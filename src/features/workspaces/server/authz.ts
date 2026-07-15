@@ -95,13 +95,26 @@ export async function requireBoardRole(
   return row;
 }
 
+/**
+ * These two also return `workspaceId`, which the joins already walk through on
+ * their way to workspace_member. The activity log needs it on every write and
+ * cannot re-derive it later — by then the task may be deleted, leaving nothing
+ * to join through (see 003_activity_log.sql). Returning it from the check that
+ * already proved it is cheaper and less forgettable than a second lookup.
+ */
+export interface ColumnAccess {
+  role: WorkspaceRole;
+  boardId: number;
+  workspaceId: string;
+}
+
 export async function requireColumnRole(
   userId: string,
   columnId: number,
   min: WorkspaceRole
-): Promise<{ role: WorkspaceRole; boardId: number }> {
-  const row = await queryOne<{ role: WorkspaceRole; boardId: number }>(
-    `SELECT wm.role, bc.board_id AS "boardId"
+): Promise<ColumnAccess> {
+  const row = await queryOne<ColumnAccess>(
+    `SELECT wm.role, bc.board_id AS "boardId", b.workspace_id AS "workspaceId"
        FROM board_column bc
        JOIN board b ON b.id = bc.board_id
        JOIN workspace_member wm
@@ -118,9 +131,9 @@ export async function requireTaskRole(
   userId: string,
   taskId: number,
   min: WorkspaceRole
-): Promise<{ role: WorkspaceRole; boardId: number }> {
-  const row = await queryOne<{ role: WorkspaceRole; boardId: number }>(
-    `SELECT wm.role, bc.board_id AS "boardId"
+): Promise<ColumnAccess> {
+  const row = await queryOne<ColumnAccess>(
+    `SELECT wm.role, bc.board_id AS "boardId", b.workspace_id AS "workspaceId"
        FROM task t
        JOIN board_column bc ON bc.id = t.column_id
        JOIN board b ON b.id = bc.board_id

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -53,6 +53,10 @@ interface DialogState {
 export function Board({ boardId, columns, initialTasks, canEdit }: BoardProps) {
   const [items, setItems] = useState<ItemsByColumn>(() =>
     groupTasks(columns, initialTasks)
+  );
+  const columnNames = useMemo(
+    () => Object.fromEntries(columns.map((c) => [c.id, c.title])),
+    [columns]
   );
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -232,6 +236,7 @@ export function Board({ boardId, columns, initialTasks, canEdit }: BoardProps) {
       <TaskDialog
         open={dialog !== null}
         task={dialog?.task}
+        columnNames={columnNames}
         onOpenChange={(open) => {
           if (!open) setDialog(null);
         }}

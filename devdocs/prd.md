@@ -305,20 +305,34 @@ Estimates assume **~8–12 hrs/week solo**.
 
 **Goal:** the board has enough structure for an agent's actions to be meaningful, attributable, and reversible.
 
-Chosen from Core Work Items **for agent-readiness**, not for coverage:
+Chosen from Core Work Items **for agent-readiness**, not for coverage. Ordered so the log comes first — see below:
 
+- ✅ **`activity_log`** (append-only, actor-typed) — audit + undo substrate + the "activity history" criterion.
 - **Assignees** — the slot an agent will later occupy.
 - **Comments** — the agent's reporting channel.
-- **`activity_log`** (append-only, actor-typed) — audit + undo substrate + the "activity history" criterion.
 - **User-editable statuses/columns** — agents move tasks *between* states; those states must be user-defined.
 - **Priority, labels, due dates** — the fields an agent reasons over when triaging.
 - **Subtasks** — an agent decomposing work needs somewhere to put the pieces.
 
+**Sequencing correction (built):** v2 listed `activity_log` third. It is built **first**, because its acceptance criterion is that *every* mutation writes a row — so anything built before it must be reopened and retrofitted with logging. Built first, it establishes a logged-mutation path that every later M1 feature is born writing through. Same work, done once.
+
 Deferred from this area: checklists, recurring, custom fields, templates, bulk edit, forms, attachments — none are needed for the wedge.
 
 **Ships:** a competent team kanban. Genuinely usable, still undifferentiated.
-**Acceptance:** every mutation writes an `activity_log` row with actor attribution; history renders on a task.
+**Acceptance:** ◐ every task mutation (create/update/move/delete) writes an `activity_log` row with actor attribution, verified by 14 cases against real Postgres; ✅ history renders on a task. The criterion re-opens as each remaining M1 feature adds mutations.
 **Risk:** low.
+
+**`activity_log` design, as built** (§8's shape, with the reasoning that survived contact):
+
+- **The log outlives what it describes.** `task_id` carries **no foreign key** — `ON DELETE CASCADE` would destroy the record of a deletion, the row an audit trail most needs, and `SET NULL` would erase which task it was. Safe because `SERIAL` never reuses ids, so a dangling id can never come to mean a different task. `actor_id` is unconstrained for the same reason (and because it turns polymorphic at M2): a user's actions survive their account.
+- **Tenancy is denormalized here, and only here.** M0's rule — resolve workspace by join, never store it — holds only while the parent outlives the child. An audit row may have no task, column, or board left to join through, so `workspace_id` lives on the row.
+- **`board_id` is recorded now** though M1 renders per-task history only. It cannot be added later: backfilling means joining through tasks that may be gone. On an append-only table, a column skipped is a window of history lost permanently.
+- **Append-only is enforced by a trigger, not convention** — but on `UPDATE` only. `UPDATE` rewrites history and has no legitimate caller. `DELETE` must remain possible because workspace deletion cascades through the table; blocking it would make tenants undeletable. Row-level delete protection is a database grant, and belongs with retention/export at M6.
+- **Full snapshots, not diffs**, in `before`/`after` — undo replays an inverse mutation, and reconstructing a task from chained partial diffs is strictly harder than reading one row.
+- **`action` is TEXT, not an enum** (unlike `workspace_role`): roles are a closed set, actions grow every milestone. The TS union in `features/activity/types.ts` is the source of truth, and readers tolerate unknown values — a row written by newer code can always reach older code.
+- **No-ops are not mutations.** An update or move that changes nothing writes no row. The dialog PATCHes on close regardless of edits, so without this the history fills with entries whose before and after are identical — noise that undo would later replay as confusing no-ops.
+- **`logActivity` requires a transaction client**, rather than accepting an optional one. A mutation and its log entry must commit together: logging outside the transaction records writes that rolled back, and a crash between them loses writes that happened. Taking a `PoolClient` makes the atomicity structural rather than a rule callers must remember. This is the same guarantee §7.2 states from the agent side.
+- **Agents are not plumbed in, deliberately.** Callers are human-only until M2; `actor_type` exists from the first row so agents need no migration, and `logActivity` already takes an `Actor`, so M2 changes callers rather than the log.
 
 ---
 
