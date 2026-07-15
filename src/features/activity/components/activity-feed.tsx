@@ -10,6 +10,8 @@ interface ActivityFeedProps {
   taskId: number;
   /** Column titles by id, for naming the columns a task moved between. */
   columnNames: Record<number, string>;
+  /** Member names by user id, for naming who a task was assigned to. */
+  memberNames: Record<string, string>;
 }
 
 /**
@@ -29,11 +31,19 @@ function actorLabel(entry: ActivityEntry): string {
 /** What happened, in prose. */
 function describe(
   entry: ActivityEntry,
-  columnNames: Record<number, string>
+  columnNames: Record<number, string>,
+  memberNames: Record<string, string>
 ): string {
   // A column can be deleted while the log entry naming it survives, so every
   // lookup needs a fallback rather than rendering "undefined".
   const column = (id: number) => columnNames[id] ?? "another column";
+
+  // Same shape of problem, one degree worse: the log outlives the assignment,
+  // and being removed from a workspace clears your assignments but not the
+  // record of them. So an id here routinely names someone the member list no
+  // longer contains — the common case, not the edge case.
+  const person = (id: string | null | undefined) =>
+    id == null ? "nobody" : (memberNames[id] ?? "a former member");
 
   switch (entry.action) {
     case "task.created":
@@ -54,6 +64,17 @@ function describe(
       if (renamed) return `renamed this to "${entry.after.title}"`;
       if (described) return "edited the description";
       return "updated this task";
+    }
+    case "task.assigned": {
+      if (!entry.before || !entry.after) return "changed the assignee";
+      const from = entry.before.assigneeId;
+      const to = entry.after.assigneeId;
+      // Self-assignment is worth its own phrasing: "Bob assigned this to Bob"
+      // is how a machine talks about the most ordinary thing on a board.
+      if (to != null && to === entry.actorId) return "took this on";
+      if (to == null) return `unassigned ${person(from)}`;
+      if (from == null) return `assigned this to ${person(to)}`;
+      return `reassigned this from ${person(from)} to ${person(to)}`;
     }
     default:
       // `action` is TEXT in Postgres and this union grows every milestone, so a
@@ -82,7 +103,11 @@ function relativeTime(iso: string, now: number): string {
   return "just now";
 }
 
-export function ActivityFeed({ taskId, columnNames }: ActivityFeedProps) {
+export function ActivityFeed({
+  taskId,
+  columnNames,
+  memberNames,
+}: ActivityFeedProps) {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +169,7 @@ export function ActivityFeed({ taskId, columnNames }: ActivityFeedProps) {
             <span className="font-medium text-foreground">
               {actorLabel(entry)}
             </span>{" "}
-            {describe(entry, columnNames)}
+            {describe(entry, columnNames, memberNames)}
             {" · "}
             <time dateTime={entry.createdAt} title={entry.createdAt}>
               {relativeTime(entry.createdAt, now)}

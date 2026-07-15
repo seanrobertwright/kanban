@@ -138,6 +138,11 @@ describe("activity log", () => {
     it("holds enough in `before` to reconstruct a deleted task", async () => {
       // This is undo's substrate (M2): the inverse of a delete is an insert of
       // exactly this snapshot.
+      //
+      // toEqual, not toMatchObject, and deliberately so: it fails whenever the
+      // snapshot gains a field, which is the point. Every field a task has must
+      // be in here or undo silently restores an incomplete task — assigneeId
+      // arrived at 004 exactly this way.
       const task = await createTask(alice, {
         columnId: todoId,
         title: "Recoverable",
@@ -151,6 +156,7 @@ describe("activity log", () => {
         description: "with a body",
         columnId: todoId,
         position: expect.any(Number),
+        assigneeId: null,
       });
     });
 

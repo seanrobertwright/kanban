@@ -308,7 +308,7 @@ Estimates assume **~8–12 hrs/week solo**.
 Chosen from Core Work Items **for agent-readiness**, not for coverage. Ordered so the log comes first — see below:
 
 - ✅ **`activity_log`** (append-only, actor-typed) — audit + undo substrate + the "activity history" criterion.
-- **Assignees** — the slot an agent will later occupy.
+- ✅ **Assignees** — the slot an agent will later occupy.
 - **Comments** — the agent's reporting channel.
 - **User-editable statuses/columns** — agents move tasks *between* states; those states must be user-defined.
 - **Priority, labels, due dates** — the fields an agent reasons over when triaging.
@@ -319,7 +319,7 @@ Chosen from Core Work Items **for agent-readiness**, not for coverage. Ordered s
 Deferred from this area: checklists, recurring, custom fields, templates, bulk edit, forms, attachments — none are needed for the wedge.
 
 **Ships:** a competent team kanban. Genuinely usable, still undifferentiated.
-**Acceptance:** ◐ every task mutation (create/update/move/delete) writes an `activity_log` row with actor attribution, verified by 14 cases against real Postgres; ✅ history renders on a task. The criterion re-opens as each remaining M1 feature adds mutations.
+**Acceptance:** ◐ every task mutation (create/update/move/delete/assign) writes an `activity_log` row with actor attribution, verified by 31 cases against real Postgres; ✅ history renders on a task. The criterion re-opens as each remaining M1 feature adds mutations.
 **Risk:** low.
 
 **`activity_log` design, as built** (§8's shape, with the reasoning that survived contact):
@@ -333,6 +333,19 @@ Deferred from this area: checklists, recurring, custom fields, templates, bulk e
 - **No-ops are not mutations.** An update or move that changes nothing writes no row. The dialog PATCHes on close regardless of edits, so without this the history fills with entries whose before and after are identical — noise that undo would later replay as confusing no-ops.
 - **`logActivity` requires a transaction client**, rather than accepting an optional one. A mutation and its log entry must commit together: logging outside the transaction records writes that rolled back, and a crash between them loses writes that happened. Taking a `PoolClient` makes the atomicity structural rather than a rule callers must remember. This is the same guarantee §7.2 states from the agent side.
 - **Agents are not plumbed in, deliberately.** Callers are human-only until M2; `actor_type` exists from the first row so agents need no migration, and `logActivity` already takes an `Actor`, so M2 changes callers rather than the log.
+
+**Assignees design, as built** (§8's `task.assignee_id`, with what survived contact):
+
+- **`ON DELETE SET NULL`, never `CASCADE`.** Deleting a person must not delete the work assigned to them — `CASCADE` would quietly turn "remove a departing employee" into "destroy their board". Note this is the *opposite* call from `activity_log.actor_id`, which carries no FK at all: an assignee is a live pointer that must resolve to a real user, while an audit row records who acted at a moment already past and must outlive them. Same column type, opposite requirements, and the difference is current state vs. history.
+- **The membership invariant lives in the repository, because no constraint can hold it.** *An assignee is a member of the task's workspace.* The FK only proves the user exists **somewhere** — without the check, any user id in the database could be written onto any board, a cross-tenant reference that renders a stranger's name and avatar to the whole workspace. Proving membership needs a `task → board_column → board → workspace_member` join, which a `CHECK` cannot see. The alternatives were a trigger, or denormalizing `workspace_id` onto `task` so a composite FK could reach — and M0 rejected that denormalization by name. So it sits next to the RBAC checks, enforced the same way and for the same reason.
+- **An invariant enforced on the way in and abandoned on the way out is not an invariant.** Membership is revocable, so removing a member clears their assignments in the same transaction that drops the membership — otherwise their face stays on cards in a workspace they can no longer see, and the rule above holds only for rows written after the fact. One log row per task, not one summarizing the batch: "unassigned 12 tasks" is neither attributable nor revertible, and a task's own history is the only place its reader looks.
+- **`COALESCE` cannot express a nullable field, so assignment does not use it.** The existing `COALESCE($2, title)` idiom reads null as "not supplied" — harmless for title and description, neither of which is nullable, and fatal for an assignee, where clearing the field *is* one of the two things a user wants to do. `assigneeId` is three-valued end to end (`undefined` = leave alone, `null` = unassign), which means the API tests key presence rather than value, and the write uses an explicit supplied-flag. Two tests fail together the moment it goes back through `COALESCE`.
+- **`task.assigned` is its own action, not a `task.updated` with a different payload.** It reads as a distinct event in the feed, undo can revert a reassignment without reverting a rename that rode along in the same PATCH, and — the reason that decides it — **at M2 assigning a task to an agent is what triggers a run.** The one action the wedge hangs off must be findable in the log, not inferred by diffing snapshots. One PATCH that changes both details and assignee writes two rows, because two things happened.
+- **`TaskSnapshot.assigneeId` is optional, and that is honest rather than lazy.** The log is append-only and this field arrived at 004: rows written before it have no such key, and no backfill can invent one, because nobody could assign a task then. `undefined` means "written before assignees existed"; `null` means "was unassigned". This is the same reasoning that put `board_id` on the table early — except here the window was already lost, so the type says so instead of pretending.
+- **Any member is assignable, viewers included.** A viewer cannot move the card they have been handed, which looks like a bug and is not one: assignment says whose work it is, roles say who may edit the board. Worth keeping apart precisely because M2 separates the same two things for agents — what an agent has been handed is not what it is permitted to do.
+- **The task carries only an id; names and avatars resolve client-side.** The assignee picker needs the member list anyway, so the lookup is free. Joining display data onto every task in `getBoard` would put the same two strings on every card of the same person.
+
+**Deliberately not built:** the assignee is not yet shown as a filter or a workload count — that is M3's view work, and there is nothing to plan against until boards hold more than a demo's worth of tasks.
 
 ---
 

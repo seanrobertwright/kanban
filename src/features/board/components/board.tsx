@@ -21,6 +21,7 @@ import {
   type TaskFormValues,
 } from "@/features/tasks/components/task-dialog";
 import type { Task } from "@/features/tasks/types";
+import type { Member } from "@/features/workspaces/types";
 import { fetchBoard } from "../client/api";
 import type { Column } from "../types";
 import { BoardColumn } from "./board-column";
@@ -41,6 +42,8 @@ interface BoardProps {
   boardId: number;
   columns: Column[];
   initialTasks: Task[];
+  /** Everyone assignable on this board, and the source of every rendered face. */
+  members: Member[];
   /** False for viewers. The server enforces this too — this only hides the UI. */
   canEdit: boolean;
 }
@@ -50,13 +53,23 @@ interface DialogState {
   task?: Task;
 }
 
-export function Board({ boardId, columns, initialTasks, canEdit }: BoardProps) {
+export function Board({
+  boardId,
+  columns,
+  initialTasks,
+  members,
+  canEdit,
+}: BoardProps) {
   const [items, setItems] = useState<ItemsByColumn>(() =>
     groupTasks(columns, initialTasks)
   );
   const columnNames = useMemo(
     () => Object.fromEntries(columns.map((c) => [c.id, c.title])),
     [columns]
+  );
+  const membersById = useMemo(
+    () => Object.fromEntries(members.map((m) => [m.userId, m])),
+    [members]
   );
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -220,6 +233,7 @@ export function Board({ boardId, columns, initialTasks, canEdit }: BoardProps) {
               key={column.id}
               column={column}
               tasks={items[column.id] ?? []}
+              membersById={membersById}
               canEdit={canEdit}
               onAddTask={() => setDialog({ columnId: column.id })}
               onEditTask={(task) =>
@@ -230,13 +244,16 @@ export function Board({ boardId, columns, initialTasks, canEdit }: BoardProps) {
           ))}
         </div>
         <DragOverlay>
-          {activeTask ? <TaskCard task={activeTask} /> : null}
+          {activeTask ? (
+            <TaskCard task={activeTask} membersById={membersById} />
+          ) : null}
         </DragOverlay>
       </DndContext>
       <TaskDialog
         open={dialog !== null}
         task={dialog?.task}
         columnNames={columnNames}
+        members={members}
         onOpenChange={(open) => {
           if (!open) setDialog(null);
         }}

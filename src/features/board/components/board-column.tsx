@@ -10,12 +10,14 @@ import { Plus } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import type { Task } from "@/features/tasks/types";
+import type { Member } from "@/features/workspaces/types";
 import type { Column } from "../types";
 import { SortableTaskCard } from "./sortable-task-card";
 
 interface BoardColumnProps {
   column: Column;
   tasks: Task[];
+  membersById: Record<string, Member>;
   canEdit: boolean;
   onAddTask: () => void;
   onEditTask: (task: Task) => void;
@@ -25,6 +27,7 @@ interface BoardColumnProps {
 export function BoardColumn({
   column,
   tasks,
+  membersById,
   canEdit,
   onAddTask,
   onEditTask,
@@ -55,6 +58,7 @@ export function BoardColumn({
             <SortableTaskCard
               key={task.id}
               task={task}
+              membersById={membersById}
               onEdit={canEdit ? onEditTask : undefined}
               onDelete={canEdit ? onDeleteTask : undefined}
             />

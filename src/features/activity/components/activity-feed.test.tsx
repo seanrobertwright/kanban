@@ -9,9 +9,17 @@ vi.mock("../client/api", () => ({ fetchTaskActivity: vi.fn() }));
 const { fetchTaskActivity } = await import("../client/api");
 
 const COLUMN_NAMES = { 1: "To Do", 3: "Done" };
+const MEMBER_NAMES = { "user-1": "Alice", "user-2": "Bob" };
 
 function snapshot(over: Partial<TaskSnapshot> = {}): TaskSnapshot {
-  return { title: "A task", description: "", columnId: 1, position: 0, ...over };
+  return {
+    title: "A task",
+    description: "",
+    columnId: 1,
+    position: 0,
+    assigneeId: null,
+    ...over,
+  };
 }
 
 function entry(over: Partial<ActivityEntry> = {}): ActivityEntry {
@@ -34,7 +42,13 @@ function entry(over: Partial<ActivityEntry> = {}): ActivityEntry {
 
 async function renderFeed(entries: ActivityEntry[]) {
   vi.mocked(fetchTaskActivity).mockResolvedValue(entries);
-  render(<ActivityFeed taskId={7} columnNames={COLUMN_NAMES} />);
+  render(
+    <ActivityFeed
+      taskId={7}
+      columnNames={COLUMN_NAMES}
+      memberNames={MEMBER_NAMES}
+    />
+  );
   // The feed fetches on mount, so every assertion waits for the first paint.
   return screen.findByRole("list");
 }
@@ -129,7 +143,91 @@ describe("ActivityFeed", () => {
 
   it("says so when a task has no history", async () => {
     vi.mocked(fetchTaskActivity).mockResolvedValue([]);
-    render(<ActivityFeed taskId={7} columnNames={COLUMN_NAMES} />);
+    render(
+      <ActivityFeed
+        taskId={7}
+        columnNames={COLUMN_NAMES}
+        memberNames={MEMBER_NAMES}
+      />
+    );
     expect(await screen.findByText("No history yet.")).toBeDefined();
+  });
+
+  describe("assignment", () => {
+    it("names who a task was assigned to", async () => {
+      await renderFeed([
+        entry({
+          action: "task.assigned",
+          before: snapshot({ assigneeId: null }),
+          after: snapshot({ assigneeId: "user-2" }),
+        }),
+      ]);
+      expect(screen.getByText(/assigned this to Bob/)).toBeDefined();
+    });
+
+    it("names both sides of a reassignment", async () => {
+      await renderFeed([
+        entry({
+          actorId: "user-9",
+          action: "task.assigned",
+          before: snapshot({ assigneeId: "user-1" }),
+          after: snapshot({ assigneeId: "user-2" }),
+        }),
+      ]);
+      expect(screen.getByText(/reassigned this from Alice to Bob/)).toBeDefined();
+    });
+
+    it("reports an unassignment as one, naming who lost it", async () => {
+      await renderFeed([
+        entry({
+          action: "task.assigned",
+          before: snapshot({ assigneeId: "user-2" }),
+          after: snapshot({ assigneeId: null }),
+        }),
+      ]);
+      expect(screen.getByText(/unassigned Bob/)).toBeDefined();
+    });
+
+    it("calls self-assignment taking it on", async () => {
+      await renderFeed([
+        entry({
+          actorId: "user-2",
+          actorName: "Bob",
+          action: "task.assigned",
+          before: snapshot({ assigneeId: null }),
+          after: snapshot({ assigneeId: "user-2" }),
+        }),
+      ]);
+      expect(screen.getByText(/took this on/)).toBeDefined();
+    });
+
+    it("survives an assignee who has left the workspace", async () => {
+      // The routine case, not the edge one: removing a member clears their
+      // assignments but not the log of them, so these ids stop resolving the
+      // moment someone leaves.
+      await renderFeed([
+        entry({
+          action: "task.assigned",
+          before: snapshot({ assigneeId: "user-gone" }),
+          after: snapshot({ assigneeId: null }),
+        }),
+      ]);
+      expect(screen.getByText(/unassigned a former member/)).toBeDefined();
+    });
+
+    it("reads an entry written before assignees existed without inventing one", async () => {
+      // Rows logged before 004 have no assigneeId key at all. undefined must
+      // read as "nobody", never as a name.
+      const legacy = snapshot();
+      delete legacy.assigneeId;
+      await renderFeed([
+        entry({
+          action: "task.assigned",
+          before: legacy,
+          after: snapshot({ assigneeId: "user-2" }),
+        }),
+      ]);
+      expect(screen.getByText(/assigned this to Bob/)).toBeDefined();
+    });
   });
 });

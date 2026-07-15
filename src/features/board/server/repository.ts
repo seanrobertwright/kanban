@@ -34,7 +34,7 @@ export async function getBoard(
 
   const tasks = await query<Task>(
     `SELECT t.id, t.column_id AS "columnId", t.title, t.description, t.position,
-            t.created_at AS "createdAt"
+            t.assignee_id AS "assigneeId", t.created_at AS "createdAt"
        FROM task t
        JOIN board_column bc ON bc.id = t.column_id
       WHERE bc.board_id = $1

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, queryOne, withTransaction } from "@/shared/db/client";
+import { unassignFromWorkspace } from "@/features/tasks/server/repository";
 import { AuthzError, requireWorkspaceRole, ROLE_RANK } from "./authz";
 import type { Invitation, Member, WorkspaceRole } from "../types";
 
@@ -202,12 +203,25 @@ export async function removeMember(
   if (!isSelf) assertMayModify(actorRole, subjectRole);
   await assertNotLastOwner(workspaceId, subjectRole, isSelf ? "leave as" : "remove");
 
-  const rows = await query(
-    `DELETE FROM workspace_member
-      WHERE workspace_id = $1 AND user_id = $2 RETURNING user_id`,
-    [workspaceId, userId]
-  );
-  return rows.length > 0;
+  // Both statements in one transaction: dropping the membership without
+  // clearing the assignments would leave tasks assigned to someone who is no
+  // longer a member — the state assertAssignable refuses to create on the way
+  // in, arrived at through the back door. The unassignments are attributed to
+  // whoever removed them, which is the truth: an admin removing a member is the
+  // actor behind every card that comes free.
+  return withTransaction(async (client) => {
+    await unassignFromWorkspace(client, workspaceId, userId, {
+      type: "human",
+      id: actorId,
+    });
+
+    const { rows } = await client.query(
+      `DELETE FROM workspace_member
+        WHERE workspace_id = $1 AND user_id = $2 RETURNING user_id`,
+      [workspaceId, userId]
+    );
+    return rows.length > 0;
+  });
 }
 
 /**

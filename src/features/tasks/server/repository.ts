@@ -18,7 +18,7 @@ import type {
 // Postgres folds unquoted identifiers to lowercase, so `AS columnId` would
 // arrive as `columnid`. The double quotes are load-bearing.
 const TASK_COLUMNS = `id, column_id AS "columnId", title, description, position,
-                      created_at AS "createdAt"`;
+                      assignee_id AS "assigneeId", created_at AS "createdAt"`;
 
 function selectTask(client: PoolClient, id: number) {
   return client
@@ -37,26 +37,69 @@ function snapshot(task: Task): TaskSnapshot {
     description: task.description,
     columnId: task.columnId,
     position: task.position,
+    assigneeId: task.assigneeId,
   };
 }
 
 /**
- * True when a write left the task exactly as it found it.
- *
- * The dialog PATCHes on close whether or not anything was edited, so without
- * this the history fills with entries whose before and after are identical.
- * That is not pedantry: a no-op is not a mutation, and at M2 undo replays these
- * rows — an inverse of "nothing changed" is a confusing no-op the user has to
- * reason about. Cheap to skip now, impossible to clean up later on an
+ * The three comparisons below exist so a write only logs what it actually
+ * changed. A no-op is not a mutation: the dialog PATCHes on close whether or not
+ * anything was edited, so without these the history fills with entries whose
+ * before and after are identical. That is not pedantry — at M2 undo replays
+ * these rows, and the inverse of "nothing changed" is a confusing no-op the user
+ * has to reason about. Cheap to skip now, impossible to clean up later on an
  * append-only table.
+ *
+ * They are split by *concern* rather than being one whole-snapshot equality
+ * check, because one PATCH can change a task's details and its assignee at once
+ * — and those are two events, logged as two rows, invertible separately.
  */
-function unchanged(before: TaskSnapshot, after: TaskSnapshot): boolean {
-  return (
-    before.title === after.title &&
-    before.description === after.description &&
-    before.columnId === after.columnId &&
-    before.position === after.position
+function sameDetails(a: TaskSnapshot, b: TaskSnapshot): boolean {
+  return a.title === b.title && a.description === b.description;
+}
+
+function samePlacement(a: TaskSnapshot, b: TaskSnapshot): boolean {
+  return a.columnId === b.columnId && a.position === b.position;
+}
+
+function sameAssignee(a: TaskSnapshot, b: TaskSnapshot): boolean {
+  return a.assigneeId === b.assigneeId;
+}
+
+/**
+ * Enforces the invariant 004_assignee.sql documents but cannot express: a task's
+ * assignee is a member of that task's workspace. The foreign key only proves the
+ * user exists somewhere; without this, any user id in the database could be
+ * written onto any board — a cross-tenant reference that would render a
+ * stranger's name and avatar to everyone in the workspace.
+ *
+ * "not_found", not "forbidden", following the rule the authz checks already
+ * establish: "there is no such user" and "that user is in someone else's
+ * workspace" must be indistinguishable, or the id space becomes an oracle for
+ * enumerating who exists.
+ *
+ * Any member may be assigned, viewers included. A viewer cannot move the card
+ * they have been handed, which looks like a bug and is not one: assignment says
+ * whose work it is, and roles say who may edit the board. A stakeholder who owns
+ * an outcome without touching the board is a real arrangement, and the two
+ * concepts are worth keeping apart — especially before M2, where an agent's
+ * permissions are likewise separate from what it has been handed.
+ */
+async function assertAssignable(
+  client: PoolClient,
+  workspaceId: string,
+  assigneeId: string
+): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT 1 FROM workspace_member WHERE workspace_id = $1 AND user_id = $2`,
+    [workspaceId, assigneeId]
   );
+  if (rows.length === 0) {
+    throw new AuthzError(
+      "not_found",
+      "That person is not a member of this workspace"
+    );
+  }
 }
 
 export async function getTask(
@@ -80,12 +123,17 @@ export async function createTask(
   // Now a transaction: the insert and its log entry must land together, or a
   // crash between them leaves a task nobody can prove the creation of.
   return withTransaction(async (client) => {
+    if (input.assigneeId != null) {
+      await assertAssignable(client, workspaceId, input.assigneeId);
+    }
+
     const { rows } = await client.query<Task>(
-      `INSERT INTO task (column_id, title, description, position)
+      `INSERT INTO task (column_id, title, description, position, assignee_id)
        VALUES ($1, $2, $3,
-               (SELECT COALESCE(MAX(position) + 1, 0) FROM task WHERE column_id = $1))
+               (SELECT COALESCE(MAX(position) + 1, 0) FROM task WHERE column_id = $1),
+               $4)
        RETURNING ${TASK_COLUMNS}`,
-      [input.columnId, input.title, input.description ?? ""]
+      [input.columnId, input.title, input.description ?? "", input.assigneeId ?? null]
     );
     const task = rows[0];
 
@@ -109,29 +157,72 @@ export async function updateTask(
 ): Promise<Task | undefined> {
   const { boardId, workspaceId } = await requireTaskRole(userId, id, "member");
 
+  // `in`, not a null check — the distinction is the whole point. `undefined`
+  // means the caller said nothing about the assignee; `null` means the caller
+  // said "unassign". Collapsing them would make unassigning impossible.
+  const setsAssignee = "assigneeId" in input;
+
   return withTransaction(async (client) => {
     const before = await selectTask(client, id);
     if (!before) return undefined;
 
+    if (setsAssignee && input.assigneeId != null) {
+      await assertAssignable(client, workspaceId, input.assigneeId);
+    }
+
+    // title and description use COALESCE, which reads null as "not supplied" —
+    // fine, because neither is nullable, so null can only ever mean absent.
+    // assignee_id cannot use it: null is a value there, and COALESCE would
+    // silently turn every unassign into a no-op. Hence the explicit
+    // supplied-flag, which is the one thing COALESCE cannot encode.
     const { rows } = await client.query<Task>(
       `UPDATE task
           SET title = COALESCE($2, title),
-              description = COALESCE($3, description)
+              description = COALESCE($3, description),
+              assignee_id = CASE WHEN $4::boolean
+                                 THEN $5::text
+                                 ELSE assignee_id END
         WHERE id = $1
         RETURNING ${TASK_COLUMNS}`,
-      [id, input.title ?? null, input.description ?? null]
+      [
+        id,
+        input.title ?? null,
+        input.description ?? null,
+        setsAssignee,
+        input.assigneeId ?? null,
+      ]
     );
     const after = rows[0];
 
-    if (!unchanged(snapshot(before), snapshot(after))) {
+    // Two rows, not one, when a single PATCH does both. The dialog can rename a
+    // task and reassign it in one submit, and those are two events: the feed
+    // reads better for it, and undo can revert the reassignment without
+    // reverting the rename. Each row carries the full snapshot — as task.moved
+    // already does — so `action` names which fields the entry is *about* while
+    // the snapshots say what the whole task looked like on either side.
+    const [from, to] = [snapshot(before), snapshot(after)];
+
+    if (!sameDetails(from, to)) {
       await logActivity(client, {
         workspaceId,
         boardId,
         taskId: id,
         actor: human(userId),
         action: "task.updated",
-        before: snapshot(before),
-        after: snapshot(after),
+        before: from,
+        after: to,
+      });
+    }
+
+    if (!sameAssignee(from, to)) {
+      await logActivity(client, {
+        workspaceId,
+        boardId,
+        taskId: id,
+        actor: human(userId),
+        action: "task.assigned",
+        before: from,
+        after: to,
       });
     }
     return after;
@@ -193,7 +284,7 @@ export async function moveTask(
     // to accommodate it. Those are consequences of this action, not actions
     // anyone took — logging them would bury the real event under bookkeeping,
     // and undo replays the move, which reproduces the shifts anyway.
-    if (after && !unchanged(snapshot(before), snapshot(after))) {
+    if (after && !samePlacement(snapshot(before), snapshot(after))) {
       await logActivity(client, {
         workspaceId,
         boardId,
@@ -206,6 +297,66 @@ export async function moveTask(
     }
     return after;
   });
+}
+
+/**
+ * Clears one person's assignments across a workspace, logging each.
+ *
+ * assertAssignable keeps a non-member from *becoming* an assignee, but says
+ * nothing about rows that already exist — and membership is revocable. Without
+ * this, removing someone leaves their name and avatar on cards in a workspace
+ * they can no longer see, and the invariant 004_assignee.sql states holds only
+ * for tasks assigned after the fact. An invariant enforced on the way in and
+ * abandoned on the way out is not an invariant.
+ *
+ * Takes the caller's transaction client rather than opening its own, for the
+ * same reason logActivity does: these unassignments must commit with the
+ * membership deletion that caused them. A crash between the two would leave
+ * exactly the orphaned state this exists to prevent.
+ *
+ * One log row per task, not one summarizing the batch. The M1 criterion is that
+ * every mutation is attributable and revertible, and a single "unassigned 12
+ * tasks" row is neither — undo needs to know which task went from whom to null,
+ * and a task's own history is the only place its reader will look.
+ */
+export async function unassignFromWorkspace(
+  client: PoolClient,
+  workspaceId: string,
+  assigneeId: string,
+  actor: Actor
+): Promise<number> {
+  // TASK_COLUMNS is unqualified, and `id` is ambiguous across this join — task,
+  // board_column and board all have one. Hence the explicit t. prefixes rather
+  // than the shared constant.
+  const { rows } = await client.query<Task & { boardId: number }>(
+    `SELECT t.id, t.column_id AS "columnId", t.title, t.description, t.position,
+            t.assignee_id AS "assigneeId", t.created_at AS "createdAt",
+            bc.board_id AS "boardId"
+       FROM task t
+       JOIN board_column bc ON bc.id = t.column_id
+       JOIN board b ON b.id = bc.board_id
+      WHERE b.workspace_id = $1 AND t.assignee_id = $2`,
+    [workspaceId, assigneeId]
+  );
+  if (rows.length === 0) return 0;
+
+  await client.query(
+    `UPDATE task SET assignee_id = NULL WHERE id = ANY($1::int[])`,
+    [rows.map((t) => t.id)]
+  );
+
+  for (const task of rows) {
+    await logActivity(client, {
+      workspaceId,
+      boardId: task.boardId,
+      taskId: task.id,
+      actor,
+      action: "task.assigned",
+      before: snapshot(task),
+      after: { ...snapshot(task), assigneeId: null },
+    });
+  }
+  return rows.length;
 }
 
 export async function deleteTask(userId: string, id: number): Promise<boolean> {

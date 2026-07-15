@@ -7,7 +7,10 @@ import { getBoard } from "@/features/board/server/repository";
 import type { BoardData } from "@/features/board/types";
 import { BoardSwitcher } from "@/features/workspaces/components/board-switcher";
 import { AuthzError } from "@/features/workspaces/server/authz";
-import { redeemInvitations } from "@/features/workspaces/server/members";
+import {
+  listMembers,
+  redeemInvitations,
+} from "@/features/workspaces/server/members";
 import {
   ensurePersonalWorkspace,
   getDefaultBoard,
@@ -50,9 +53,14 @@ export default async function Home({
   }
   if (!data) notFound();
 
-  const [workspaces, boards] = await Promise.all([
+  // Members come down with the board rather than being fetched by the client:
+  // the assignee picker needs them the moment a dialog opens, and every card
+  // that shows a face needs them on first paint. Both resolve names and avatars
+  // from this one list, which is why Task carries only an assignee id.
+  const [workspaces, boards, members] = await Promise.all([
     listWorkspacesForUser(session.user.id),
     listBoardsForUser(session.user.id),
+    listMembers(session.user.id, data.board.workspaceId),
   ]);
   const workspace = workspaces.find((w) => w.id === data.board.workspaceId)!;
   const canEdit = workspace.role !== "viewer";
@@ -82,6 +90,7 @@ export default async function Home({
         boardId={data.board.id}
         columns={data.columns}
         initialTasks={data.tasks}
+        members={members}
         canEdit={canEdit}
       />
     </main>
