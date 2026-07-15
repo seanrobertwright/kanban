@@ -289,7 +289,7 @@ Estimates assume **~8–12 hrs/week solo**.
 - **Leaving is not an admin action.** Anyone may remove themselves; removing someone else takes admin.
 - **Pending invitations are admin-only to read** — the list is a list of people's email addresses.
 
-**Remaining M0 gap:** there is no UI to create a *second* workspace (only the auto-provisioned personal one) or a second board — `createBoard` is built and tested but unreachable from the interface. Small, and worth folding into M1 rather than holding M0 open.
+**Remaining M0 gap:** ✅ closed. Workspace and board creation are now reachable from the board switcher (`POST /api/workspaces`, `POST /api/workspaces/:id/boards`). The switcher lists every workspace the user belongs to rather than only the current one — without that, a second workspace would have been unreachable the moment it was created. `createWorkspace` returns the seeded board alongside the workspace, so the client can navigate straight to it instead of making a second round trip to discover it.
 
 **Decisions taken while building, worth knowing:**
 

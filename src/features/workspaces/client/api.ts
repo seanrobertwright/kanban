@@ -1,4 +1,10 @@
-import type { Invitation, Member, WorkspaceRole } from "../types";
+import type {
+  Board,
+  Invitation,
+  Member,
+  NewWorkspace,
+  WorkspaceRole,
+} from "../types";
 
 export interface MembersResponse {
   members: Member[];
@@ -13,6 +19,29 @@ async function unwrap<T>(res: Response): Promise<T> {
     throw new Error(body?.error ?? `Request failed (${res.status})`);
   }
   return res.status === 204 ? (undefined as T) : res.json();
+}
+
+export async function createWorkspace(name: string): Promise<NewWorkspace> {
+  return unwrap(
+    await fetch("/api/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+  );
+}
+
+export async function createBoard(
+  workspaceId: string,
+  name: string
+): Promise<Board> {
+  return unwrap(
+    await fetch(`/api/workspaces/${workspaceId}/boards`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+  );
 }
 
 export async function fetchMembers(workspaceId: string): Promise<MembersResponse> {

@@ -12,9 +12,56 @@ import {
   revokeInvitation,
   updateMemberRole,
 } from "./members";
+import { createBoard, createWorkspace } from "./repository";
 
 function badRequest(message: string) {
   return Response.json({ error: message }, { status: 400 });
+}
+
+const NAME_MAX = 60;
+
+/**
+ * Names are the one free-text field on these two routes. Trim first, then
+ * length-check the trimmed value, so "   " is rejected as empty rather than
+ * stored as whitespace.
+ */
+function readName(body: unknown): string | { error: string } {
+  if (!body || typeof body !== "object") return { error: "Invalid JSON body" };
+  const { name } = body as Record<string, unknown>;
+  if (typeof name !== "string" || !name.trim())
+    return { error: "name is required" };
+  const trimmed = name.trim();
+  if (trimmed.length > NAME_MAX)
+    return { error: `name must be ${NAME_MAX} characters or fewer` };
+  return trimmed;
+}
+
+export async function handleCreateWorkspace(request: Request) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+
+  const name = readName(await request.json().catch(() => null));
+  if (typeof name !== "string") return badRequest(name.error);
+
+  // No try/catch for authz: createWorkspace has no role to check — the session
+  // above is the whole gate. A throw here is a real fault and should 500.
+  const workspace = await createWorkspace(session.user.id, name);
+  return Response.json(workspace, { status: 201 });
+}
+
+export async function handleCreateBoard(request: Request, workspaceId: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+
+  const name = readName(await request.json().catch(() => null));
+  if (typeof name !== "string") return badRequest(name.error);
+
+  try {
+    const board = await createBoard(session.user.id, workspaceId, name);
+    return Response.json(board, { status: 201 });
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
 }
 
 export async function handleListMembers(request: Request, workspaceId: string) {

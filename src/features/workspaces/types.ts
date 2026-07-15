@@ -20,6 +20,16 @@ export interface Board {
   createdAt: string;
 }
 
+/**
+ * A newly provisioned workspace and the board it was seeded with. The board
+ * comes back because the caller's next move is always to navigate to it, and it
+ * is not otherwise addressable without a second round trip.
+ */
+export interface NewWorkspace {
+  workspace: WorkspaceMembership;
+  board: Board;
+}
+
 export interface Member {
   userId: string;
   name: string;

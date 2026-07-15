@@ -14,9 +14,11 @@ import { AuthzError } from "./authz";
 import {
   addMember,
   createBoard,
+  createWorkspace,
   ensurePersonalWorkspace,
   getDefaultBoard,
   listBoards,
+  listBoardsForUser,
   listWorkspacesForUser,
 } from "./repository";
 
@@ -98,6 +100,52 @@ describe("workspace tenancy", () => {
   it("does not list another workspace's boards", async () => {
     const boards = await listBoards(alice, aliceWorkspaceId);
     expect(boards.map((b) => b.id)).not.toContain(bobBoardId);
+  });
+
+  describe("createWorkspace", () => {
+    it("provisions a workspace the caller owns, with a board and columns", async () => {
+      const { workspace, board } = await createWorkspace(bob, "Bob's Second");
+      expect(workspace.role).toBe("owner");
+      expect(board.workspaceId).toBe(workspace.id);
+
+      // The returned board must be real and reachable — it is what the UI
+      // navigates to immediately after creation.
+      const data = await getBoard(bob, board.id);
+      expect(data?.columns).toHaveLength(3);
+    });
+
+    it("does not make the new workspace visible to anyone else", async () => {
+      const { workspace } = await createWorkspace(bob, "Bob's Private");
+      await expectAuthzError(() => listBoards(alice, workspace.id), "not_found");
+    });
+
+    it("leaves the caller's existing workspaces alone", async () => {
+      const before = await listWorkspacesForUser(bob);
+      await createWorkspace(bob, "Another");
+      const after = await listWorkspacesForUser(bob);
+      expect(after).toHaveLength(before.length + 1);
+    });
+  });
+
+  describe("listBoardsForUser", () => {
+    it("returns boards from every workspace the user belongs to", async () => {
+      const { board } = await createWorkspace(alice, "Alice Extra");
+      const ids = (await listBoardsForUser(alice)).map((b) => b.id);
+      expect(ids).toContain(aliceBoardId);
+      expect(ids).toContain(board.id);
+    });
+
+    it("never returns another workspace's boards", async () => {
+      // This is the switcher's whole data source, so a leak here would render
+      // someone else's board names in the menu.
+      const ids = (await listBoardsForUser(bob)).map((b) => b.id);
+      expect(ids).not.toContain(aliceBoardId);
+    });
+
+    it("includes boards of a workspace the user was added to", async () => {
+      const ids = (await listBoardsForUser(viewer)).map((b) => b.id);
+      expect(ids).toContain(aliceBoardId);
+    });
   });
 
   describe("cross-tenant reads", () => {

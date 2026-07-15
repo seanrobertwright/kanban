@@ -11,7 +11,7 @@ import { redeemInvitations } from "@/features/workspaces/server/members";
 import {
   ensurePersonalWorkspace,
   getDefaultBoard,
-  listBoards,
+  listBoardsForUser,
   listWorkspacesForUser,
 } from "@/features/workspaces/server/repository";
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
@@ -50,9 +50,11 @@ export default async function Home({
   }
   if (!data) notFound();
 
-  const workspaces = await listWorkspacesForUser(session.user.id);
+  const [workspaces, boards] = await Promise.all([
+    listWorkspacesForUser(session.user.id),
+    listBoardsForUser(session.user.id),
+  ]);
   const workspace = workspaces.find((w) => w.id === data.board.workspaceId)!;
-  const boards = await listBoards(session.user.id, workspace.id);
   const canEdit = workspace.role !== "viewer";
 
   return (
@@ -60,7 +62,7 @@ export default async function Home({
       <header className="flex items-start justify-between gap-4">
         <div className="grid gap-1">
           <BoardSwitcher
-            workspace={workspace}
+            workspaces={workspaces}
             boards={boards}
             currentBoardId={data.board.id}
             currentUserId={session.user.id}

@@ -1,8 +1,15 @@
 import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 
 import { query, queryOne, withTransaction } from "@/shared/db/client";
 import { requireWorkspaceRole } from "./authz";
-import type { Board, WorkspaceMembership, WorkspaceRole } from "../types";
+import type {
+  Board,
+  NewWorkspace,
+  Workspace,
+  WorkspaceMembership,
+  WorkspaceRole,
+} from "../types";
 
 const DEFAULT_COLUMNS = ["To Do", "In Progress", "Done"];
 
@@ -46,6 +53,26 @@ export async function listBoards(
   );
 }
 
+/**
+ * Every board the user can reach, across all their workspaces, in one query.
+ *
+ * The switcher needs all of them to render, and calling listBoards() per
+ * workspace would be an N+1 whose N is set by how many workspaces someone
+ * belongs to. The membership join is the tenancy check here — a board with no
+ * matching workspace_member row simply does not come back.
+ */
+export async function listBoardsForUser(userId: string): Promise<Board[]> {
+  return query<Board>(
+    `SELECT b.id, b.workspace_id AS "workspaceId", b.name, b.position,
+            b.created_at AS "createdAt"
+       FROM board b
+       JOIN workspace_member wm
+         ON wm.workspace_id = b.workspace_id AND wm.user_id = $1
+      ORDER BY b.position, b.id`,
+    [userId]
+  );
+}
+
 export async function createBoard(
   userId: string,
   workspaceId: string,
@@ -67,16 +94,64 @@ export async function createBoard(
   });
 }
 
-async function seedColumns(
-  client: { query: (t: string, p?: unknown[]) => Promise<unknown> },
-  boardId: number
-) {
+async function seedColumns(client: PoolClient, boardId: number) {
   for (const [i, title] of DEFAULT_COLUMNS.entries()) {
     await client.query(
       "INSERT INTO board_column (board_id, title, position) VALUES ($1, $2, $3)",
       [boardId, title, i]
     );
   }
+}
+
+/**
+ * Creates a workspace, its owner membership, a first board, and the default
+ * columns. Callers supply the transaction, because a workspace with no owner or
+ * no board is an unusable half-state — all four writes land or none do.
+ */
+async function provisionWorkspace(
+  client: PoolClient,
+  userId: string,
+  name: string
+): Promise<NewWorkspace> {
+  const id = randomUUID();
+  const { rows } = await client.query<Workspace>(
+    `INSERT INTO workspace (id, name, slug)
+     VALUES ($1, $2, $3)
+     RETURNING id, name, slug, created_at AS "createdAt"`,
+    [id, name, slugify(name)]
+  );
+  await client.query(
+    `INSERT INTO workspace_member (workspace_id, user_id, role)
+     VALUES ($1, $2, 'owner')`,
+    [id, userId]
+  );
+  const { rows: boardRows } = await client.query<Board>(
+    `INSERT INTO board (workspace_id, name, position)
+     VALUES ($1, 'Kanban Board', 0)
+     RETURNING id, workspace_id AS "workspaceId", name, position,
+               created_at AS "createdAt"`,
+    [id]
+  );
+  await seedColumns(client, boardRows[0].id);
+
+  return {
+    workspace: { ...rows[0], role: "owner" as const },
+    board: boardRows[0],
+  };
+}
+
+/**
+ * Creates a workspace the caller owns.
+ *
+ * This is the one workspace mutation with no role check, and deliberately so:
+ * there is no workspace to hold a role in until this returns. The session is the
+ * only gate — anyone signed in may make a workspace of their own.
+ */
+export async function createWorkspace(
+  userId: string,
+  name: string
+): Promise<NewWorkspace> {
+  return withTransaction((client) => provisionWorkspace(client, userId, name));
 }
 
 export async function addMember(
@@ -109,29 +184,7 @@ export async function ensurePersonalWorkspace(
   if (existing.length > 0) return existing[0];
 
   const name = displayName ? `${displayName}'s Workspace` : "My Workspace";
-
-  return withTransaction(async (client) => {
-    const id = randomUUID();
-    const { rows } = await client.query<WorkspaceMembership>(
-      `INSERT INTO workspace (id, name, slug)
-       VALUES ($1, $2, $3)
-       RETURNING id, name, slug, created_at AS "createdAt"`,
-      [id, name, slugify(name)]
-    );
-    await client.query(
-      `INSERT INTO workspace_member (workspace_id, user_id, role)
-       VALUES ($1, $2, 'owner')`,
-      [id, userId]
-    );
-    const { rows: boardRows } = await client.query<{ id: number }>(
-      `INSERT INTO board (workspace_id, name, position)
-       VALUES ($1, 'Kanban Board', 0) RETURNING id`,
-      [id]
-    );
-    await seedColumns(client, boardRows[0].id);
-
-    return { ...rows[0], role: "owner" as const };
-  });
+  return (await createWorkspace(userId, name)).workspace;
 }
 
 /** The board a user lands on by default: first board of their first workspace. */
