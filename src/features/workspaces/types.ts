@@ -1,0 +1,39 @@
+export type WorkspaceRole = "owner" | "admin" | "member" | "viewer";
+
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+}
+
+/** A workspace as seen by one member — includes that member's own role. */
+export interface WorkspaceMembership extends Workspace {
+  role: WorkspaceRole;
+}
+
+export interface Board {
+  id: number;
+  workspaceId: string;
+  name: string;
+  position: number;
+  createdAt: string;
+}
+
+export interface Member {
+  userId: string;
+  name: string;
+  email: string;
+  image: string | null;
+  role: WorkspaceRole;
+  createdAt: string;
+}
+
+export interface Invitation {
+  id: string;
+  workspaceId: string;
+  email: string;
+  role: WorkspaceRole;
+  createdAt: string;
+  expiresAt: string;
+}
