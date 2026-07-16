@@ -1,5 +1,6 @@
 import { query, queryOne } from "@/shared/db/client";
 import { requireBoardRole } from "@/features/workspaces/server/authz";
+import { taskColumns } from "@/features/tasks/server/repository";
 import type { Task } from "@/features/tasks/types";
 import type { Board } from "@/features/workspaces/types";
 import type { BoardData, Column } from "../types";
@@ -32,9 +33,13 @@ export async function getBoard(
     [boardId]
   );
 
+  // taskColumns rather than a list written out here, which is what this query
+  // used to have and how it came to return tasks with two fields missing: 006
+  // added priority and due_date, the tasks repository knew, and this did not.
+  // `query<Task>` cannot catch that — it is a cast, not a check — so the cards
+  // rendered an undefined priority and no due date while every test passed.
   const tasks = await query<Task>(
-    `SELECT t.id, t.column_id AS "columnId", t.title, t.description, t.position,
-            t.assignee_id AS "assigneeId", t.created_at AS "createdAt"
+    `SELECT ${taskColumns("t")}
        FROM task t
        JOIN board_column bc ON bc.id = t.column_id
       WHERE bc.board_id = $1

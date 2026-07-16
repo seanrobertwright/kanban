@@ -15,15 +15,36 @@ import type {
   UpdateTaskInput,
 } from "../types";
 
-// Postgres folds unquoted identifiers to lowercase, so `AS columnId` would
-// arrive as `columnid`. The double quotes are load-bearing.
-//
-// due_date needs no cast or to_char: shared/db/client.ts parses DATE to the raw
-// 'YYYY-MM-DD' string globally, which is what keeps a due date from becoming a
-// JS Date at the one boundary where that silently changes the day.
-const TASK_COLUMNS = `id, column_id AS "columnId", title, description, position,
-                      assignee_id AS "assigneeId", priority,
-                      due_date AS "dueDate", created_at AS "createdAt"`;
+/**
+ * Every column of a task, optionally qualified by a table alias.
+ *
+ * A function rather than a constant, and exported rather than private, because
+ * the constant it replaces could not serve the queries that join — those need
+ * `t.id` where a plain read needs `id`, so each of them hand-copied the list
+ * instead, and a hand-copied list drifts. It did: 006 added priority and due_date
+ * here and getBoard kept selecting the seven columns it already knew, returning
+ * tasks that were missing two fields while still being typed as whole ones.
+ *
+ * That bug is invisible to the compiler, which is the point of centralizing it.
+ * `query<Task>` is a cast, not a check — pg cannot see the SQL, so a SELECT that
+ * under-fetches type-checks perfectly and fails only in the browser, as an
+ * undefined where a value should be. The one defence is that there be one list.
+ *
+ * Postgres folds unquoted identifiers to lowercase, so `AS columnId` would
+ * arrive as `columnid`. The double quotes are load-bearing.
+ *
+ * due_date needs no cast or to_char: shared/db/client.ts parses DATE to the raw
+ * 'YYYY-MM-DD' string globally, which is what keeps a due date from becoming a
+ * JS Date at the one boundary where that silently changes the day.
+ */
+export function taskColumns(alias = ""): string {
+  const p = alias ? `${alias}.` : "";
+  return `${p}id, ${p}column_id AS "columnId", ${p}title, ${p}description,
+          ${p}position, ${p}assignee_id AS "assigneeId", ${p}priority,
+          ${p}due_date AS "dueDate", ${p}created_at AS "createdAt"`;
+}
+
+const TASK_COLUMNS = taskColumns();
 
 function selectTask(client: PoolClient, id: number) {
   return client
@@ -404,21 +425,14 @@ export async function unassignFromWorkspace(
   assigneeId: string,
   actor: Actor
 ): Promise<number> {
-  // TASK_COLUMNS is unqualified, and `id` is ambiguous across this join — task,
-  // board_column and board all have one. Hence the explicit t. prefixes rather
-  // than the shared constant.
-  //
-  // Every column snapshot() reads has to be listed here, including the ones this
-  // function never touches: the rows below become `before`/`after` on an
-  // append-only table, and a field missing from this SELECT would land as
-  // undefined in JSONB — indistinguishable, forever, from "written before 006".
-  // That is the failure this list exists to prevent, and the reason it is worth
-  // the duplication of TASK_COLUMNS rather than a partial select.
+  // Aliased, because `id` is ambiguous across this join — task, board_column and
+  // board all have one. This is the case that made taskColumns a function: the
+  // hand-written list it replaces is how getBoard silently lost two fields at
+  // 006, and these rows have further to fall. They become `before`/`after` on an
+  // append-only table, where a missing field lands as undefined in JSONB and is
+  // indistinguishable, forever, from "written before 006".
   const { rows } = await client.query<Task & { boardId: number }>(
-    `SELECT t.id, t.column_id AS "columnId", t.title, t.description, t.position,
-            t.assignee_id AS "assigneeId", t.priority, t.due_date AS "dueDate",
-            t.created_at AS "createdAt",
-            bc.board_id AS "boardId"
+    `SELECT ${taskColumns("t")}, bc.board_id AS "boardId"
        FROM task t
        JOIN board_column bc ON bc.id = t.column_id
        JOIN board b ON b.id = bc.board_id
