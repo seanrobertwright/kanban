@@ -2,6 +2,11 @@ import { query, queryOne, withTransaction } from "@/shared/db/client";
 import { logActivity } from "@/features/activity/server/repository";
 import type { Actor, CommentSnapshot } from "@/features/activity/types";
 import {
+  asPrincipal,
+  principalActor,
+} from "@/features/auth/server/principal";
+import type { Principal } from "@/features/auth/server/principal";
+import {
   AuthzError,
   ROLE_RANK,
   requireTaskRole,
@@ -112,11 +117,12 @@ async function requireCommentAccess(
 /**
  * A task's comments, oldest first — a conversation, not an audit trail.
  *
- * The LEFT JOIN resolves the author's name and tolerates its absence, exactly as
- * the activity feed's does and for the same two reasons: author_id carries no
- * foreign key, so a deleted user's remarks outlive them, and from M2 an agent id
- * will not match "user" at all. Both arrive as a null name, which the UI renders
- * rather than dropping the row.
+ * Two LEFT JOINs resolve the author's name, one per author kind and gated on
+ * author_type, exactly as the activity feed's do: a human's remark resolves
+ * through "user", an agent's through "agent" (009) — so an agent report reads
+ * under the agent's name rather than "An agent". Both tolerate absence: author_id
+ * carries no foreign key, so a deleted author's remarks outlive them as a null
+ * name, which the UI renders rather than dropping the row.
  */
 export async function listCommentsForTask(
   userId: string,
@@ -128,10 +134,13 @@ export async function listCommentsForTask(
     Comment & { authorName: string | null; authorImage: string | null }
   >(
     `SELECT ${commentColumns("c.")},
-            u.name AS "authorName", u.image AS "authorImage"
+            COALESCE(u.name, ag.name) AS "authorName",
+            COALESCE(u.image, ag.image) AS "authorImage"
        FROM comment c
        LEFT JOIN "user" u
          ON u.id = c.author_id AND c.author_type = 'human'
+       LEFT JOIN agent ag
+         ON ag.id = c.author_id AND c.author_type = 'agent'
       WHERE c.task_id = $1
       ORDER BY c.id ASC`,
     [taskId]
@@ -163,11 +172,16 @@ export async function listCommentsForTask(
  * check to look like an oversight.
  */
 export async function createComment(
-  userId: string,
+  actor: string | Principal,
   input: CreateCommentInput
 ): Promise<Comment> {
+  // The author columns come straight from the principal — 'human'/user id or
+  // 'agent'/agent id — where this INSERT used to hardcode 'human'. That single
+  // hardcode was the last thing pinning comments to people; §7.1 makes
+  // comment_on_task an agent tool, and this is the door it comes through.
+  const by = principalActor(asPrincipal(actor));
   const { boardId, workspaceId } = await requireTaskRole(
-    userId,
+    actor,
     input.taskId,
     "viewer"
   );
@@ -175,9 +189,9 @@ export async function createComment(
   return withTransaction(async (client) => {
     const { rows } = await client.query<Comment>(
       `INSERT INTO comment (task_id, author_type, author_id, body)
-       VALUES ($1, 'human', $2, $3)
+       VALUES ($1, $2, $3, $4)
        RETURNING ${commentColumns()}`,
-      [input.taskId, userId, input.body]
+      [input.taskId, by.type, by.id, input.body]
     );
     const comment = rows[0];
 
@@ -185,7 +199,7 @@ export async function createComment(
       workspaceId,
       boardId,
       taskId: input.taskId,
-      actor: human(userId),
+      actor: by,
       action: "comment.created",
       // No `before`: the comment did not exist. Undo inverts this to a delete.
       after: snapshot(comment),

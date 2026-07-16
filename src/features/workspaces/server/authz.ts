@@ -1,4 +1,6 @@
 import { queryOne } from "@/shared/db/client";
+import { asPrincipal } from "@/features/auth/server/principal";
+import type { Principal } from "@/features/auth/server/principal";
 import type { WorkspaceRole } from "../types";
 
 export const ROLE_RANK: Record<WorkspaceRole, number> = {
@@ -64,31 +66,63 @@ export function authzErrorResponse(error: unknown): Response {
   throw error;
 }
 
+/**
+ * The one place a human and an agent diverge in every resource check: where a
+ * human's role is found. Both are aliased `wm` so the surrounding SELECT — always
+ * `wm.role` — is identical, and both join on `b.workspace_id`, so the resource
+ * queries below need only splice this clause in and bind the principal's id.
+ *
+ * A human's role is an edge in workspace_member; an agent's is an attribute on
+ * its own row (009), scoped to the one workspace it belongs to. Joining `agent`
+ * on `workspace_id` is what makes a resource in another workspace resolve to no
+ * row — reported as not_found, the same anti-enumeration answer a human gets, so
+ * an agent's token cannot be used to probe which ids exist elsewhere.
+ */
+function membershipJoin(principal: Principal): { join: string; id: string } {
+  return principal.kind === "human"
+    ? {
+        join: `JOIN workspace_member wm
+                 ON wm.workspace_id = b.workspace_id AND wm.user_id = $2`,
+        id: principal.userId,
+      }
+    : {
+        join: `JOIN agent wm
+                 ON wm.workspace_id = b.workspace_id AND wm.id = $2`,
+        id: principal.agentId,
+      };
+}
+
 export async function requireWorkspaceRole(
-  userId: string,
+  principal: string | Principal,
   workspaceId: string,
   min: WorkspaceRole
 ): Promise<WorkspaceRole> {
+  const p = asPrincipal(principal);
+  // No board to join through here, so this one does not use membershipJoin: it
+  // reads the role straight from the principal's own table, keyed on the
+  // workspace it is being asked about.
   const row = await queryOne<{ role: WorkspaceRole }>(
-    `SELECT role FROM workspace_member WHERE workspace_id = $1 AND user_id = $2`,
-    [workspaceId, userId]
+    p.kind === "human"
+      ? `SELECT role FROM workspace_member WHERE workspace_id = $1 AND user_id = $2`
+      : `SELECT role FROM agent WHERE workspace_id = $1 AND id = $2`,
+    [workspaceId, p.kind === "human" ? p.userId : p.agentId]
   );
   if (!row) throw new AuthzError("not_found", "Workspace not found");
   return assertRank(row.role, min, "act in this workspace");
 }
 
 export async function requireBoardRole(
-  userId: string,
+  principal: string | Principal,
   boardId: number,
   min: WorkspaceRole
 ): Promise<{ role: WorkspaceRole; workspaceId: string }> {
+  const { join, id } = membershipJoin(asPrincipal(principal));
   const row = await queryOne<{ role: WorkspaceRole; workspaceId: string }>(
     `SELECT wm.role, b.workspace_id AS "workspaceId"
        FROM board b
-       JOIN workspace_member wm
-         ON wm.workspace_id = b.workspace_id AND wm.user_id = $2
+       ${join}
       WHERE b.id = $1`,
-    [boardId, userId]
+    [boardId, id]
   );
   if (!row) throw new AuthzError("not_found", "Board not found");
   assertRank(row.role, min, "act on this board");
@@ -109,18 +143,18 @@ export interface ColumnAccess {
 }
 
 export async function requireColumnRole(
-  userId: string,
+  principal: string | Principal,
   columnId: number,
   min: WorkspaceRole
 ): Promise<ColumnAccess> {
+  const { join, id } = membershipJoin(asPrincipal(principal));
   const row = await queryOne<ColumnAccess>(
     `SELECT wm.role, bc.board_id AS "boardId", b.workspace_id AS "workspaceId"
        FROM board_column bc
        JOIN board b ON b.id = bc.board_id
-       JOIN workspace_member wm
-         ON wm.workspace_id = b.workspace_id AND wm.user_id = $2
+       ${join}
       WHERE bc.id = $1`,
-    [columnId, userId]
+    [columnId, id]
   );
   if (!row) throw new AuthzError("not_found", "Column not found");
   assertRank(row.role, min, "act on this column");
@@ -128,19 +162,19 @@ export async function requireColumnRole(
 }
 
 export async function requireTaskRole(
-  userId: string,
+  principal: string | Principal,
   taskId: number,
   min: WorkspaceRole
 ): Promise<ColumnAccess> {
+  const { join, id } = membershipJoin(asPrincipal(principal));
   const row = await queryOne<ColumnAccess>(
     `SELECT wm.role, bc.board_id AS "boardId", b.workspace_id AS "workspaceId"
        FROM task t
        JOIN board_column bc ON bc.id = t.column_id
        JOIN board b ON b.id = bc.board_id
-       JOIN workspace_member wm
-         ON wm.workspace_id = b.workspace_id AND wm.user_id = $2
+       ${join}
       WHERE t.id = $1`,
-    [taskId, userId]
+    [taskId, id]
   );
   if (!row) throw new AuthzError("not_found", "Task not found");
   assertRank(row.role, min, "modify this task");

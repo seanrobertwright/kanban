@@ -1,7 +1,5 @@
-import {
-  getSessionFromRequest,
-  unauthorized,
-} from "@/features/auth/server/session";
+import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
+import { unauthorized } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import { PRIORITY_ORDER, isTaskPriority } from "../types";
 import type { TaskPriority } from "../types";
@@ -84,8 +82,8 @@ function isDueDate(value: unknown): value is string | null | undefined {
 }
 
 export async function handleCreateTask(request: Request) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return badRequest("Invalid JSON body");
@@ -125,7 +123,7 @@ export async function handleCreateTask(request: Request) {
     return badRequest("labelIds must be an array of label ids");
 
   try {
-    const task = await createTask(session.user.id, {
+    const task = await createTask(principal, {
       columnId,
       title: title.trim(),
       description,
@@ -142,20 +140,39 @@ export async function handleCreateTask(request: Request) {
 }
 
 export async function handleListSubtasks(request: Request, id: number) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
   if (!Number.isInteger(id)) return badRequest("Invalid task id");
 
   try {
-    return Response.json(await listSubtasks(session.user.id, id));
+    return Response.json(await listSubtasks(principal, id));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/**
+ * Reading a single task by id — added for the MCP `get_task` tool, since a card's
+ * pieces and an agent's "what does this task look like now" both want one task
+ * rather than a whole board. The board has no per-task GET before this because the
+ * human UI reads the board whole; an agent reasons task by task.
+ */
+export async function handleGetTask(request: Request, id: number) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  if (!Number.isInteger(id)) return badRequest("Invalid task id");
+
+  try {
+    const task = await getTask(principal, id);
+    return task ? Response.json(task) : notFound();
   } catch (error) {
     return authzErrorResponse(error);
   }
 }
 
 export async function handleUpdateTask(request: Request, id: number) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
   if (!Number.isInteger(id)) return badRequest("Invalid task id");
 
   const body = await request.json().catch(() => null);
@@ -200,7 +217,7 @@ export async function handleUpdateTask(request: Request, id: number) {
     if (columnId !== undefined || position !== undefined) {
       if (typeof columnId !== "number" || typeof position !== "number")
         return badRequest("columnId and position are both required to move");
-      const moved = await moveTask(session.user.id, id, { columnId, position });
+      const moved = await moveTask(principal, id, { columnId, position });
       if (!moved) return notFound();
     }
 
@@ -225,7 +242,7 @@ export async function handleUpdateTask(request: Request, id: number) {
       if (!isLabelIds(labelIds))
         return badRequest("labelIds must be an array of label ids");
 
-      const updated = await updateTask(session.user.id, id, {
+      const updated = await updateTask(principal, id, {
         title: title as string | undefined,
         description: description as string | undefined,
         // Spread, so the key exists only when the caller sent it. Writing
@@ -250,7 +267,7 @@ export async function handleUpdateTask(request: Request, id: number) {
       return Response.json(updated);
     }
 
-    const task = await getTask(session.user.id, id);
+    const task = await getTask(principal, id);
     return task ? Response.json(task) : notFound();
   } catch (error) {
     return authzErrorResponse(error);
@@ -258,12 +275,12 @@ export async function handleUpdateTask(request: Request, id: number) {
 }
 
 export async function handleDeleteTask(request: Request, id: number) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
   if (!Number.isInteger(id)) return badRequest("Invalid task id");
 
   try {
-    return (await deleteTask(session.user.id, id))
+    return (await deleteTask(principal, id))
       ? new Response(null, { status: 204 })
       : notFound();
   } catch (error) {

@@ -4,6 +4,11 @@ import { query, queryOne, withTransaction } from "@/shared/db/client";
 import { logActivity } from "@/features/activity/server/repository";
 import type { Actor, TaskSnapshot } from "@/features/activity/types";
 import {
+  asPrincipal,
+  principalActor,
+} from "@/features/auth/server/principal";
+import type { Principal } from "@/features/auth/server/principal";
+import {
   assertLabelsInWorkspace,
   setTaskLabels,
 } from "@/features/labels/server/repository";
@@ -28,11 +33,6 @@ function selectTask(client: PoolClient, id: number) {
   return client
     .query<Task>(`SELECT ${TASK_COLUMNS} FROM task WHERE id = $1`, [id])
     .then((r) => r.rows[0]);
-}
-
-/** Every caller here is a signed-in person; agents become actors at M2. */
-function human(userId: string): Actor {
-  return { type: "human", id: userId };
 }
 
 const snapshot = taskSnapshot;
@@ -159,11 +159,11 @@ async function assertAssignable(
  */
 async function assertDecomposable(
   client: PoolClient,
-  userId: string,
+  actor: string | Principal,
   parentId: number,
   boardId: number
 ): Promise<void> {
-  const parent = await requireTaskRole(userId, parentId, "member");
+  const parent = await requireTaskRole(actor, parentId, "member");
   if (parent.boardId !== boardId) {
     throw new AuthzError(
       "forbidden",
@@ -185,10 +185,10 @@ async function assertDecomposable(
 }
 
 export async function getTask(
-  userId: string,
+  actor: string | Principal,
   id: number
 ): Promise<Task | undefined> {
-  await requireTaskRole(userId, id, "viewer");
+  await requireTaskRole(actor, id, "viewer");
   return queryOne<Task>(`SELECT ${TASK_COLUMNS} FROM task WHERE id = $1`, [id]);
 }
 
@@ -210,10 +210,10 @@ export async function getTask(
  * second board's worth of rows that nobody is looking at until they open one.
  */
 export async function listSubtasks(
-  userId: string,
+  actor: string | Principal,
   taskId: number
 ): Promise<Task[]> {
-  await requireTaskRole(userId, taskId, "viewer");
+  await requireTaskRole(actor, taskId, "viewer");
   return query<Task>(
     `SELECT ${taskColumns("t")}
        FROM task t
@@ -225,11 +225,12 @@ export async function listSubtasks(
 }
 
 export async function createTask(
-  userId: string,
+  actor: string | Principal,
   input: CreateTaskInput
 ): Promise<Task> {
+  const by = principalActor(asPrincipal(actor));
   const { boardId, workspaceId } = await requireColumnRole(
-    userId,
+    actor,
     input.columnId,
     "member"
   );
@@ -239,7 +240,7 @@ export async function createTask(
   return withTransaction(async (client) => {
     const parentId = input.parentId ?? null;
     if (parentId !== null) {
-      await assertDecomposable(client, userId, parentId, boardId);
+      await assertDecomposable(client, actor, parentId, boardId);
     }
     if (input.assigneeId != null) {
       await assertAssignable(client, workspaceId, input.assigneeId);
@@ -293,7 +294,7 @@ export async function createTask(
       workspaceId,
       boardId,
       taskId: task.id,
-      actor: human(userId),
+      actor: by,
       action: "task.created",
       // No `before`: the task did not exist. Undo inverts this to a delete.
       after: snapshot(task),
@@ -315,11 +316,12 @@ export async function createTask(
 }
 
 export async function updateTask(
-  userId: string,
+  actor: string | Principal,
   id: number,
   input: UpdateTaskInput
 ): Promise<Task | undefined> {
-  const { boardId, workspaceId } = await requireTaskRole(userId, id, "member");
+  const by = principalActor(asPrincipal(actor));
+  const { boardId, workspaceId } = await requireTaskRole(actor, id, "member");
 
   // `in`, not a null check — the distinction is the whole point. `undefined`
   // means the caller said nothing about the assignee; `null` means the caller
@@ -406,7 +408,7 @@ export async function updateTask(
         workspaceId,
         boardId,
         taskId: id,
-        actor: human(userId),
+        actor: by,
         action: "task.updated",
         before: from,
         after: to,
@@ -418,7 +420,7 @@ export async function updateTask(
         workspaceId,
         boardId,
         taskId: id,
-        actor: human(userId),
+        actor: by,
         action: "task.assigned",
         before: from,
         after: to,
@@ -430,7 +432,7 @@ export async function updateTask(
         workspaceId,
         boardId,
         taskId: id,
-        actor: human(userId),
+        actor: by,
         action: "task.prioritized",
         before: from,
         after: to,
@@ -442,7 +444,7 @@ export async function updateTask(
         workspaceId,
         boardId,
         taskId: id,
-        actor: human(userId),
+        actor: by,
         action: "task.scheduled",
         before: from,
         after: to,
@@ -454,7 +456,7 @@ export async function updateTask(
         workspaceId,
         boardId,
         taskId: id,
-        actor: human(userId),
+        actor: by,
         action: "task.labeled",
         before: from,
         after: to,
@@ -465,12 +467,13 @@ export async function updateTask(
 }
 
 export async function moveTask(
-  userId: string,
+  actor: string | Principal,
   id: number,
   input: MoveTaskInput
 ): Promise<Task | undefined> {
-  const { boardId, workspaceId } = await requireTaskRole(userId, id, "member");
-  const target = await requireColumnRole(userId, input.columnId, "member");
+  const by = principalActor(asPrincipal(actor));
+  const { boardId, workspaceId } = await requireTaskRole(actor, id, "member");
+  const target = await requireColumnRole(actor, input.columnId, "member");
 
   // Both checks above only prove the caller can touch each side. Without this
   // equality the API would happily move a task into a column of another board
@@ -540,7 +543,7 @@ export async function moveTask(
         workspaceId,
         boardId,
         taskId: id,
-        actor: human(userId),
+        actor: by,
         action: "task.moved",
         before: snapshot(before),
         after: snapshot(after),
@@ -632,8 +635,12 @@ export async function unassignFromWorkspace(
  * audience for why it disappeared, and undo needs to recreate each piece rather
  * than a count of them.
  */
-export async function deleteTask(userId: string, id: number): Promise<boolean> {
-  const { boardId, workspaceId } = await requireTaskRole(userId, id, "member");
+export async function deleteTask(
+  actor: string | Principal,
+  id: number
+): Promise<boolean> {
+  const by = principalActor(asPrincipal(actor));
+  const { boardId, workspaceId } = await requireTaskRole(actor, id, "member");
 
   return withTransaction(async (client) => {
     const before = await selectTask(client, id);
@@ -669,7 +676,7 @@ export async function deleteTask(userId: string, id: number): Promise<boolean> {
         workspaceId,
         boardId,
         taskId: subtask.id,
-        actor: human(userId),
+        actor: by,
         action: "task.deleted",
         before: snapshot(subtask),
       });
@@ -682,7 +689,7 @@ export async function deleteTask(userId: string, id: number): Promise<boolean> {
       workspaceId,
       boardId,
       taskId: id,
-      actor: human(userId),
+      actor: by,
       action: "task.deleted",
       before: snapshot(before),
     });

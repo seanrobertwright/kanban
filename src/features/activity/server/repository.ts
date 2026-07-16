@@ -99,11 +99,14 @@ const ACTIVITY_COLUMNS = `al.id, al.workspace_id AS "workspaceId",
  * A task's history, newest first.
  *
  * Readable by any workspace member — a viewer who can see the task can see what
- * happened to it. The LEFT JOIN resolves the actor's display name and tolerates
- * its absence: actor_id carries no foreign key, so a deleted user's actions
- * survive them, and from M2 an agent id will not match "user" at all. Both
- * arrive as a null name, which the UI renders rather than dropping the row —
- * losing an audit entry because its author left would defeat the purpose.
+ * happened to it. Two LEFT JOINs resolve the actor's display name, one per actor
+ * kind, gated on actor_type so each row matches at most one: a human row resolves
+ * through "user", an agent row through "agent" (009) — which is what makes the
+ * feed read "Triage Bot moved this" rather than attributing it to whoever minted
+ * the token. Both tolerate absence: actor_id carries no foreign key, so a deleted
+ * user's or a deleted agent's actions survive them as a null name, which the UI
+ * renders rather than dropping the row — losing an audit entry because its author
+ * left would defeat the purpose.
  */
 export async function listActivityForTask(
   userId: string,
@@ -112,10 +115,13 @@ export async function listActivityForTask(
   await requireTaskRole(userId, taskId, "viewer");
   return query<ActivityEntry>(
     `SELECT ${ACTIVITY_COLUMNS},
-            u.name AS "actorName", u.image AS "actorImage"
+            COALESCE(u.name, ag.name) AS "actorName",
+            COALESCE(u.image, ag.image) AS "actorImage"
        FROM activity_log al
        LEFT JOIN "user" u
          ON u.id = al.actor_id AND al.actor_type = 'human'
+       LEFT JOIN agent ag
+         ON ag.id = al.actor_id AND al.actor_type = 'agent'
       WHERE al.task_id = $1
       ORDER BY al.id DESC`,
     [taskId]

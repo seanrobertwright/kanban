@@ -1,3 +1,4 @@
+import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
 import {
   getSessionFromRequest,
   unauthorized,
@@ -46,8 +47,11 @@ export async function handleListComments(request: Request, id: string) {
 }
 
 export async function handleCreateComment(request: Request, id: string) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  // The one comment handler an agent reaches (comment_on_task, §7.1). Editing and
+  // deleting stay human-only — an agent reports, it does not moderate — so those
+  // handlers still resolve a session directly.
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
 
   const taskId = Number(id);
   if (!Number.isInteger(taskId)) return badRequest("Invalid task id");
@@ -60,7 +64,7 @@ export async function handleCreateComment(request: Request, id: string) {
   if (body === null) return badRequest("body must be a non-empty string");
 
   try {
-    const comment = await createComment(session.user.id, { taskId, body });
+    const comment = await createComment(principal, { taskId, body });
     return Response.json(comment, { status: 201 });
   } catch (error) {
     return authzErrorResponse(error);

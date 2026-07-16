@@ -1,5 +1,6 @@
 import { query, queryOne } from "@/shared/db/client";
 import { requireBoardRole } from "@/features/workspaces/server/authz";
+import type { Principal } from "@/features/auth/server/principal";
 import { taskColumns } from "@/features/tasks/server/task-row";
 import type { Task } from "@/features/tasks/types";
 import type { Board } from "@/features/workspaces/types";
@@ -12,10 +13,10 @@ import type { BoardData, Column } from "../types";
  * the workspace that owns this board.
  */
 export async function getBoard(
-  userId: string,
+  actor: string | Principal,
   boardId: number
 ): Promise<BoardData | undefined> {
-  await requireBoardRole(userId, boardId, "viewer");
+  await requireBoardRole(actor, boardId, "viewer");
 
   const board = await queryOne<Board>(
     `SELECT id, workspace_id AS "workspaceId", name, position,
