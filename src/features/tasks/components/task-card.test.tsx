@@ -3,11 +3,25 @@ import { render, screen } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { AgentSummary } from "@/features/agents/types";
 import type { Member } from "@/features/workspaces/types";
 import { TaskCard } from "./task-card";
 import type { Task } from "../types";
 
-const MEMBERS_BY_ID: Record<string, Member> = {};
+const MEMBERS_BY_ID: Record<string, Member> = {
+  "u-alice": {
+    userId: "u-alice",
+    name: "Alice",
+    email: "alice@example.test",
+    image: null,
+    role: "member",
+    createdAt: "2026-07-15T00:00:00.000Z",
+  },
+};
+
+const AGENTS_BY_ID: Record<string, AgentSummary> = {
+  "a-triage": { id: "a-triage", name: "Triage Bot", image: null, role: "member" },
+};
 
 function task(over: Partial<Task> = {}): Task {
   return {
@@ -16,7 +30,7 @@ function task(over: Partial<Task> = {}): Task {
     title: "A task",
     description: "",
     position: 0,
-    assigneeId: null,
+    assignee: null,
     priority: "none",
     dueDate: null,
     labels: [],
@@ -30,7 +44,11 @@ function task(over: Partial<Task> = {}): Task {
 }
 
 const card = (over: Partial<Task> = {}) => (
-  <TaskCard task={task(over)} membersById={MEMBERS_BY_ID} />
+  <TaskCard
+    task={task(over)}
+    membersById={MEMBERS_BY_ID}
+    agentsById={AGENTS_BY_ID}
+  />
 );
 
 /** Comfortably in the past and the future, so neither depends on when this runs. */
@@ -50,6 +68,27 @@ describe("TaskCard priority", () => {
     // would cost the space and say nothing.
     render(card({ priority: "none" }));
     expect(screen.queryByRole("img", { name: /Priority/ })).toBeNull();
+  });
+});
+
+describe("TaskCard assignee", () => {
+  it("names a human assignee", () => {
+    render(card({ assignee: { type: "human", id: "u-alice" } }));
+    expect(screen.getByText("Assigned to Alice")).toBeDefined();
+  });
+
+  it("marks an agent assignee as an agent — the wedge on a card", () => {
+    // A person and an agent both hold work; the bot mark and the word are what
+    // say which, "counting human and agent capacity as peers" (§4.3).
+    render(card({ assignee: { type: "agent", id: "a-triage" } }));
+    expect(screen.getByText("Agent Triage Bot")).toBeDefined();
+  });
+
+  it("says nothing when the assignee id no longer resolves", () => {
+    // Between a member's removal and the board's refetch the id stops resolving;
+    // the card renders nothing rather than a broken face.
+    render(card({ assignee: { type: "human", id: "u-gone" } }));
+    expect(screen.queryByText(/Assigned to|Agent /)).toBeNull();
   });
 });
 

@@ -80,16 +80,20 @@ export interface Task {
    */
   subtaskCount: number;
   /**
-   * The member this task is assigned to, or null. Peer to the `agentId` that
-   * lands at M2 (PRD §8) — the picker treats agents as another kind of
-   * assignee rather than a separate concept, which is the wedge in one field.
+   * Who this task is assigned to — a person or an agent (011) — or null. An
+   * Actor (type + id), unified above the two peer columns assignee_id / agent_id,
+   * the wedge in one field: §8's "assignee_id and agent_id are peers, exactly one
+   * set", and §4.3's board that "counts human and agent capacity as peers". This
+   * was `assigneeId: string` through M1; 011 gave it the agent half and the Actor
+   * shape, matching 010's claimedBy — the picker treats an agent as another kind
+   * of assignee rather than a separate concept.
    *
-   * Only the id: the name and avatar are resolved client-side from the member
-   * list the assignee picker already needs, rather than joined onto every task
-   * in getBoard. Widening the read to carry display data would put the same
-   * two strings on every card of the same person.
+   * Only the principal, not its name: display data is resolved client-side, a
+   * human from the member list and an agent from the workspace's agent roster,
+   * both of which the picker holds anyway. Joining names onto every task in
+   * getBoard would put the same two strings on every card of the same assignee.
    */
-  assigneeId: string | null;
+  assignee: Actor | null;
   /**
    * Never null: 006 gives the column NOT NULL DEFAULT 'none', because "nobody
    * has triaged this" is a state worth naming rather than an absence. That is
@@ -144,7 +148,13 @@ export interface CreateTaskInput {
   columnId: number;
   title: string;
   description?: string;
-  assigneeId?: string | null;
+  /**
+   * Who to assign — a person or an agent (011) — or null/absent for no one. An
+   * Actor, so one field carries both, and the repository proves the principal
+   * belongs to this workspace before writing it to whichever of the two peer
+   * columns its type names.
+   */
+  assignee?: Actor | null;
   priority?: TaskPriority;
   dueDate?: string | null;
   /** Ids, not refs: the caller says which labels, the database knows their names. */
@@ -175,13 +185,15 @@ export interface UpdateTaskInput {
   description?: string;
   /**
    * Three-valued, and the distinction is load-bearing: `undefined` means "leave
-   * the assignee alone", `null` means "unassign". The existing COALESCE idiom in
-   * updateTask cannot express this — it reads null as "no value supplied" — so
-   * the repository tests for the key's presence instead. Harmless for title and
-   * description, neither of which is nullable; fatal here, where clearing the
-   * field IS one of the two things a user wants to do.
+   * the assignee alone", `null` means "unassign", an Actor means "assign to this
+   * person or agent". The existing COALESCE idiom in updateTask cannot express
+   * the clear — it reads null as "no value supplied" — so the repository tests
+   * for the key's presence instead. Harmless for title and description, neither
+   * nullable; fatal here, where clearing the field IS one of the things a user
+   * wants to do. 011 widened the value from a bare id to an Actor; the
+   * three-valued shape did not change.
    */
-  assigneeId?: string | null;
+  assignee?: Actor | null;
   /**
    * Two-valued, and the contrast with the two fields either side of it is the
    * point. Clearing a priority means setting it to 'none' — a value — so `null`

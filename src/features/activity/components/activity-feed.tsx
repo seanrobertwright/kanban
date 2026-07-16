@@ -7,7 +7,7 @@ import { formatDueDate } from "@/shared/lib/due-date";
 import { relativeTime } from "@/shared/lib/relative-time";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import { fetchTaskActivity } from "../client/api";
-import type { ActivityEntry } from "../types";
+import type { Actor, ActivityEntry, TaskSnapshot } from "../types";
 
 interface ActivityFeedProps {
   taskId: number;
@@ -15,6 +15,8 @@ interface ActivityFeedProps {
   columnNames: Record<number, string>;
   /** Member names by user id, for naming who a task was assigned to. */
   memberNames: Record<string, string>;
+  /** Agent names by agent id (011), for naming an agent assignee in the feed. */
+  agentNames?: Record<string, string>;
   /**
    * Changes to force a refetch. Commenting writes a log row, and the thread that
    * wrote it sits directly above this — without a nudge, the history would keep
@@ -37,22 +39,48 @@ function actorLabel(entry: ActivityEntry): string {
   return entry.actorName ?? "A removed user";
 }
 
+/**
+ * The assignee an entry's snapshot records, tolerant of the pre-011 shape.
+ *
+ * 011 unified assignment into `assignee` (an Actor). Older task.assigned rows,
+ * written when only humans could be assigned, carry a bare `assigneeId` string
+ * instead — and the log is append-only, so they always will. This is the fallback
+ * TaskSnapshot.assigneeId is kept in the type for: read `assignee` if the row has
+ * it, else interpret the legacy id as a human Actor, so a historical entry still
+ * names who a task went to.
+ */
+function assigneeOf(
+  snapshot: TaskSnapshot | null
+): Actor | null | undefined {
+  if (!snapshot) return undefined;
+  if (snapshot.assignee !== undefined) return snapshot.assignee;
+  if (snapshot.assigneeId == null) return snapshot.assigneeId;
+  return { type: "human", id: snapshot.assigneeId };
+}
+
 /** What happened, in prose. */
 function describe(
   entry: ActivityEntry,
   columnNames: Record<number, string>,
-  memberNames: Record<string, string>
+  memberNames: Record<string, string>,
+  agentNames: Record<string, string>
 ): string {
   // A column can be deleted while the log entry naming it survives, so every
   // lookup needs a fallback rather than rendering "undefined".
   const column = (id: number) => columnNames[id] ?? "another column";
 
-  // Same shape of problem, one degree worse: the log outlives the assignment,
-  // and being removed from a workspace clears your assignments but not the
-  // record of them. So an id here routinely names someone the member list no
-  // longer contains — the common case, not the edge case.
-  const person = (id: string | null | undefined) =>
-    id == null ? "nobody" : (memberNames[id] ?? "a former member");
+  // Names an actor — a person or an agent (011) — from whichever roster its kind
+  // points at, each with a fallback. The log outlives the assignment: being
+  // removed from a workspace clears your assignments but not the record of them,
+  // so an id here routinely names someone the roster no longer contains — the
+  // common case, not the edge case. An agent resolves the same way against its
+  // own roster, and "an agent" is the fallback when it too has been removed.
+  const name = (actor: Actor | null | undefined) => {
+    if (actor == null) return "nobody";
+    return actor.type === "agent"
+      ? (agentNames[actor.id] ?? "an agent")
+      : (memberNames[actor.id] ?? "a former member");
+  };
 
   switch (entry.action) {
     case "task.created":
@@ -76,14 +104,17 @@ function describe(
     }
     case "task.assigned": {
       if (!entry.before || !entry.after) return "changed the assignee";
-      const from = entry.before.assigneeId;
-      const to = entry.after.assigneeId;
-      // Self-assignment is worth its own phrasing: "Bob assigned this to Bob"
-      // is how a machine talks about the most ordinary thing on a board.
-      if (to != null && to === entry.actorId) return "took this on";
-      if (to == null) return `unassigned ${person(from)}`;
-      if (from == null) return `assigned this to ${person(to)}`;
-      return `reassigned this from ${person(from)} to ${person(to)}`;
+      const from = assigneeOf(entry.before);
+      const to = assigneeOf(entry.after);
+      // Self-assignment is worth its own phrasing: "Bob assigned this to Bob" is
+      // how a machine talks about the most ordinary thing on a board. The check
+      // is on the whole actor now (011) — an agent that assigns a task to itself
+      // reads "took this on" too, which is exactly the run-trigger event.
+      if (to != null && to.type === entry.actorType && to.id === entry.actorId)
+        return "took this on";
+      if (to == null) return `unassigned ${name(from)}`;
+      if (from == null) return `assigned this to ${name(to)}`;
+      return `reassigned this from ${name(from)} to ${name(to)}`;
     }
     case "task.prioritized": {
       if (!entry.before || !entry.after) return "changed the priority";
@@ -156,7 +187,7 @@ function describe(
       if (held.type === entry.actorType && held.id === entry.actorId)
         return "stopped working on this";
       if (held.type === "agent") return "released an agent's claim";
-      return `released ${person(held.id)}'s claim`;
+      return `released ${name(held)}'s claim`;
     }
     // The comment itself is not repeated here. It is rendered in full a few
     // inches away in the thread, and the log's job is to say a thing happened,
@@ -175,7 +206,7 @@ function describe(
       if (author.type === "human" && author.id === entry.actorId)
         return "deleted their comment";
       if (author.type === "agent") return "deleted an agent's comment";
-      return `deleted ${person(author.id)}'s comment`;
+      return `deleted ${name(author)}'s comment`;
     }
     default:
       // `action` is TEXT in Postgres and this union grows every milestone, so a
@@ -190,6 +221,7 @@ export function ActivityFeed({
   taskId,
   columnNames,
   memberNames,
+  agentNames = {},
   refreshToken = 0,
 }: ActivityFeedProps) {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
@@ -253,7 +285,7 @@ export function ActivityFeed({
             <span className="font-medium text-foreground">
               {actorLabel(entry)}
             </span>{" "}
-            {describe(entry, columnNames, memberNames)}
+            {describe(entry, columnNames, memberNames, agentNames)}
             {" · "}
             <time dateTime={entry.createdAt} title={entry.createdAt}>
               {relativeTime(entry.createdAt, now)}

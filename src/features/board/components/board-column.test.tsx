@@ -15,6 +15,7 @@ function renderColumn(
     column,
     tasks: [],
     membersById: {},
+    agentsById: {},
     labelsById: {},
     canEdit: true,
     canDelete: true,

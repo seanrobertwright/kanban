@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
+import { listWorkspaceAgents } from "@/features/agents/server/repository";
 import { UserMenu } from "@/features/auth/components/user-menu";
 import { getSession } from "@/features/auth/server/session";
 import { Board } from "@/features/board/components/board";
@@ -63,10 +64,15 @@ export default async function Home({
   // not the board — 007 scopes the vocabulary there, so this list is the same
   // for every board a user switches between. Cards need it on first paint for
   // chip colour, and the picker needs it the moment a dialog opens.
-  const [workspaces, boards, members, labels] = await Promise.all([
+  // Agents ride down beside members and for the same reason (011): the picker
+  // shows them as another kind of assignee, and every card with an agent on it
+  // resolves that agent's name and face from this one roster on first paint —
+  // which is why Task carries only an assignee's {type, id}, not its display data.
+  const [workspaces, boards, members, agents, labels] = await Promise.all([
     listWorkspacesForUser(session.user.id),
     listBoardsForUser(session.user.id),
     listMembers(session.user.id, data.board.workspaceId),
+    listWorkspaceAgents(session.user.id, data.board.workspaceId),
     listLabels(session.user.id, data.board.workspaceId),
   ]);
   const workspace = workspaces.find((w) => w.id === data.board.workspaceId)!;
@@ -107,6 +113,7 @@ export default async function Home({
         columns={data.columns}
         initialTasks={data.tasks}
         members={members}
+        agents={agents}
         initialLabels={labels}
         workspaceId={data.board.workspaceId}
         canEdit={canEdit}

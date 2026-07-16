@@ -71,7 +71,7 @@ describe("getBoard", () => {
       columnId: todoId,
       title: "Whole",
       description: "every field",
-      assigneeId: alice,
+      assignee: { type: "human", id: alice },
       priority: "urgent",
       dueDate: "2026-08-01",
     });

@@ -1,7 +1,15 @@
 "use client";
 
-import { ListTree, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  Bot,
+  ListTree,
+  Lock,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 
+import type { AgentSummary } from "@/features/agents/types";
 import type { Member } from "@/features/workspaces/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import { Button } from "@/shared/ui/button";
@@ -28,6 +36,8 @@ interface TaskCardProps {
   task: Task;
   /** Members by user id — the card holds an assignee id, not a name. */
   membersById: Record<string, Member>;
+  /** Agents by id (011) — the other place an assignee's name and face resolve. */
+  agentsById?: Record<string, AgentSummary>;
   /**
    * Labels by id, for their colour only — the task carries its own names
    * (LabelRef), because the log needs them. A colour is presentation, so it is
@@ -99,18 +109,38 @@ function DueDate({ date }: { date: string }) {
   );
 }
 
+/**
+ * The assignee's display data, resolved from whichever roster its kind names
+ * (011): a human from the members, an agent from the agents. Undefined when
+ * unassigned, or when the id names someone no longer in the workspace — which
+ * should not outlast a round trip (removing a member clears their assignments),
+ * but this render sits between the removal and the refetch, so it cannot assume
+ * the lookup succeeds. `isAgent` is what the card marks visibly: an agent holding
+ * a task is the wedge on a card, the peer to a person §4.3 calls for.
+ */
+function resolveAssignee(
+  assignee: Task["assignee"],
+  membersById: Record<string, Member>,
+  agentsById: Record<string, AgentSummary>
+): { name: string; image: string | null; isAgent: boolean } | undefined {
+  if (!assignee) return undefined;
+  if (assignee.type === "agent") {
+    const agent = agentsById[assignee.id];
+    return agent && { name: agent.name, image: agent.image, isAgent: true };
+  }
+  const member = membersById[assignee.id];
+  return member && { name: member.name, image: member.image, isAgent: false };
+}
+
 export function TaskCard({
   task,
   membersById,
+  agentsById = {},
   labelsById = {},
   onEdit,
   onDelete,
 }: TaskCardProps) {
-  // Undefined rather than absent when the id names someone no longer in the
-  // workspace. That should not outlast a round trip — removing a member clears
-  // their assignments — but this render sits between the removal and the
-  // refetch, so it cannot assume the lookup succeeds.
-  const assignee = task.assigneeId ? membersById[task.assigneeId] : undefined;
+  const assignee = resolveAssignee(task.assignee, membersById, agentsById);
   return (
     <Card className="cursor-grab gap-1 py-3 active:cursor-grabbing">
       <CardHeader className="px-3">
@@ -223,18 +253,29 @@ export function TaskCard({
             )}
             {task.dueDate && <DueDate date={task.dueDate} />}
             {assignee && (
-              <span title={`Assigned to ${assignee.name}`}>
-                {/* The image is decorative (alt="") and the initials are hidden,
-                    because both say the same thing as the text beside them. A
-                    screen reader should hear "Assigned to Bob" once, not the
-                    name, then "BO", then the name again. */}
+              // A person or an agent (011). The bot mark is the visible
+              // difference — "counts human and agent capacity as peers" (§4.3),
+              // shown on the card — and the word carries it for anyone who cannot
+              // see the icon. The image is decorative (alt="") and the initials
+              // hidden, because both say the same thing as the sr-only text: a
+              // screen reader should hear "Agent Triage Bot" once, not the name,
+              // then "TR", then the name again.
+              <span
+                className="flex items-center gap-1"
+                title={`${assignee.isAgent ? "Agent" : "Assigned to"} ${assignee.name}`}
+              >
+                {assignee.isAgent && (
+                  <Bot className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                )}
                 <Avatar className="size-5" aria-hidden="true">
                   <AvatarImage src={assignee.image ?? undefined} alt="" />
                   <AvatarFallback className="text-[9px]">
                     {assignee.name.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <span className="sr-only">Assigned to {assignee.name}</span>
+                <span className="sr-only">
+                  {assignee.isAgent ? "Agent" : "Assigned to"} {assignee.name}
+                </span>
               </span>
             )}
           </div>

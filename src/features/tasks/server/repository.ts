@@ -63,7 +63,13 @@ function samePlacement(a: TaskSnapshot, b: TaskSnapshot): boolean {
 }
 
 function sameAssignee(a: TaskSnapshot, b: TaskSnapshot): boolean {
-  return a.assigneeId === b.assigneeId;
+  const [x, y] = [a.assignee ?? null, b.assignee ?? null];
+  if (x === null || y === null) return x === y;
+  // sameActor (defined below with the claim helpers) compares type and id, so a
+  // human and an agent that happened to share an id string never read as equal —
+  // the type is half the identity. This is what makes reassignment from a person
+  // to an agent register as a change rather than a no-op.
+  return sameActor(x, y);
 }
 
 function samePriority(a: TaskSnapshot, b: TaskSnapshot): boolean {
@@ -109,24 +115,55 @@ function sameLabels(a: TaskSnapshot, b: TaskSnapshot): boolean {
  * they have been handed, which looks like a bug and is not one: assignment says
  * whose work it is, and roles say who may edit the board. A stakeholder who owns
  * an outcome without touching the board is a real arrangement, and the two
- * concepts are worth keeping apart — especially before M2, where an agent's
- * permissions are likewise separate from what it has been handed.
+ * concepts are worth keeping apart — and it is exactly the separation M2 needs
+ * for agents: what an agent has been handed is not what it is permitted to do.
+ *
+ * One function, two principals (011). A human's membership is an edge in
+ * workspace_member; an agent's is its own row scoped to one workspace (009). The
+ * "not_found" answer is the same for both, and for the same anti-enumeration
+ * reason: "there is no such principal" and "that principal is in another
+ * workspace" must be indistinguishable, or the id space becomes an oracle.
  */
 async function assertAssignable(
   client: PoolClient,
   workspaceId: string,
-  assigneeId: string
+  assignee: Actor
 ): Promise<void> {
-  const { rows } = await client.query(
-    `SELECT 1 FROM workspace_member WHERE workspace_id = $1 AND user_id = $2`,
-    [workspaceId, assigneeId]
-  );
+  const { rows } =
+    assignee.type === "human"
+      ? await client.query(
+          `SELECT 1 FROM workspace_member WHERE workspace_id = $1 AND user_id = $2`,
+          [workspaceId, assignee.id]
+        )
+      : await client.query(
+          `SELECT 1 FROM agent WHERE workspace_id = $1 AND id = $2`,
+          [workspaceId, assignee.id]
+        );
   if (rows.length === 0) {
     throw new AuthzError(
       "not_found",
-      "That person is not a member of this workspace"
+      assignee.type === "human"
+        ? "That person is not a member of this workspace"
+        : "That agent is not part of this workspace"
     );
   }
+}
+
+/**
+ * An Actor split into the two peer columns 011 stores it across — the human id in
+ * assignee_id, the agent id in agent_id, and always exactly one (or neither) set.
+ * Setting one clears the other by construction, which is what keeps the
+ * task_one_assignee CHECK (011) satisfied without any writer having to remember
+ * to null the peer.
+ */
+function assigneeColumns(assignee: Actor | null): {
+  assigneeId: string | null;
+  agentId: string | null;
+} {
+  if (!assignee) return { assigneeId: null, agentId: null };
+  return assignee.type === "human"
+    ? { assigneeId: assignee.id, agentId: null }
+    : { assigneeId: null, agentId: assignee.id };
 }
 
 /**
@@ -243,8 +280,8 @@ export async function createTask(
     if (parentId !== null) {
       await assertDecomposable(client, actor, parentId, boardId);
     }
-    if (input.assigneeId != null) {
-      await assertAssignable(client, workspaceId, input.assigneeId);
+    if (input.assignee != null) {
+      await assertAssignable(client, workspaceId, input.assignee);
     }
     if (input.labelIds?.length) {
       await assertLabelsInWorkspace(client, workspaceId, input.labelIds);
@@ -265,19 +302,23 @@ export async function createTask(
     // top-level task position 0. That is the ordinary path, so it would be a bug
     // in every board rather than only in subtasks — which is why the operator is
     // worth naming rather than pattern-matching from the query above it.
+    // The two peer columns from one Actor (011). assigneeColumns clears whichever
+    // the assignee is not, so the task_one_assignee CHECK holds by construction.
+    const { assigneeId, agentId } = assigneeColumns(input.assignee ?? null);
     const { rows } = await client.query<{ id: number }>(
       `INSERT INTO task (column_id, title, description, position, assignee_id,
-                         priority, due_date, parent_id)
+                         agent_id, priority, due_date, parent_id)
        VALUES ($1, $2, $3,
                (SELECT COALESCE(MAX(position) + 1, 0) FROM task
-                 WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $7),
-               $4, $5, $6, $7)
+                 WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $8),
+               $4, $5, $6, $7, $8)
        RETURNING id`,
       [
         input.columnId,
         input.title,
         input.description ?? "",
-        input.assigneeId ?? null,
+        assigneeId,
+        agentId,
         input.priority ?? "none",
         input.dueDate ?? null,
         parentId,
@@ -331,15 +372,15 @@ export async function updateTask(
   // due_date needs the same treatment for the same reason (clearing a date is
   // setting null), and priority conspicuously does not: clearing a priority is
   // setting 'none', so null keeps its ordinary meaning of "absent" there.
-  const setsAssignee = "assigneeId" in input;
+  const setsAssignee = "assignee" in input;
   const setsDueDate = "dueDate" in input;
 
   return withTransaction(async (client) => {
     const before = await selectTask(client, id);
     if (!before) return undefined;
 
-    if (setsAssignee && input.assigneeId != null) {
-      await assertAssignable(client, workspaceId, input.assigneeId);
+    if (setsAssignee && input.assignee != null) {
+      await assertAssignable(client, workspaceId, input.assignee);
     }
     if (input.labelIds?.length) {
       await assertLabelsInWorkspace(client, workspaceId, input.labelIds);
@@ -360,10 +401,17 @@ export async function updateTask(
     // description (not nullable), and for priority (nullable in neither the
     // column nor the intent — 'none' is how you clear it).
     //
-    // assignee_id and due_date have no such value: null IS the cleared state.
+    // assignee and due_date have no such value: null IS the cleared state.
     // COALESCE would silently turn every unassign and every date-clear into a
     // no-op. Hence the explicit supplied-flag, which is the one thing COALESCE
     // cannot encode.
+    //
+    // The assignee is now two columns behind one supplied-flag (011): the same
+    // flag writes both, and assigneeColumns has already cleared whichever the new
+    // assignee is not, so a reassignment from a person to an agent nulls
+    // assignee_id and sets agent_id in one write and the task_one_assignee CHECK
+    // never sees both set. When the flag is false, both columns are left alone.
+    const { assigneeId, agentId } = assigneeColumns(input.assignee ?? null);
     const { rows } = await client.query<Task>(
       `UPDATE task
           SET title = COALESCE($2, title),
@@ -371,9 +419,12 @@ export async function updateTask(
               assignee_id = CASE WHEN $4::boolean
                                  THEN $5::text
                                  ELSE assignee_id END,
-              priority = COALESCE($6::task_priority, priority),
-              due_date = CASE WHEN $7::boolean
-                              THEN $8::date
+              agent_id = CASE WHEN $4::boolean
+                              THEN $6::text
+                              ELSE agent_id END,
+              priority = COALESCE($7::task_priority, priority),
+              due_date = CASE WHEN $8::boolean
+                              THEN $9::date
                               ELSE due_date END
         WHERE id = $1
         RETURNING ${TASK_COLUMNS}`,
@@ -382,7 +433,8 @@ export async function updateTask(
         input.title ?? null,
         input.description ?? null,
         setsAssignee,
-        input.assigneeId ?? null,
+        assigneeId,
+        agentId,
         input.priority ?? null,
         setsDueDate,
         input.dueDate ?? null,
@@ -820,7 +872,7 @@ export async function unassignFromWorkspace(
       actor,
       action: "task.assigned",
       before: snapshot(task),
-      after: { ...snapshot(task), assigneeId: null },
+      after: { ...snapshot(task), assignee: null },
     });
   }
   return rows.length;

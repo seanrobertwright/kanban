@@ -166,7 +166,7 @@ describe("activity log", () => {
         description: "with a body",
         columnId: todoId,
         position: expect.any(Number),
-        assigneeId: null,
+        assignee: null,
         // Set to non-defaults above precisely so this asserts the values were
         // captured, rather than that the keys exist. A snapshot that recorded
         // 'none', null and [] for every task would pass a weaker version of this

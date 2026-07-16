@@ -182,11 +182,26 @@ export interface TaskSnapshot {
   columnId: number;
   position: number;
   /**
-   * Optional because the log is append-only and this field arrived at 004: rows
-   * written before it genuinely have no such key, and no backfill can invent
-   * one — nobody knows who those tasks were assigned to, because nobody could
-   * assign them. `undefined` means "written before assignees existed"; `null`
-   * means "was unassigned". Every row written from here on sets it.
+   * Who the task is assigned to — a person OR an agent (011) — or null if
+   * unassigned. An Actor (type + id), unified above the two peer columns
+   * assignee_id / agent_id, the same shape 010's claimedBy took and for the same
+   * reason: a polymorphic principal reference has to say which table it points at.
+   *
+   * Optional because the log is append-only and assignment arrived at 004: rows
+   * written before it have no such key. `undefined` means "written before
+   * assignees existed"; `null` means "was unassigned". Every row written from 011
+   * on sets this rather than the legacy field below.
+   */
+  assignee?: Actor | null;
+  /**
+   * Pre-011 rows ONLY. Before agents could be assigned, this snapshot stored a
+   * bare user-id string here; 011 unified assignment into `assignee` above, and
+   * nothing has written it since. But the log is append-only — 003's rule, that a
+   * row is never rewritten and history is never lost — so old rows still carry
+   * it, and a reader wanting a historical entry's assignee falls back to reading
+   * it as a human Actor. Kept in the type precisely so that fallback type-checks
+   * rather than reaching through a cast. See assigneeOf() in activity-feed.tsx:
+   * `assignee` wins, this is the legacy tail.
    */
   assigneeId?: string | null;
   /**

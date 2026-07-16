@@ -22,7 +22,7 @@ function subtask(over: Partial<Task> = {}): Task {
     title: "a piece",
     description: "",
     position: 0,
-    assigneeId: null,
+    assignee: null,
     priority: "none",
     dueDate: null,
     labels: [],

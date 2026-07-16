@@ -27,6 +27,7 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { Input } from "@/shared/ui/input";
 import type { Task } from "@/features/tasks/types";
+import type { AgentSummary } from "@/features/agents/types";
 import type { Label as LabelData } from "@/features/labels/types";
 import type { Member } from "@/features/workspaces/types";
 import type { Column } from "../types";
@@ -36,6 +37,8 @@ interface BoardColumnProps {
   column: Column;
   tasks: Task[];
   membersById: Record<string, Member>;
+  /** Agents by id (011), for resolving an agent assignee's name and face. */
+  agentsById: Record<string, AgentSummary>;
   /** Labels by id, for chip colour. The task carries its own names (LabelRef). */
   labelsById: Record<number, LabelData>;
   /** Member and up: add a task, add/rename/reorder a column. */
@@ -56,6 +59,7 @@ export function BoardColumn({
   column,
   tasks,
   membersById,
+  agentsById,
   labelsById,
   canEdit,
   canDelete,
@@ -182,6 +186,7 @@ export function BoardColumn({
               key={task.id}
               task={task}
               membersById={membersById}
+              agentsById={agentsById}
               labelsById={labelsById}
               onEdit={canEdit ? onEditTask : undefined}
               onDelete={canEdit ? onDeleteTask : undefined}

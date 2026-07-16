@@ -75,6 +75,13 @@ function tool(name, description, inputSchema, run) {
 
 const priority = z.enum(["none", "low", "medium", "high", "urgent"]);
 
+// An assignee is a principal (011): a person or an agent. {type,id} rather than a
+// bare id so one field carries both — pass null to unassign. Get a human's id
+// from the workspace's members, an agent's from its identity.
+const assignee = z
+  .object({ type: z.enum(["human", "agent"]), id: z.string().min(1) })
+  .nullish();
+
 tool(
   "list_board",
   "Read a board: its columns and their top-level tasks (each with a subtaskCount). Omit boardId for the workspace's first board. Column ids come from here.",
@@ -105,7 +112,7 @@ tool(
     description: z.string().optional(),
     priority: priority.optional(),
     dueDate: z.string().optional(), // YYYY-MM-DD
-    assigneeId: z.string().nullish(),
+    assignee,
     labelIds: z.array(z.number().int()).optional(),
   },
   (input) => api("POST", "/api/tasks", input)
@@ -113,14 +120,14 @@ tool(
 
 tool(
   "update_task",
-  "Edit a task's fields. Only the fields you pass change; omit the rest. Pass null to clear dueDate or assigneeId.",
+  "Edit a task's fields. Only the fields you pass change; omit the rest. Pass null to clear dueDate or assignee.",
   {
     id: z.number().int(),
     title: z.string().min(1).optional(),
     description: z.string().optional(),
     priority: priority.optional(),
     dueDate: z.string().nullish(),
-    assigneeId: z.string().nullish(),
+    assignee,
     labelIds: z.array(z.number().int()).optional(),
   },
   ({ id, ...patch }) => api("PATCH", `/api/tasks/${id}`, patch)
@@ -168,7 +175,7 @@ tool(
     description: z.string().optional(),
     priority: priority.optional(),
     dueDate: z.string().optional(),
-    assigneeId: z.string().nullish(),
+    assignee,
     labelIds: z.array(z.number().int()).optional(),
   },
   ({ parentId, ...rest }) => api("POST", "/api/tasks", { parentId, ...rest })

@@ -16,6 +16,7 @@ const { fetchTaskActivity } = await import("../client/api");
 
 const COLUMN_NAMES = { 1: "To Do", 3: "Done" };
 const MEMBER_NAMES = { "user-1": "Alice", "user-2": "Bob" };
+const AGENT_NAMES = { "agent-1": "Triage Bot" };
 
 /**
  * One builder per arm of the union, rather than one taking
@@ -36,7 +37,11 @@ function snapshot(over: Partial<TaskSnapshot> = {}): TaskSnapshot {
     description: "",
     columnId: 1,
     position: 0,
-    assigneeId: null,
+    // The present-day shape (011): an Actor or null. Legacy rows that carry the
+    // pre-011 bare `assigneeId` string instead are built explicitly, by the one
+    // backward-compat test below — defaulting to `assignee` keeps every other
+    // test on the current path rather than the historical one.
+    assignee: null,
     // Defaulted to what every row written since 006 carries, rather than left
     // off. Both are legal — the fields are optional precisely so a pre-006 row
     // can say "this did not exist yet" — but defaulting to absent would quietly
@@ -102,6 +107,7 @@ async function renderFeed(entries: ActivityEntry[]) {
       taskId={7}
       columnNames={COLUMN_NAMES}
       memberNames={MEMBER_NAMES}
+      agentNames={AGENT_NAMES}
     />
   );
   // The feed fetches on mount, so every assertion waits for the first paint.
@@ -207,15 +213,31 @@ describe("ActivityFeed", () => {
   });
 
   describe("assignment", () => {
+    const human = (id: string) => ({ type: "human" as const, id });
+    const agentRef = (id: string) => ({ type: "agent" as const, id });
+
     it("names who a task was assigned to", async () => {
       await renderFeed([
         entry({
           action: "task.assigned",
-          before: snapshot({ assigneeId: null }),
-          after: snapshot({ assigneeId: "user-2" }),
+          before: snapshot({ assignee: null }),
+          after: snapshot({ assignee: human("user-2") }),
         }),
       ]);
       expect(screen.getByText(/assigned this to Bob/)).toBeDefined();
+    });
+
+    it("names an agent assignee — the wedge, in the feed", async () => {
+      // The run-trigger event, in prose: assigning to an agent reads the same as
+      // assigning to a person, resolved from the agent roster (011).
+      await renderFeed([
+        entry({
+          action: "task.assigned",
+          before: snapshot({ assignee: null }),
+          after: snapshot({ assignee: agentRef("agent-1") }),
+        }),
+      ]);
+      expect(screen.getByText(/assigned this to Triage Bot/)).toBeDefined();
     });
 
     it("names both sides of a reassignment", async () => {
@@ -223,19 +245,33 @@ describe("ActivityFeed", () => {
         entry({
           actorId: "user-9",
           action: "task.assigned",
-          before: snapshot({ assigneeId: "user-1" }),
-          after: snapshot({ assigneeId: "user-2" }),
+          before: snapshot({ assignee: human("user-1") }),
+          after: snapshot({ assignee: human("user-2") }),
         }),
       ]);
       expect(screen.getByText(/reassigned this from Alice to Bob/)).toBeDefined();
+    });
+
+    it("names a person handing a task to an agent", async () => {
+      await renderFeed([
+        entry({
+          actorId: "user-9",
+          action: "task.assigned",
+          before: snapshot({ assignee: human("user-1") }),
+          after: snapshot({ assignee: agentRef("agent-1") }),
+        }),
+      ]);
+      expect(
+        screen.getByText(/reassigned this from Alice to Triage Bot/)
+      ).toBeDefined();
     });
 
     it("reports an unassignment as one, naming who lost it", async () => {
       await renderFeed([
         entry({
           action: "task.assigned",
-          before: snapshot({ assigneeId: "user-2" }),
-          after: snapshot({ assigneeId: null }),
+          before: snapshot({ assignee: human("user-2") }),
+          after: snapshot({ assignee: null }),
         }),
       ]);
       expect(screen.getByText(/unassigned Bob/)).toBeDefined();
@@ -247,8 +283,25 @@ describe("ActivityFeed", () => {
           actorId: "user-2",
           actorName: "Bob",
           action: "task.assigned",
-          before: snapshot({ assigneeId: null }),
-          after: snapshot({ assigneeId: "user-2" }),
+          before: snapshot({ assignee: null }),
+          after: snapshot({ assignee: human("user-2") }),
+        }),
+      ]);
+      expect(screen.getByText(/took this on/)).toBeDefined();
+    });
+
+    it("calls an agent claiming its own assignment taking it on", async () => {
+      // The self-assign check is on the whole actor now (011): an agent assigning
+      // a task to itself reads "took this on" too — which is exactly the shape of
+      // an agent picking up its own run.
+      await renderFeed([
+        entry({
+          actorType: "agent",
+          actorId: "agent-1",
+          actorName: "Triage Bot",
+          action: "task.assigned",
+          before: snapshot({ assignee: null }),
+          after: snapshot({ assignee: agentRef("agent-1") }),
         }),
       ]);
       expect(screen.getByText(/took this on/)).toBeDefined();
@@ -261,23 +314,40 @@ describe("ActivityFeed", () => {
       await renderFeed([
         entry({
           action: "task.assigned",
-          before: snapshot({ assigneeId: "user-gone" }),
-          after: snapshot({ assigneeId: null }),
+          before: snapshot({ assignee: human("user-gone") }),
+          after: snapshot({ assignee: null }),
         }),
       ]);
       expect(screen.getByText(/unassigned a former member/)).toBeDefined();
     });
 
-    it("reads an entry written before assignees existed without inventing one", async () => {
-      // Rows logged before 004 have no assigneeId key at all. undefined must
-      // read as "nobody", never as a name.
+    it("still reads a pre-011 row that stored a bare assignee id", async () => {
+      // Backward compat, the append-only tail: rows written before 011 carry
+      // `assigneeId` (a bare human id), not `assignee`. assigneeOf falls back to
+      // reading it as a human, so a historical entry still names who it went to.
       const legacy = snapshot();
-      delete legacy.assigneeId;
+      delete legacy.assignee;
+      legacy.assigneeId = "user-2";
+      await renderFeed([
+        entry({
+          action: "task.assigned",
+          before: snapshot({ assignee: null }),
+          after: legacy,
+        }),
+      ]);
+      expect(screen.getByText(/assigned this to Bob/)).toBeDefined();
+    });
+
+    it("reads an entry written before assignees existed without inventing one", async () => {
+      // Rows logged before 004 have neither key at all. undefined must read as
+      // "nobody", never as a name.
+      const legacy = snapshot();
+      delete legacy.assignee;
       await renderFeed([
         entry({
           action: "task.assigned",
           before: legacy,
-          after: snapshot({ assigneeId: "user-2" }),
+          after: snapshot({ assignee: human("user-2") }),
         }),
       ]);
       expect(screen.getByText(/assigned this to Bob/)).toBeDefined();

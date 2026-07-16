@@ -5,12 +5,14 @@ import { CSS } from "@dnd-kit/utilities";
 
 import { TaskCard } from "@/features/tasks/components/task-card";
 import type { Task } from "@/features/tasks/types";
+import type { AgentSummary } from "@/features/agents/types";
 import type { Label as LabelData } from "@/features/labels/types";
 import type { Member } from "@/features/workspaces/types";
 
 interface SortableTaskCardProps {
   task: Task;
   membersById: Record<string, Member>;
+  agentsById: Record<string, AgentSummary>;
   labelsById: Record<number, LabelData>;
   // Omitted for viewers, which is what hides TaskCard's action menu.
   onEdit?: (task: Task) => void;
@@ -20,6 +22,7 @@ interface SortableTaskCardProps {
 export function SortableTaskCard({
   task,
   membersById,
+  agentsById,
   labelsById,
   onEdit,
   onDelete,
@@ -44,6 +47,7 @@ export function SortableTaskCard({
       <TaskCard
         task={task}
         membersById={membersById}
+        agentsById={agentsById}
         labelsById={labelsById}
         onEdit={onEdit}
         onDelete={onDelete}

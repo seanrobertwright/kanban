@@ -16,6 +16,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 
 import { Plus, Tags } from "lucide-react";
 
+import type { AgentSummary } from "@/features/agents/types";
 import { LabelsDialog } from "@/features/labels/components/labels-dialog";
 import type { Label as LabelData } from "@/features/labels/types";
 import * as tasksApi from "@/features/tasks/client/api";
@@ -52,6 +53,12 @@ interface BoardProps {
   /** Everyone assignable on this board, and the source of every rendered face. */
   members: Member[];
   /**
+   * The workspace's agents (011) — the other half of "everyone assignable". The
+   * picker shows them beside the members, and a card resolves an agent assignee's
+   * name and face from here, exactly as it does a human's from `members`.
+   */
+  agents: AgentSummary[];
+  /**
    * The workspace's label vocabulary — the picker's options, and the source of
    * every chip's colour. Held in state rather than read straight from the prop
    * because the labels dialog can change it, and the board is what re-renders.
@@ -85,6 +92,7 @@ export function Board({
   columns,
   initialTasks,
   members,
+  agents,
   initialLabels,
   workspaceId,
   canEdit,
@@ -108,6 +116,10 @@ export function Board({
   const membersById = useMemo(
     () => Object.fromEntries(members.map((m) => [m.userId, m])),
     [members]
+  );
+  const agentsById = useMemo(
+    () => Object.fromEntries(agents.map((a) => [a.id, a])),
+    [agents]
   );
   const [labels, setLabels] = useState<LabelData[]>(initialLabels);
   const [labelsOpen, setLabelsOpen] = useState(false);
@@ -363,6 +375,7 @@ export function Board({
               column={column}
               tasks={items[column.id] ?? []}
               membersById={membersById}
+              agentsById={agentsById}
               labelsById={labelsById}
               canEdit={canEdit}
               canDelete={canDeleteColumns}
@@ -435,6 +448,7 @@ export function Board({
             <TaskCard
               task={activeTask}
               membersById={membersById}
+              agentsById={agentsById}
               labelsById={labelsById}
             />
           ) : null}
@@ -447,6 +461,7 @@ export function Board({
         columnNames={columnNames}
         columns={cols}
         members={members}
+        agents={agents}
         labels={labels}
         onOpenChange={(open) => {
           if (!open) setDialog(null);

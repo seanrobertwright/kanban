@@ -23,14 +23,28 @@ function notFound() {
 }
 
 /**
- * null is a legal value ("unassign"), undefined is its absence ("leave alone"),
- * and both must pass — which is why this is not the usual `typeof x === "string"`
- * guard. Whether the id names a real member of this workspace is not decided
- * here: that is a tenancy question, and it is answered in the repository next to
- * the RBAC checks, against the same transaction that does the write.
+ * An assignee is an Actor now (011) — {type: 'human'|'agent', id} — or null
+ * ("unassign") or absent ("leave alone"), and all three must pass, which is why
+ * this is not a plain type check. The shape is validated here; whether the
+ * principal is actually a member (a human) or an agent of *this* workspace is a
+ * tenancy question, answered in the repository next to the RBAC checks against
+ * the same transaction that does the write.
+ *
+ * The empty-string id is rejected: a "" id would reach the database as a lookup
+ * that matches nothing and answers a confusing not_found, where the truth is that
+ * the request was malformed.
  */
-function isAssigneeId(value: unknown): value is string | null | undefined {
-  return value === undefined || value === null || typeof value === "string";
+function isAssignee(
+  value: unknown
+): value is { type: "human" | "agent"; id: string } | null | undefined {
+  if (value === undefined || value === null) return true;
+  if (typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    (v.type === "human" || v.type === "agent") &&
+    typeof v.id === "string" &&
+    v.id !== ""
+  );
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -94,7 +108,7 @@ export async function handleCreateTask(request: Request) {
     columnId,
     title,
     description,
-    assigneeId,
+    assignee,
     priority,
     dueDate,
     labelIds,
@@ -105,8 +119,8 @@ export async function handleCreateTask(request: Request) {
     return badRequest("title is required");
   if (description !== undefined && typeof description !== "string")
     return badRequest("description must be a string");
-  if (!isAssigneeId(assigneeId))
-    return badRequest("assigneeId must be a user id or null");
+  if (!isAssignee(assignee))
+    return badRequest("assignee must be {type, id} or null");
   // Two-valued: absent means top-level, and there is no third state to encode —
   // 008 makes the field immutable, so "clear it" is not a request anyone can
   // make. Whether the id names a task on *this* board, and one that is not itself
@@ -129,7 +143,7 @@ export async function handleCreateTask(request: Request) {
       columnId,
       title: title.trim(),
       description,
-      assigneeId,
+      assignee,
       priority,
       dueDate,
       labelIds,
@@ -185,21 +199,21 @@ export async function handleUpdateTask(request: Request, id: number) {
     description,
     columnId,
     position,
-    assigneeId,
+    assignee,
     priority,
     dueDate,
     labelIds,
   } = body as Record<string, unknown>;
 
-  // Presence, not value. `{"assigneeId": null}` is a request to unassign and
-  // must be told apart from a PATCH that never mentions the assignee — and
+  // Presence, not value. `{"assignee": null}` is a request to unassign and must
+  // be told apart from a PATCH that never mentions the assignee — and
   // destructuring alone cannot: both hand back undefined.
   //
   // dueDate needs the same, since `{"dueDate": null}` clears a date. priority
   // does not: `{"priority": null}` is not a request to do anything, because
   // clearing a priority is `{"priority": "none"}`. It falls through to the
   // rejection below rather than being honoured as a clear.
-  const setsAssignee = "assigneeId" in body;
+  const setsAssignee = "assignee" in body;
   const setsDueDate = "dueDate" in body;
 
   // Refused rather than ignored, and the difference matters because the failure
@@ -235,8 +249,8 @@ export async function handleUpdateTask(request: Request, id: number) {
         return badRequest("title must be a non-empty string");
       if (description !== undefined && typeof description !== "string")
         return badRequest("description must be a string");
-      if (!isAssigneeId(assigneeId))
-        return badRequest("assigneeId must be a user id or null");
+      if (!isAssignee(assignee))
+        return badRequest("assignee must be {type, id} or null");
       if (priority !== undefined && !isTaskPriority(priority))
         return badRequest(`priority must be one of: ${PRIORITY_ORDER.join(", ")}`);
       if (!isDueDate(dueDate))
@@ -248,10 +262,10 @@ export async function handleUpdateTask(request: Request, id: number) {
         title: title as string | undefined,
         description: description as string | undefined,
         // Spread, so the key exists only when the caller sent it. Writing
-        // `assigneeId: assigneeId` unconditionally would put an explicit
-        // undefined on the object — and `"assigneeId" in input` would then be
-        // true for every title-only edit, turning each one into an unassign.
-        ...(setsAssignee ? { assigneeId: assigneeId ?? null } : {}),
+        // `assignee: assignee` unconditionally would put an explicit undefined on
+        // the object — and `"assignee" in input` would then be true for every
+        // title-only edit, turning each one into an unassign.
+        ...(setsAssignee ? { assignee: assignee ?? null } : {}),
         // No spread needed: priority is two-valued, so an explicit undefined on
         // the object means exactly what an absent key would — nothing was said.
         // The repository reads its value, not its presence.

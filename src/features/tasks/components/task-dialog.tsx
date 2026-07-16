@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 
 import { ActivityFeed } from "@/features/activity/components/activity-feed";
+import type { Actor } from "@/features/activity/types";
+import type { AgentSummary } from "@/features/agents/types";
 import { CommentThread } from "@/features/comments/components/comment-thread";
 import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
@@ -27,8 +29,12 @@ import type { Task, TaskPriority } from "../types";
 export interface TaskFormValues {
   title: string;
   description: string;
-  /** null unassigns. The picker always has a value, so this is never absent. */
-  assigneeId: string | null;
+  /**
+   * A person or an agent (011), or null to unassign. The picker always has a
+   * value, so this is never absent — it is the one-field wedge, an Actor the
+   * select encodes as "human:id" / "agent:id" and decodes on submit.
+   */
+  assignee: Actor | null;
   /** Never null: 'none' is how the form says "no priority". */
   priority: TaskPriority;
   /** null clears the date. The input always has a value, so never absent. */
@@ -39,6 +45,26 @@ export interface TaskFormValues {
 
 /** The <option> value standing in for "nobody", since a DOM value is a string. */
 const UNASSIGNED = "";
+
+/**
+ * A DOM <option> value is a string, but an assignee is an Actor — a person or an
+ * agent (011) — so the kind has to travel in the value itself, "human:id" or
+ * "agent:id", or the form could not tell a user from an agent that happened to
+ * share an id. Split on the first colon only: the type is a fixed prefix and the
+ * id is whatever follows, so an id containing a colon survives the round trip.
+ */
+function encodeAssignee(assignee: Actor | null): string {
+  return assignee ? `${assignee.type}:${assignee.id}` : UNASSIGNED;
+}
+
+function decodeAssignee(value: string): Actor | null {
+  if (value === UNASSIGNED) return null;
+  const colon = value.indexOf(":");
+  return {
+    type: value.slice(0, colon) as Actor["type"],
+    id: value.slice(colon + 1),
+  };
+}
 
 /**
  * The empty <input type="date">, which reports "" when cleared. Distinct from
@@ -68,6 +94,9 @@ interface TaskDialogProps {
   parentTask?: Task;
   /** Everyone assignable here — the picker's options, and the feed's names. */
   members: Member[];
+  /** The workspace's agents (011) — the picker's second group, and the feed's
+   * source for an agent assignee's name. */
+  agents: AgentSummary[];
   /** The workspace's vocabulary — the only labels this task may wear. */
   labels: LabelData[];
   onOpenChange: (open: boolean) => void;
@@ -95,6 +124,7 @@ export function TaskDialog({
   columns = [],
   parentTask,
   members,
+  agents,
   labels,
   onOpenChange,
   onSubmit,
@@ -105,7 +135,9 @@ export function TaskDialog({
 }: TaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [assigneeId, setAssigneeId] = useState<string>(UNASSIGNED);
+  // The encoded picker value: "" | "human:id" | "agent:id". Decoded to an Actor
+  // on submit; encoded from the task's Actor on open.
+  const [assignee, setAssignee] = useState<string>(UNASSIGNED);
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
   const [labelIds, setLabelIds] = useState<number[]>([]);
@@ -128,12 +160,16 @@ export function TaskDialog({
     () => Object.fromEntries(members.map((m) => [m.userId, m.name])),
     [members]
   );
+  const agentNames = useMemo(
+    () => Object.fromEntries(agents.map((a) => [a.id, a.name])),
+    [agents]
+  );
 
   useEffect(() => {
     if (open) {
       setTitle(task?.title ?? "");
       setDescription(task?.description ?? "");
-      setAssigneeId(task?.assigneeId ?? UNASSIGNED);
+      setAssignee(encodeAssignee(task?.assignee ?? null));
       setPriority(task?.priority ?? "none");
       setDueDate(task?.dueDate ?? NO_DUE_DATE);
       // Back to ids: the task carries {id, name} because the log needs the name
@@ -152,9 +188,9 @@ export function TaskDialog({
       await onSubmit({
         title: title.trim(),
         description,
-        // Back to null at the boundary: the empty string is a DOM artifact, and
-        // letting it reach the API would try to assign a user whose id is "".
-        assigneeId: assigneeId === UNASSIGNED ? null : assigneeId,
+        // Decoded back to an Actor (or null) at the boundary: the "type:id"
+        // string is a DOM artifact, and the API speaks {type, id}.
+        assignee: decodeAssignee(assignee),
         // No conversion: 'none' is a real priority all the way down, which is
         // the whole reason this field avoids the null-vs-absent problem the two
         // fields either side of it have.
@@ -224,23 +260,38 @@ export function TaskDialog({
           </div>
           {/* A native select rather than a styled menu: it is one tab stop, it
               is announced as a listbox without any ARIA of our own, and it gets
-              the platform picker on touch. At M2 this list grows a second group
-              of agents — which is the whole wedge, and is why the field is
-              labelled "Assignee" rather than anything person-shaped. */}
+              the platform picker on touch. The second group is 011's agents —
+              the whole wedge, and why the field was labelled "Assignee" rather
+              than anything person-shaped from the start. Each group renders only
+              when it has members, so a workspace with no agents shows exactly the
+              picker it did before. */}
           <div className="grid gap-2">
             <Label htmlFor="task-assignee">Assignee</Label>
             <select
               id="task-assignee"
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
+              value={assignee}
+              onChange={(e) => setAssignee(e.target.value)}
               className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
             >
               <option value={UNASSIGNED}>Unassigned</option>
-              {members.map((member) => (
-                <option key={member.userId} value={member.userId}>
-                  {member.name}
-                </option>
-              ))}
+              {members.length > 0 && (
+                <optgroup label="People">
+                  {members.map((member) => (
+                    <option key={member.userId} value={`human:${member.userId}`}>
+                      {member.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {agents.length > 0 && (
+                <optgroup label="Agents">
+                  {agents.map((agent) => (
+                    <option key={agent.id} value={`agent:${agent.id}`}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
           {/* Status, for a piece only. A top-level task's column is its place on
@@ -355,6 +406,7 @@ export function TaskDialog({
                   taskId={task.id}
                   columnNames={columnNames}
                   memberNames={memberNames}
+                  agentNames={agentNames}
                   refreshToken={activityVersion}
                 />
               </div>

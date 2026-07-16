@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { AgentSummary } from "@/features/agents/types";
 import type { Label as LabelData } from "@/features/labels/types";
 import type { Member } from "@/features/workspaces/types";
 import { TaskDialog } from "./task-dialog";
@@ -55,6 +56,10 @@ const MEMBERS: Member[] = [
   },
 ];
 
+const AGENTS: AgentSummary[] = [
+  { id: "a-triage", name: "Triage Bot", image: null, role: "member" },
+];
+
 function task(over: Partial<Task> = {}): Task {
   return {
     id: 7,
@@ -62,7 +67,7 @@ function task(over: Partial<Task> = {}): Task {
     title: "A task",
     description: "",
     position: 0,
-    assigneeId: null,
+    assignee: null,
     priority: "none",
     dueDate: null,
     labels: [],
@@ -83,6 +88,7 @@ function renderDialog(over: { task?: Task } = {}) {
       task={over.task}
       columnNames={{ 1: "To Do" }}
       members={MEMBERS}
+      agents={AGENTS}
       labels={LABELS}
       onOpenChange={vi.fn()}
       onSubmit={onSubmit}
@@ -96,47 +102,66 @@ const submit = () =>
 
 /**
  * The picker's whole job is translating between a DOM value (always a string)
- * and the API's three-valued assignee (a user id, or null to unassign). That
- * boundary is where the bugs live: "" is not a user id, and the wrong side of
- * this mapping either assigns a task to a user whose id is the empty string, or
- * makes unassigning impossible.
+ * and the API's assignee — an Actor now (011), a person or an agent, or null to
+ * unassign. That boundary is where the bugs live: "" is not an id, the kind has
+ * to survive the round trip through a "type:id" value, and the wrong side of the
+ * mapping either assigns to a principal whose id is the empty string or makes
+ * unassigning impossible.
  */
 describe("TaskDialog assignee picker", () => {
-  it("offers every member, plus nobody", () => {
+  it("offers every member and agent, plus nobody", () => {
     renderDialog();
     const picker = screen.getByLabelText("Assignee") as HTMLSelectElement;
+    // Options flatten across the optgroups — people, then agents, then nobody.
     expect([...picker.options].map((o) => o.text)).toEqual([
       "Unassigned",
       "Alice",
       "Bob",
+      "Triage Bot",
     ]);
   });
 
-  it("shows the task's current assignee when opened", () => {
-    renderDialog({ task: task({ assigneeId: "u-bob" }) });
+  it("shows the task's current assignee when opened, encoding its kind", () => {
+    renderDialog({ task: task({ assignee: { type: "human", id: "u-bob" } }) });
     expect((screen.getByLabelText("Assignee") as HTMLSelectElement).value).toBe(
-      "u-bob"
+      "human:u-bob"
     );
   });
 
-  it("submits the chosen member's id", async () => {
+  it("submits the chosen member as a human Actor", async () => {
     const { onSubmit } = renderDialog({ task: task() });
     fireEvent.change(screen.getByLabelText("Assignee"), {
-      target: { value: "u-bob" },
+      target: { value: "human:u-bob" },
     });
     submit();
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({ assigneeId: "u-bob" })
+        expect.objectContaining({ assignee: { type: "human", id: "u-bob" } })
+      )
+    );
+  });
+
+  it("submits the chosen agent as an agent Actor — the wedge in one field", async () => {
+    const { onSubmit } = renderDialog({ task: task() });
+    fireEvent.change(screen.getByLabelText("Assignee"), {
+      target: { value: "agent:a-triage" },
+    });
+    submit();
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ assignee: { type: "agent", id: "a-triage" } })
       )
     );
   });
 
   it("submits null — not an empty string — when unassigning", async () => {
-    // The one that matters. "" reaches the API as a user id to look up, which
-    // is not what "Unassigned" means, and no member will ever match it.
-    const { onSubmit } = renderDialog({ task: task({ assigneeId: "u-bob" }) });
+    // The one that matters. "" reaches the API as an id to look up, which is not
+    // what "Unassigned" means, and no principal will ever match it.
+    const { onSubmit } = renderDialog({
+      task: task({ assignee: { type: "human", id: "u-bob" } }),
+    });
     fireEvent.change(screen.getByLabelText("Assignee"), {
       target: { value: "" },
     });
@@ -144,7 +169,7 @@ describe("TaskDialog assignee picker", () => {
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({ assigneeId: null })
+        expect.objectContaining({ assignee: null })
       )
     );
   });
@@ -158,7 +183,7 @@ describe("TaskDialog assignee picker", () => {
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({ title: "New task", assigneeId: null })
+        expect.objectContaining({ title: "New task", assignee: null })
       )
     );
   });
@@ -376,6 +401,7 @@ describe("TaskDialog subtask", () => {
         columnNames={{ 1: "To Do", 2: "Doing", 3: "Done" }}
         columns={COLUMNS}
         members={MEMBERS}
+        agents={AGENTS}
         labels={LABELS}
         onOpenChange={vi.fn()}
         onSubmit={vi.fn().mockResolvedValue(undefined)}
@@ -428,6 +454,7 @@ describe("TaskDialog subtask", () => {
         columnNames={{ 1: "To Do" }}
         columns={COLUMNS}
         members={MEMBERS}
+        agents={AGENTS}
         labels={LABELS}
         onOpenChange={vi.fn()}
         onSubmit={vi.fn()}

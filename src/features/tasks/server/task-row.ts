@@ -42,7 +42,7 @@ export function taskColumns(alias = ""): string {
   // no-alias form is used.
   const self = alias ? `${alias}.id` : "task.id";
   return `${p}id, ${p}column_id AS "columnId", ${p}title, ${p}description,
-          ${p}position, ${p}assignee_id AS "assigneeId", ${p}priority,
+          ${p}position, ${assigneeObject(p)} AS assignee, ${p}priority,
           ${p}due_date AS "dueDate", ${p}parent_id AS "parentId",
           ${claimedByObject(p)} AS "claimedBy",
           ${p}claimed_at AS "claimedAt",
@@ -76,6 +76,24 @@ export function taskColumns(alias = ""): string {
  */
 function subtaskCountSubquery(taskRef: string): string {
   return `(SELECT COUNT(*)::int FROM task s WHERE s.parent_id = ${taskRef})`;
+}
+
+/**
+ * The assignee as a json {type, id} object, or NULL when unassigned — unifying
+ * the two peer columns (011) into the one Actor the app reasons about.
+ *
+ * assignee_id and agent_id are mutually exclusive by the task_one_assignee CHECK
+ * (011), so this reads whichever is set. It is claimedByObject's twin, one line
+ * up, and the two together are why an agent is "another kind of assignee rather
+ * than a separate concept": the same Actor shape carries a human or an agent for
+ * both the assignment and the claim.
+ */
+function assigneeObject(p: string): string {
+  return `CASE WHEN ${p}assignee_id IS NOT NULL
+               THEN json_build_object('type', 'human', 'id', ${p}assignee_id)
+               WHEN ${p}agent_id IS NOT NULL
+               THEN json_build_object('type', 'agent', 'id', ${p}agent_id)
+               ELSE NULL END`;
 }
 
 /**
@@ -156,7 +174,10 @@ export function taskSnapshot(task: Task): TaskSnapshot {
     description: task.description,
     columnId: task.columnId,
     position: task.position,
-    assigneeId: task.assigneeId,
+    // The Actor, unified from the two peer columns (011). Written as `assignee`,
+    // never the legacy `assigneeId` a pre-011 row carries — TaskSnapshot keeps
+    // that field only so old rows still read. See taskColumns/assigneeObject.
+    assignee: task.assignee,
     priority: task.priority,
     dueDate: task.dueDate,
     labels: task.labels,

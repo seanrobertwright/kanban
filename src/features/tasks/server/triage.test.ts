@@ -209,7 +209,7 @@ describe("priority and due dates", () => {
       const task = await newTask();
       await updateTask(alice, task.id, {
         title: "All at once",
-        assigneeId: alice,
+        assignee: { type: "human", id: alice },
         priority: "high",
         dueDate: "2026-10-10",
       });
