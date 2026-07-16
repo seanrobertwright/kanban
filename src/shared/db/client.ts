@@ -8,6 +8,26 @@ pg.types.setTypeParser(pg.types.builtins.TIMESTAMPTZ, (value) =>
   new Date(value).toISOString()
 );
 
+// DATE would otherwise arrive as a JS Date too, and for task.due_date (006) that
+// is not a cosmetic difference — it is an off-by-one waiting to happen.
+//
+// node-postgres parses '2026-07-17' into a Date at *local* midnight. Serialize
+// that through Response.json and you get the local midnight expressed in UTC:
+// west of Greenwich it survives (2026-07-17T04:00:00Z), east of it the date
+// moves (2026-07-16T15:00:00Z in UTC+9). So a due date entered in Tokyo would
+// come back a day early — from the database's point of view, correctly. The
+// value was never an instant; making it one is what introduces the bug.
+//
+// Returning the raw string keeps a DATE a date all the way to the client, where
+// it is compared and rendered as 'YYYY-MM-DD' and never handed to a Date
+// constructor. This is global rather than a to_char() in each SELECT precisely
+// so it also covers the queries nobody has written yet.
+//
+// It assumes DateStyle is ISO, which is the Postgres default and what the
+// container in docker-compose.yml runs. The TIMESTAMPTZ parser above already
+// takes the same class of dependency on the server's text output.
+pg.types.setTypeParser(pg.types.builtins.DATE, (value) => value);
+
 function createPool(): pg.Pool {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {

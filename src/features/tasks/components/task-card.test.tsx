@@ -1,0 +1,105 @@
+// @vitest-environment jsdom
+import { render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+
+import type { Member } from "@/features/workspaces/types";
+import { TaskCard } from "./task-card";
+import type { Task } from "../types";
+
+const MEMBERS_BY_ID: Record<string, Member> = {};
+
+function task(over: Partial<Task> = {}): Task {
+  return {
+    id: 7,
+    columnId: 1,
+    title: "A task",
+    description: "",
+    position: 0,
+    assigneeId: null,
+    priority: "none",
+    dueDate: null,
+    createdAt: "2026-07-15T00:00:00.000Z",
+    ...over,
+  };
+}
+
+const card = (over: Partial<Task> = {}) => (
+  <TaskCard task={task(over)} membersById={MEMBERS_BY_ID} />
+);
+
+/** Comfortably in the past and the future, so neither depends on when this runs. */
+const LONG_PAST = "2020-01-01";
+const FAR_FUTURE = "2999-01-01";
+
+describe("TaskCard priority", () => {
+  it("says the priority in words, not only in colour", () => {
+    // Roughly one reader in twenty cannot separate the amber dot from the red
+    // one, and the dot is the entire signal. The label is the content.
+    render(card({ priority: "urgent" }));
+    expect(screen.getByRole("img", { name: "Priority: Urgent" })).toBeDefined();
+  });
+
+  it("renders nothing at all for an untriaged task", () => {
+    // 'none' is the default state of most cards. A grey dot on every one of them
+    // would cost the space and say nothing.
+    render(card({ priority: "none" }));
+    expect(screen.queryByRole("img", { name: /Priority/ })).toBeNull();
+  });
+});
+
+describe("TaskCard due date", () => {
+  it("renders the date without a zone to be wrong about", () => {
+    // Formatted from the string, never through a Date. In a UTC-anchored
+    // rendering this would read 31 Dec 2025 anywhere east of Greenwich.
+    render(card({ dueDate: "2026-01-01" }));
+    expect(screen.getByText("1 Jan 2026")).toBeDefined();
+  });
+
+  it("marks a past date overdue, in words as well as colour", () => {
+    render(card({ dueDate: LONG_PAST }));
+    expect(screen.getByText(/Overdue:/)).toBeDefined();
+  });
+
+  it("leaves a future date alone", () => {
+    render(card({ dueDate: FAR_FUTURE }));
+    expect(screen.queryByText(/Overdue:/)).toBeNull();
+  });
+
+  /**
+   * The reason useToday is a useSyncExternalStore with a getServerSnapshot
+   * rather than a plain `new Date()`, proven rather than asserted.
+   *
+   * A due date is zoneless, so "overdue" needs the reader's zone — which the
+   * server does not have. If the server answered in its own zone (UTC in the
+   * container), a card rendered at 8pm in Denver would arrive from the server
+   * claiming a task due today was overdue, and then contradict itself on
+   * hydration. So the server must answer "I don't know", and the only way to see
+   * that it does is to render it as the server does.
+   */
+  describe("server rendering", () => {
+    it("claims nothing is overdue, because the server has no reader", () => {
+      const html = renderToString(card({ dueDate: LONG_PAST }));
+      expect(html).not.toContain("Overdue");
+    });
+
+    it("still renders the date itself", () => {
+      // The date is a fact about the task and the server knows it. Only the
+      // *judgement* about it needs a reader — losing both would be an
+      // overcorrection, and would flash the date in on hydration.
+      const html = renderToString(card({ dueDate: "2026-01-01" }));
+      expect(html).toContain("1 Jan 2026");
+    });
+
+    it("renders a past and a future date identically, up to the date itself", () => {
+      // The sharpest statement of the property: on the server, "overdue" is not
+      // a distinction that exists. If any future change makes the server guess
+      // at today, these two diverge and this fails.
+      const past = renderToString(card({ dueDate: LONG_PAST }));
+      const future = renderToString(card({ dueDate: FAR_FUTURE }));
+      expect(past.replace(LONG_PAST, "D").replace("1 Jan 2020", "F")).toBe(
+        future.replace(FAR_FUTURE, "D").replace("1 Jan 2999", "F")
+      );
+    });
+  });
+});

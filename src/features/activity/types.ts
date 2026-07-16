@@ -1,3 +1,5 @@
+import type { TaskPriority } from "@/features/tasks/types";
+
 /**
  * Who performed an action. Agents cannot act until M2, but the type is actor-
  * shaped from the first row: the log is append-only, so a schema that assumed a
@@ -36,7 +38,47 @@ export type TaskAction =
    * Covers assign, reassign, and unassign — all three are "the assignee
    * changed", and `before`/`after` say which.
    */
-  | "task.assigned";
+  | "task.assigned"
+  /**
+   * 006's two fields get their own actions, which raises the question 004 could
+   * dodge — if every field earns an action, the union is just the column list
+   * spelled twice. So the line, stated once here and applied from now on:
+   *
+   *   An action exists when its inverse is something someone would want to
+   *   apply on its own.
+   *
+   * That derives what is already here. Nobody reverts a title edit but keeps the
+   * description edit from the same submit — they are one authored change, so
+   * task.updated covers both. But reverting a reassignment while keeping a
+   * rename is an ordinary want, which is why task.assigned split off.
+   *
+   * Priority passes the test twice over, and the second time decides it the way
+   * the agent trigger decided task.assigned. M2's changeset review (§7.4) shows
+   * an agent's proposed actions as one diff to accept or reject *in parts* — and
+   * criterion #1 is an agent triaging twenty bugs, where "set priority to
+   * Urgent" is exactly the unit a reviewer accepts or rejects. Folded into
+   * task.updated it would not be separable from the description edit beside it.
+   * At M5 it becomes a trigger outright: "when a bug is labeled P0, assign to
+   * the triage agent" reads priority to decide.
+   *
+   * Covers set, raise, lower, and clear — all four are "the priority changed",
+   * and since 'none' is a value rather than null, clearing is not a special case
+   * the way unassigning is.
+   */
+  | "task.prioritized"
+  /**
+   * The due date passes the same test on the first clause alone, and it is worth
+   * being honest that its case is thinner than priority's: no milestone makes a
+   * due date a trigger. What carries it is that a date is a *commitment* rather
+   * than content — M3's calendar view and M4's sprint planning both read it as a
+   * scheduling signal, not a description — and that "moved the due date to
+   * Friday" is an event a reader scans a history for, while "updated this task"
+   * is what they scroll past.
+   *
+   * Named for the act, not the field, following task.assigned. Covers setting,
+   * moving, and clearing a date.
+   */
+  | "task.scheduled";
 
 /**
  * Comments are logged like any other mutation (M1's criterion is that *every*
@@ -83,6 +125,24 @@ export interface TaskSnapshot {
    * means "was unassigned". Every row written from here on sets it.
    */
   assigneeId?: string | null;
+  /**
+   * Optional for 004's reason, one milestone later: rows written before 006 have
+   * no such key. Note it is never *null* — the column is NOT NULL DEFAULT 'none'
+   * — so `undefined` here means only "written before priorities existed", and
+   * carries none of assigneeId's ambiguity.
+   *
+   * The table itself was backfilled to 'none', truthfully; the log cannot be,
+   * for the reason 003 gives. A snapshot is what the task looked like at an
+   * instant, and at that instant it had no priority to look like.
+   */
+  priority?: TaskPriority;
+  /**
+   * Optional for the same reason, and three-valued for the same reason as
+   * assigneeId: `undefined` means "written before 006", `null` means "had no due
+   * date". 'YYYY-MM-DD' when set — never a Date, in the log least of all, where
+   * it would be frozen into JSONB as a UTC instant and be wrong forever.
+   */
+  dueDate?: string | null;
 }
 
 /**

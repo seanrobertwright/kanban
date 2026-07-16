@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { PRIORITY_LABELS, PRIORITY_ORDER } from "@/features/tasks/types";
+import { formatDueDate } from "@/shared/lib/due-date";
 import { relativeTime } from "@/shared/lib/relative-time";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import { fetchTaskActivity } from "../client/api";
@@ -82,6 +84,39 @@ function describe(
       if (to == null) return `unassigned ${person(from)}`;
       if (from == null) return `assigned this to ${person(to)}`;
       return `reassigned this from ${person(from)} to ${person(to)}`;
+    }
+    case "task.prioritized": {
+      if (!entry.before || !entry.after) return "changed the priority";
+      const from = entry.before.priority;
+      const to = entry.after.priority;
+      if (to == null) return "changed the priority";
+      if (to === "none") return "cleared the priority";
+      const label = PRIORITY_LABELS[to];
+      // "raised" and "lowered" rather than "changed", which is what
+      // PRIORITY_ORDER's ordering is for. Direction is the whole content of a
+      // priority change — a reader scanning a history wants to know something
+      // got more urgent, and "changed priority to High" makes them find the
+      // previous entry to learn whether that is news.
+      //
+      // `from` is undefined on rows written before 006, and there is no
+      // direction to state without it. That is the one case that falls back.
+      if (from == null) return `set the priority to ${label}`;
+      if (from === "none") return `set the priority to ${label}`;
+      const rose = PRIORITY_ORDER.indexOf(to) > PRIORITY_ORDER.indexOf(from);
+      return `${rose ? "raised" : "lowered"} the priority to ${label}`;
+    }
+    case "task.scheduled": {
+      if (!entry.before || !entry.after) return "changed the due date";
+      const from = entry.before.dueDate;
+      const to = entry.after.dueDate;
+      if (to === undefined) return "changed the due date";
+      if (to === null) return "cleared the due date";
+      const when = formatDueDate(to);
+      // Three phrasings, because "set" and "moved" are different events to a
+      // reader: the first is a commitment, the second is a commitment slipping
+      // or being pulled in. `from` undefined means a pre-006 row, which cannot
+      // tell the two apart, so it takes the weaker "set".
+      return from == null ? `set the due date to ${when}` : `moved the due date to ${when}`;
     }
     // The comment itself is not repeated here. It is rendered in full a few
     // inches away in the thread, and the log's job is to say a thing happened,

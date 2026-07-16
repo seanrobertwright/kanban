@@ -17,8 +17,13 @@ import type {
 
 // Postgres folds unquoted identifiers to lowercase, so `AS columnId` would
 // arrive as `columnid`. The double quotes are load-bearing.
+//
+// due_date needs no cast or to_char: shared/db/client.ts parses DATE to the raw
+// 'YYYY-MM-DD' string globally, which is what keeps a due date from becoming a
+// JS Date at the one boundary where that silently changes the day.
 const TASK_COLUMNS = `id, column_id AS "columnId", title, description, position,
-                      assignee_id AS "assigneeId", created_at AS "createdAt"`;
+                      assignee_id AS "assigneeId", priority,
+                      due_date AS "dueDate", created_at AS "createdAt"`;
 
 function selectTask(client: PoolClient, id: number) {
   return client
@@ -38,21 +43,26 @@ function snapshot(task: Task): TaskSnapshot {
     columnId: task.columnId,
     position: task.position,
     assigneeId: task.assigneeId,
+    priority: task.priority,
+    dueDate: task.dueDate,
   };
 }
 
 /**
- * The three comparisons below exist so a write only logs what it actually
- * changed. A no-op is not a mutation: the dialog PATCHes on close whether or not
- * anything was edited, so without these the history fills with entries whose
- * before and after are identical. That is not pedantry — at M2 undo replays
- * these rows, and the inverse of "nothing changed" is a confusing no-op the user
- * has to reason about. Cheap to skip now, impossible to clean up later on an
- * append-only table.
+ * The comparisons below exist so a write only logs what it actually changed. A
+ * no-op is not a mutation: the dialog PATCHes on close whether or not anything
+ * was edited, so without these the history fills with entries whose before and
+ * after are identical. That is not pedantry — at M2 undo replays these rows, and
+ * the inverse of "nothing changed" is a confusing no-op the user has to reason
+ * about. Cheap to skip now, impossible to clean up later on an append-only
+ * table.
  *
  * They are split by *concern* rather than being one whole-snapshot equality
- * check, because one PATCH can change a task's details and its assignee at once
- * — and those are two events, logged as two rows, invertible separately.
+ * check, because one PATCH can change a task's details, its assignee, its
+ * priority and its due date at once — and those are four events, logged as four
+ * rows, invertible separately. The partition is the same one ActivityAction
+ * draws, and for the same reason: each of these is a thing someone would want to
+ * undo without undoing the others.
  */
 function sameDetails(a: TaskSnapshot, b: TaskSnapshot): boolean {
   return a.title === b.title && a.description === b.description;
@@ -64,6 +74,14 @@ function samePlacement(a: TaskSnapshot, b: TaskSnapshot): boolean {
 
 function sameAssignee(a: TaskSnapshot, b: TaskSnapshot): boolean {
   return a.assigneeId === b.assigneeId;
+}
+
+function samePriority(a: TaskSnapshot, b: TaskSnapshot): boolean {
+  return a.priority === b.priority;
+}
+
+function sameDueDate(a: TaskSnapshot, b: TaskSnapshot): boolean {
+  return a.dueDate === b.dueDate;
 }
 
 /**
@@ -127,13 +145,24 @@ export async function createTask(
       await assertAssignable(client, workspaceId, input.assigneeId);
     }
 
+    // priority falls back to 'none' rather than being left to the column
+    // default, so the INSERT states the value it means. due_date has no such
+    // fallback to state: null is the value.
     const { rows } = await client.query<Task>(
-      `INSERT INTO task (column_id, title, description, position, assignee_id)
+      `INSERT INTO task (column_id, title, description, position, assignee_id,
+                         priority, due_date)
        VALUES ($1, $2, $3,
                (SELECT COALESCE(MAX(position) + 1, 0) FROM task WHERE column_id = $1),
-               $4)
+               $4, $5, $6)
        RETURNING ${TASK_COLUMNS}`,
-      [input.columnId, input.title, input.description ?? "", input.assigneeId ?? null]
+      [
+        input.columnId,
+        input.title,
+        input.description ?? "",
+        input.assigneeId ?? null,
+        input.priority ?? "none",
+        input.dueDate ?? null,
+      ]
     );
     const task = rows[0];
 
@@ -160,7 +189,12 @@ export async function updateTask(
   // `in`, not a null check — the distinction is the whole point. `undefined`
   // means the caller said nothing about the assignee; `null` means the caller
   // said "unassign". Collapsing them would make unassigning impossible.
+  //
+  // due_date needs the same treatment for the same reason (clearing a date is
+  // setting null), and priority conspicuously does not: clearing a priority is
+  // setting 'none', so null keeps its ordinary meaning of "absent" there.
   const setsAssignee = "assigneeId" in input;
+  const setsDueDate = "dueDate" in input;
 
   return withTransaction(async (client) => {
     const before = await selectTask(client, id);
@@ -170,18 +204,30 @@ export async function updateTask(
       await assertAssignable(client, workspaceId, input.assigneeId);
     }
 
-    // title and description use COALESCE, which reads null as "not supplied" —
-    // fine, because neither is nullable, so null can only ever mean absent.
-    // assignee_id cannot use it: null is a value there, and COALESCE would
-    // silently turn every unassign into a no-op. Hence the explicit
-    // supplied-flag, which is the one thing COALESCE cannot encode.
+    // Both idioms appear below, and which one a field gets is not a style
+    // choice — it follows from whether the field has a non-null value meaning
+    // "empty".
+    //
+    // COALESCE reads null as "not supplied", so it is correct exactly when null
+    // cannot be a value the caller wants to write. That holds for title and
+    // description (not nullable), and for priority (nullable in neither the
+    // column nor the intent — 'none' is how you clear it).
+    //
+    // assignee_id and due_date have no such value: null IS the cleared state.
+    // COALESCE would silently turn every unassign and every date-clear into a
+    // no-op. Hence the explicit supplied-flag, which is the one thing COALESCE
+    // cannot encode.
     const { rows } = await client.query<Task>(
       `UPDATE task
           SET title = COALESCE($2, title),
               description = COALESCE($3, description),
               assignee_id = CASE WHEN $4::boolean
                                  THEN $5::text
-                                 ELSE assignee_id END
+                                 ELSE assignee_id END,
+              priority = COALESCE($6::task_priority, priority),
+              due_date = CASE WHEN $7::boolean
+                              THEN $8::date
+                              ELSE due_date END
         WHERE id = $1
         RETURNING ${TASK_COLUMNS}`,
       [
@@ -190,16 +236,25 @@ export async function updateTask(
         input.description ?? null,
         setsAssignee,
         input.assigneeId ?? null,
+        input.priority ?? null,
+        setsDueDate,
+        input.dueDate ?? null,
       ]
     );
     const after = rows[0];
 
-    // Two rows, not one, when a single PATCH does both. The dialog can rename a
-    // task and reassign it in one submit, and those are two events: the feed
-    // reads better for it, and undo can revert the reassignment without
-    // reverting the rename. Each row carries the full snapshot — as task.moved
-    // already does — so `action` names which fields the entry is *about* while
-    // the snapshots say what the whole task looked like on either side.
+    // A row per concern that actually changed, not one per PATCH. The dialog can
+    // rename a task, reassign it, prioritize it and date it in one submit, and
+    // those are four events: the feed reads better for it, and undo can revert
+    // any one without reverting the others. Each row carries the full snapshot —
+    // as task.moved already does — so `action` names which fields the entry is
+    // *about* while the snapshots say what the whole task looked like on either
+    // side.
+    //
+    // This is also the shape M2's changeset review needs. An agent that triages
+    // a bug sets a priority and comments its reasoning; a reviewer accepting the
+    // former while rejecting the latter needs them to be separate rows, and no
+    // amount of diffing a single task.updated snapshot recovers that.
     const [from, to] = [snapshot(before), snapshot(after)];
 
     if (!sameDetails(from, to)) {
@@ -221,6 +276,30 @@ export async function updateTask(
         taskId: id,
         actor: human(userId),
         action: "task.assigned",
+        before: from,
+        after: to,
+      });
+    }
+
+    if (!samePriority(from, to)) {
+      await logActivity(client, {
+        workspaceId,
+        boardId,
+        taskId: id,
+        actor: human(userId),
+        action: "task.prioritized",
+        before: from,
+        after: to,
+      });
+    }
+
+    if (!sameDueDate(from, to)) {
+      await logActivity(client, {
+        workspaceId,
+        boardId,
+        taskId: id,
+        actor: human(userId),
+        action: "task.scheduled",
         before: from,
         after: to,
       });
@@ -328,9 +407,17 @@ export async function unassignFromWorkspace(
   // TASK_COLUMNS is unqualified, and `id` is ambiguous across this join — task,
   // board_column and board all have one. Hence the explicit t. prefixes rather
   // than the shared constant.
+  //
+  // Every column snapshot() reads has to be listed here, including the ones this
+  // function never touches: the rows below become `before`/`after` on an
+  // append-only table, and a field missing from this SELECT would land as
+  // undefined in JSONB — indistinguishable, forever, from "written before 006".
+  // That is the failure this list exists to prevent, and the reason it is worth
+  // the duplication of TASK_COLUMNS rather than a partial select.
   const { rows } = await client.query<Task & { boardId: number }>(
     `SELECT t.id, t.column_id AS "columnId", t.title, t.description, t.position,
-            t.assignee_id AS "assigneeId", t.created_at AS "createdAt",
+            t.assignee_id AS "assigneeId", t.priority, t.due_date AS "dueDate",
+            t.created_at AS "createdAt",
             bc.board_id AS "boardId"
        FROM task t
        JOIN board_column bc ON bc.id = t.column_id

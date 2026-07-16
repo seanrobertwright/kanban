@@ -142,11 +142,13 @@ describe("activity log", () => {
       // toEqual, not toMatchObject, and deliberately so: it fails whenever the
       // snapshot gains a field, which is the point. Every field a task has must
       // be in here or undo silently restores an incomplete task — assigneeId
-      // arrived at 004 exactly this way.
+      // arrived at 004 exactly this way, and priority and dueDate at 006.
       const task = await createTask(alice, {
         columnId: todoId,
         title: "Recoverable",
         description: "with a body",
+        priority: "high",
+        dueDate: "2026-08-01",
       });
       await deleteTask(alice, task.id);
 
@@ -157,6 +159,12 @@ describe("activity log", () => {
         columnId: todoId,
         position: expect.any(Number),
         assigneeId: null,
+        // Set to non-defaults above precisely so this asserts the values were
+        // captured, rather than that the keys exist. A snapshot that recorded
+        // 'none' and null for every task would pass a weaker version of this
+        // test and restore the wrong task.
+        priority: "high",
+        dueDate: "2026-08-01",
       });
     });
 

@@ -3,6 +3,8 @@ import {
   unauthorized,
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
+import { PRIORITY_ORDER, isTaskPriority } from "../types";
+import type { TaskPriority } from "../types";
 import {
   createTask,
   deleteTask,
@@ -30,6 +32,40 @@ function isAssigneeId(value: unknown): value is string | null | undefined {
   return value === undefined || value === null || typeof value === "string";
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A calendar date, or null ("no due date"), or absent ("leave it alone") — the
+ * same three-valued shape as isAssigneeId, for the same reason.
+ *
+ * The shape check is not enough, and the round-trip below is the point:
+ * "2026-02-30" and "2026-13-01" both match the regex and neither is a date.
+ * Postgres would reject them — with a 22008 that surfaces as a 500, turning a
+ * caller's typo into our error. Better to answer 400, which is the truth.
+ *
+ * Everything here is UTC — Date.UTC in, getUTC* out — even though the value is
+ * zoneless. That is not confusion about what a date is: it is how the check
+ * avoids introducing a zone. `new Date(2026, 1, 30)` would silently roll over to
+ * March 2nd *in the server's local zone*, so the validity of a user's input
+ * would depend on where the container happens to run. UTC is the one frame that
+ * is the same everywhere, which makes it the right one to do zone-free
+ * arithmetic in.
+ */
+function isDueDate(value: unknown): value is string | null | undefined {
+  if (value === undefined || value === null) return true;
+  if (typeof value !== "string" || !ISO_DATE.test(value)) return false;
+
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  // Round-trip: a rolled-over date disagrees with its own input on at least one
+  // component. February 30th comes back as March 2nd and is caught here.
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
+
 export async function handleCreateTask(request: Request) {
   const session = await getSessionFromRequest(request);
   if (!session) return unauthorized();
@@ -37,10 +73,8 @@ export async function handleCreateTask(request: Request) {
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return badRequest("Invalid JSON body");
 
-  const { columnId, title, description, assigneeId } = body as Record<
-    string,
-    unknown
-  >;
+  const { columnId, title, description, assigneeId, priority, dueDate } =
+    body as Record<string, unknown>;
   if (typeof columnId !== "number") return badRequest("columnId is required");
   if (typeof title !== "string" || title.trim() === "")
     return badRequest("title is required");
@@ -48,6 +82,13 @@ export async function handleCreateTask(request: Request) {
     return badRequest("description must be a string");
   if (!isAssigneeId(assigneeId))
     return badRequest("assigneeId must be a user id or null");
+  // Not `!isTaskPriority(priority)`: undefined is legal here and means "use the
+  // default", which is what the repository's ?? 'none' supplies. An unknown
+  // string is not — it would reach Postgres and fail the enum cast as a 500.
+  if (priority !== undefined && !isTaskPriority(priority))
+    return badRequest(`priority must be one of: ${PRIORITY_ORDER.join(", ")}`);
+  if (!isDueDate(dueDate))
+    return badRequest("dueDate must be a YYYY-MM-DD date or null");
 
   try {
     const task = await createTask(session.user.id, {
@@ -55,6 +96,8 @@ export async function handleCreateTask(request: Request) {
       title: title.trim(),
       description,
       assigneeId,
+      priority,
+      dueDate,
     });
     return Response.json(task, { status: 201 });
   } catch (error) {
@@ -70,15 +113,19 @@ export async function handleUpdateTask(request: Request, id: number) {
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return badRequest("Invalid JSON body");
 
-  const { title, description, columnId, position, assigneeId } = body as Record<
-    string,
-    unknown
-  >;
+  const { title, description, columnId, position, assigneeId, priority, dueDate } =
+    body as Record<string, unknown>;
 
   // Presence, not value. `{"assigneeId": null}` is a request to unassign and
   // must be told apart from a PATCH that never mentions the assignee — and
   // destructuring alone cannot: both hand back undefined.
+  //
+  // dueDate needs the same, since `{"dueDate": null}` clears a date. priority
+  // does not: `{"priority": null}` is not a request to do anything, because
+  // clearing a priority is `{"priority": "none"}`. It falls through to the
+  // rejection below rather than being honoured as a clear.
   const setsAssignee = "assigneeId" in body;
+  const setsDueDate = "dueDate" in body;
 
   try {
     // A move request carries columnId + position; a content edit carries
@@ -90,13 +137,23 @@ export async function handleUpdateTask(request: Request, id: number) {
       if (!moved) return notFound();
     }
 
-    if (title !== undefined || description !== undefined || setsAssignee) {
+    if (
+      title !== undefined ||
+      description !== undefined ||
+      setsAssignee ||
+      priority !== undefined ||
+      setsDueDate
+    ) {
       if (title !== undefined && (typeof title !== "string" || !title.trim()))
         return badRequest("title must be a non-empty string");
       if (description !== undefined && typeof description !== "string")
         return badRequest("description must be a string");
       if (!isAssigneeId(assigneeId))
         return badRequest("assigneeId must be a user id or null");
+      if (priority !== undefined && !isTaskPriority(priority))
+        return badRequest(`priority must be one of: ${PRIORITY_ORDER.join(", ")}`);
+      if (!isDueDate(dueDate))
+        return badRequest("dueDate must be a YYYY-MM-DD date or null");
 
       const updated = await updateTask(session.user.id, id, {
         title: title as string | undefined,
@@ -106,6 +163,14 @@ export async function handleUpdateTask(request: Request, id: number) {
         // undefined on the object — and `"assigneeId" in input` would then be
         // true for every title-only edit, turning each one into an unassign.
         ...(setsAssignee ? { assigneeId: assigneeId ?? null } : {}),
+        // No spread needed: priority is two-valued, so an explicit undefined on
+        // the object means exactly what an absent key would — nothing was said.
+        // The repository reads its value, not its presence.
+        priority: priority as TaskPriority | undefined,
+        // Spread, for assigneeId's reason exactly: `"dueDate" in input` decides
+        // whether the date is written, so a stray undefined key would clear the
+        // due date on every title-only edit.
+        ...(setsDueDate ? { dueDate: dueDate as string | null } : {}),
       });
       if (!updated) return notFound();
       return Response.json(updated);

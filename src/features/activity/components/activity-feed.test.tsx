@@ -37,6 +37,14 @@ function snapshot(over: Partial<TaskSnapshot> = {}): TaskSnapshot {
     columnId: 1,
     position: 0,
     assigneeId: null,
+    // Defaulted to what every row written since 006 carries, rather than left
+    // off. Both are legal — the fields are optional precisely so a pre-006 row
+    // can say "this did not exist yet" — but defaulting to absent would quietly
+    // make every test in this file a test of the historical case, and the
+    // present-day one would go uncovered. Tests that want a pre-006 row pass
+    // `undefined` and say so.
+    priority: "none",
+    dueDate: null,
     ...over,
   };
 }
@@ -272,6 +280,126 @@ describe("ActivityFeed", () => {
         }),
       ]);
       expect(screen.getByText(/assigned this to Bob/)).toBeDefined();
+    });
+  });
+
+  describe("priority", () => {
+    it("says which way the priority went", async () => {
+      // The reason PRIORITY_ORDER is an ordered array rather than a set, and the
+      // reason the column is an enum rather than TEXT. "changed priority to
+      // High" makes a reader find the previous entry to learn whether that is
+      // good news; direction is the whole content of the event.
+      await renderFeed([
+        entry({
+          action: "task.prioritized",
+          before: snapshot({ priority: "low" }),
+          after: snapshot({ priority: "urgent" }),
+        }),
+      ]);
+      expect(screen.getByText(/raised the priority to Urgent/)).toBeDefined();
+    });
+
+    it("says lowered when it went the other way", async () => {
+      await renderFeed([
+        entry({
+          action: "task.prioritized",
+          before: snapshot({ priority: "urgent" }),
+          after: snapshot({ priority: "low" }),
+        }),
+      ]);
+      expect(screen.getByText(/lowered the priority to Low/)).toBeDefined();
+    });
+
+    it("calls the first priority a set, not a raise", async () => {
+      // From 'none' there is nothing to have risen from — the task was never
+      // less urgent, it was untriaged.
+      await renderFeed([
+        entry({
+          action: "task.prioritized",
+          before: snapshot({ priority: "none" }),
+          after: snapshot({ priority: "high" }),
+        }),
+      ]);
+      expect(screen.getByText(/set the priority to High/)).toBeDefined();
+    });
+
+    it("says cleared rather than naming 'none' as a priority", async () => {
+      await renderFeed([
+        entry({
+          action: "task.prioritized",
+          before: snapshot({ priority: "high" }),
+          after: snapshot({ priority: "none" }),
+        }),
+      ]);
+      expect(screen.getByText(/cleared the priority/)).toBeDefined();
+    });
+
+    it("reads a row written before priorities existed without inventing one", async () => {
+      // 004's lesson, one milestone on: a pre-006 row has no priority key, so
+      // there is no direction to state. It must fall back rather than claim the
+      // task was raised from something.
+      await renderFeed([
+        entry({
+          action: "task.prioritized",
+          before: snapshot({ priority: undefined }),
+          after: snapshot({ priority: "high" }),
+        }),
+      ]);
+      expect(screen.getByText(/set the priority to High/)).toBeDefined();
+    });
+  });
+
+  describe("due dates", () => {
+    it("names the date it was set to", async () => {
+      await renderFeed([
+        entry({
+          action: "task.scheduled",
+          before: snapshot({ dueDate: null }),
+          after: snapshot({ dueDate: "2026-08-01" }),
+        }),
+      ]);
+      expect(screen.getByText(/set the due date to 1 Aug 2026/)).toBeDefined();
+    });
+
+    it("renders the date the reader's zone cannot shift", async () => {
+      // The feed formats from the string, never through a Date. A test rather
+      // than a comment because this file runs in whatever zone CI happens to
+      // use, and toLocaleDateString would pass here and fail in Tokyo.
+      await renderFeed([
+        entry({
+          action: "task.scheduled",
+          before: snapshot({ dueDate: null }),
+          after: snapshot({ dueDate: "2026-01-01" }),
+        }),
+      ]);
+      // 31 Dec 2025 is what a UTC-anchored Date would render east of Greenwich.
+      expect(screen.getByText(/1 Jan 2026/)).toBeDefined();
+      expect(screen.queryByText(/2025/)).toBeNull();
+    });
+
+    it("says moved when a date is replaced, not set", async () => {
+      // Worth distinguishing: setting a date is a commitment, moving one is a
+      // commitment slipping. A reader scanning for the latter should not have to
+      // diff two entries to find it.
+      await renderFeed([
+        entry({
+          action: "task.scheduled",
+          before: snapshot({ dueDate: "2026-08-01" }),
+          after: snapshot({ dueDate: "2026-09-15" }),
+        }),
+      ]);
+      expect(screen.getByText(/moved the due date to 15 Sep 2026/)).toBeDefined();
+    });
+
+    it("says cleared when the date is removed", async () => {
+      await renderFeed([
+        entry({
+          action: "task.scheduled",
+          before: snapshot({ dueDate: "2026-08-01" }),
+          after: snapshot({ dueDate: null }),
+        }),
+      ]);
+      expect(screen.getByText(/cleared the due date/)).toBeDefined();
     });
   });
 

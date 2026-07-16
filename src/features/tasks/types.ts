@@ -1,3 +1,42 @@
+/**
+ * Mirrors the `task_priority` enum in 006, in declaration order — which is also
+ * sort order, in Postgres and in PRIORITY_ORDER below. Keep the two in step: a
+ * value added here without an ALTER TYPE is a write that fails at the database,
+ * and one added there without this is a value the UI cannot name.
+ *
+ * A closed set, unlike ActivityAction: growing it is a product decision, not a
+ * milestone's side effect. See the reasoning in 006.
+ */
+export type TaskPriority = "none" | "low" | "medium" | "high" | "urgent";
+
+/**
+ * Lowest to highest, matching the enum's declaration order — so an index into
+ * this array compares two priorities, which is what lets the activity feed say
+ * "raised" or "lowered" rather than the much less useful "changed".
+ */
+export const PRIORITY_ORDER: readonly TaskPriority[] = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "urgent",
+] as const;
+
+export const PRIORITY_LABELS: Record<TaskPriority, string> = {
+  none: "No priority",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+};
+
+export function isTaskPriority(value: unknown): value is TaskPriority {
+  return (
+    typeof value === "string" &&
+    (PRIORITY_ORDER as readonly string[]).includes(value)
+  );
+}
+
 export interface Task {
   id: number;
   columnId: number;
@@ -15,6 +54,22 @@ export interface Task {
    * two strings on every card of the same person.
    */
   assigneeId: string | null;
+  /**
+   * Never null: 006 gives the column NOT NULL DEFAULT 'none', because "nobody
+   * has triaged this" is a state worth naming rather than an absence. That is
+   * what keeps updates two-valued — see UpdateTaskInput.
+   */
+  priority: TaskPriority;
+  /**
+   * A calendar date as 'YYYY-MM-DD', or null for no due date.
+   *
+   * A string rather than a Date, deliberately and all the way down: 006 stores
+   * DATE, and shared/db/client.ts stops node-postgres turning it into a local
+   * midnight that serializes to the wrong day east of Greenwich. Nothing should
+   * pass this through `new Date()` — the format sorts and compares
+   * lexicographically, which covers every question the UI actually asks of it.
+   */
+  dueDate: string | null;
   createdAt: string;
 }
 
@@ -23,6 +78,8 @@ export interface CreateTaskInput {
   title: string;
   description?: string;
   assigneeId?: string | null;
+  priority?: TaskPriority;
+  dueDate?: string | null;
 }
 
 export interface UpdateTaskInput {
@@ -37,6 +94,23 @@ export interface UpdateTaskInput {
    * field IS one of the two things a user wants to do.
    */
   assigneeId?: string | null;
+  /**
+   * Two-valued, and the contrast with the two fields either side of it is the
+   * point. Clearing a priority means setting it to 'none' — a value — so `null`
+   * never has to mean "clear", which frees it to mean "not supplied" and lets
+   * COALESCE do the work, exactly as it does for title.
+   *
+   * The rule this and dueDate together establish: a field needs the
+   * supplied-flag treatment iff it has no non-null value meaning "empty".
+   * Priority has one, so it does not.
+   */
+  priority?: TaskPriority;
+  /**
+   * Three-valued, like assigneeId and for the identical reason: there is no date
+   * that means "no due date", so `null` is the cleared state and cannot also be
+   * the absent one. `undefined` leaves the date alone; `null` clears it.
+   */
+  dueDate?: string | null;
 }
 
 export interface MoveTaskInput {
