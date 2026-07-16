@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { relativeTime } from "@/shared/lib/relative-time";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import { fetchTaskActivity } from "../client/api";
 import type { ActivityEntry } from "../types";
@@ -12,6 +13,12 @@ interface ActivityFeedProps {
   columnNames: Record<number, string>;
   /** Member names by user id, for naming who a task was assigned to. */
   memberNames: Record<string, string>;
+  /**
+   * Changes to force a refetch. Commenting writes a log row, and the thread that
+   * wrote it sits directly above this — without a nudge, the history would keep
+   * insisting nothing happened until the dialog is reopened.
+   */
+  refreshToken?: number;
 }
 
 /**
@@ -76,37 +83,39 @@ function describe(
       if (from == null) return `assigned this to ${person(to)}`;
       return `reassigned this from ${person(from)} to ${person(to)}`;
     }
+    // The comment itself is not repeated here. It is rendered in full a few
+    // inches away in the thread, and the log's job is to say a thing happened,
+    // not to become a second copy of it that can drift from the first.
+    case "comment.created":
+      return "commented";
+    case "comment.updated":
+      return "edited a comment";
+    case "comment.deleted": {
+      const author = entry.before?.author;
+      if (!author) return "deleted a comment";
+      // Worth distinguishing, because this is the one entry where the actor and
+      // the subject routinely differ: an admin may delete anyone's remark, and
+      // "deleted a comment" would hide whose. This is what CommentSnapshot
+      // records the author for.
+      if (author.type === "human" && author.id === entry.actorId)
+        return "deleted their comment";
+      if (author.type === "agent") return "deleted an agent's comment";
+      return `deleted ${person(author.id)}'s comment`;
+    }
     default:
       // `action` is TEXT in Postgres and this union grows every milestone, so a
       // row written by newer code can reach older code. Say something true
-      // rather than crashing the dialog.
-      return "changed this task";
+      // rather than crashing the dialog — and say "this", not "this task",
+      // since from 005 an entry is not necessarily about the task itself.
+      return "changed this";
   }
-}
-
-const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["year", 31536000],
-  ["month", 2592000],
-  ["day", 86400],
-  ["hour", 3600],
-  ["minute", 60],
-];
-
-function relativeTime(iso: string, now: number): string {
-  const seconds = Math.round((new Date(iso).getTime() - now) / 1000);
-  const abs = Math.abs(seconds);
-  if (abs < 45) return "just now";
-  const format = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-  for (const [unit, size] of UNITS) {
-    if (abs >= size) return format.format(Math.round(seconds / size), unit);
-  }
-  return "just now";
 }
 
 export function ActivityFeed({
   taskId,
   columnNames,
   memberNames,
+  refreshToken = 0,
 }: ActivityFeedProps) {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,7 +148,7 @@ export function ActivityFeed({
     return () => {
       cancelled = true;
     };
-  }, [taskId]);
+  }, [taskId, refreshToken]);
 
   if (loading && entries.length === 0) {
     return <p className="text-xs text-muted-foreground">Loading history…</p>;

@@ -6,9 +6,13 @@ import type { Member } from "@/features/workspaces/types";
 import { TaskDialog } from "./task-dialog";
 import type { Task } from "../types";
 
-// The dialog mounts the feed for an existing task, which would otherwise fetch.
+// The dialog mounts both of these for an existing task, and each would
+// otherwise fetch. They are covered by their own suites.
 vi.mock("@/features/activity/components/activity-feed", () => ({
   ActivityFeed: () => null,
+}));
+vi.mock("@/features/comments/components/comment-thread", () => ({
+  CommentThread: () => null,
 }));
 
 const MEMBERS: Member[] = [

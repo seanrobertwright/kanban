@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ActivityFeed } from "@/features/activity/components/activity-feed";
+import { CommentThread } from "@/features/comments/components/comment-thread";
 import type { Member } from "@/features/workspaces/types";
 import { Button } from "@/shared/ui/button";
 import {
@@ -52,6 +53,10 @@ export function TaskDialog({
   const [description, setDescription] = useState("");
   const [assigneeId, setAssigneeId] = useState<string>(UNASSIGNED);
   const [saving, setSaving] = useState(false);
+  // Bumped by the thread whenever it writes, which makes the feed refetch. Every
+  // comment mutation logs a row, so without this the history sitting directly
+  // below the comment you just posted would deny it happened.
+  const [activityVersion, setActivityVersion] = useState(0);
 
   const memberNames = useMemo(
     () => Object.fromEntries(members.map((m) => [m.userId, m.name])),
@@ -136,21 +141,33 @@ export function TaskDialog({
               ))}
             </select>
           </div>
-          {/* Only an existing task has history, and only while the dialog is
-              open — mounting the feed otherwise would fetch on every board
-              render. The key remounts it per task so switching cards cannot
-              show the previous task's entries while the new ones load. */}
+          {/* Only an existing task has a thread or history, and only while the
+              dialog is open — mounting either otherwise would fetch on every
+              board render. The keys remount them per task so switching cards
+              cannot show the previous task's entries while the new ones load.
+
+              Comments come first because they are the conversation and the
+              history is the receipt: the thread is what a reader came for, and
+              at M2 it is where an agent reports what it did. */}
           {task && open && (
-            <div className="grid gap-2 border-t pt-3">
-              <p className="text-xs font-medium text-muted-foreground">
-                History
-              </p>
-              <ActivityFeed
-                key={task.id}
+            <div className="grid gap-4 border-t pt-3">
+              <CommentThread
+                key={`comments-${task.id}`}
                 taskId={task.id}
-                columnNames={columnNames}
-                memberNames={memberNames}
+                onChanged={() => setActivityVersion((v) => v + 1)}
               />
+              <div className="grid gap-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  History
+                </p>
+                <ActivityFeed
+                  key={task.id}
+                  taskId={task.id}
+                  columnNames={columnNames}
+                  memberNames={memberNames}
+                  refreshToken={activityVersion}
+                />
+              </div>
             </div>
           )}
           <DialogFooter>

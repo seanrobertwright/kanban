@@ -309,7 +309,7 @@ Chosen from Core Work Items **for agent-readiness**, not for coverage. Ordered s
 
 - ✅ **`activity_log`** (append-only, actor-typed) — audit + undo substrate + the "activity history" criterion.
 - ✅ **Assignees** — the slot an agent will later occupy.
-- **Comments** — the agent's reporting channel.
+- ✅ **Comments** — the agent's reporting channel.
 - **User-editable statuses/columns** — agents move tasks *between* states; those states must be user-defined.
 - **Priority, labels, due dates** — the fields an agent reasons over when triaging.
 - **Subtasks** — an agent decomposing work needs somewhere to put the pieces.
@@ -319,7 +319,7 @@ Chosen from Core Work Items **for agent-readiness**, not for coverage. Ordered s
 Deferred from this area: checklists, recurring, custom fields, templates, bulk edit, forms, attachments — none are needed for the wedge.
 
 **Ships:** a competent team kanban. Genuinely usable, still undifferentiated.
-**Acceptance:** ◐ every task mutation (create/update/move/delete/assign) writes an `activity_log` row with actor attribution, verified by 31 cases against real Postgres; ✅ history renders on a task. The criterion re-opens as each remaining M1 feature adds mutations.
+**Acceptance:** ◐ every task mutation (create/update/move/delete/assign/comment) writes an `activity_log` row with actor attribution, verified by 61 cases against real Postgres; ✅ history renders on a task. The criterion re-opens as each remaining M1 feature adds mutations.
 **Risk:** low.
 
 **`activity_log` design, as built** (§8's shape, with the reasoning that survived contact):
@@ -346,6 +346,23 @@ Deferred from this area: checklists, recurring, custom fields, templates, bulk e
 - **The task carries only an id; names and avatars resolve client-side.** The assignee picker needs the member list anyway, so the lookup is free. Joining display data onto every task in `getBoard` would put the same two strings on every card of the same person.
 
 **Deliberately not built:** the assignee is not yet shown as a filter or a workload count — that is M3's view work, and there is nothing to plan against until boards hold more than a demo's worth of tasks.
+
+**Comments design, as built** (§8's `task ──< comment`, with what survived contact):
+
+- **Comments are content; the log is history — and every fork below follows from that one distinction.** `comment.task_id` CASCADEs, where `activity_log.task_id` carries no FK at all: a remark means nothing detached from the task it is about, while the record that the task was deleted is the row an audit most needs. The comment goes, the record of it stays. Both calls appear in the same feature and point opposite ways, which is the clearest statement yet of a rule M0 and M1 had each been applying half of.
+- **The author carries no foreign key, unlike `task.assignee_id`.** A comment is an *utterance* — a thing someone said at a moment already past — not a live pointer that must resolve to a real user. `ON DELETE SET NULL` would keep the remark and erase who made it, and authorship is the one part of a remark that cannot be re-derived; CASCADE would delete a departing employee's half of every discussion, rewriting threads that other people's replies still answer. A dangling id is honest: the comment stands, and the reader is told the author is gone. This is `activity_log.actor_id`'s reasoning, reached independently, which is some evidence it is the right one.
+- **`author_type` exists from the first row**, so M2's agents need no migration — §7.1 makes `comment_on_task` an agent tool, and 003's lesson was that a schema assuming a human actor leaves every earlier row permanently unable to say otherwise. One column, paid today.
+- **The membership invariant needs no check here, and that is worth stating rather than leaving to look like an oversight.** 004 needs `assertAssignable` because an assignee is someone *else*, so their membership is an open question. An author is the caller, and `requireTaskRole` has just proved the caller is a member of this task's workspace. The invariant holds by construction.
+- **Removing a member does *not* delete their comments** — the deliberate opposite of 004's assignment cleanup. An assignee is a live claim on work in a workspace they can no longer see; a comment is a record of something said while they were there. Deleting it would tear a hole in a thread that replied to it. The author reverts to a plain name and avatar, which is all it ever was.
+- **Viewers may comment** — the one place a mutation here accepts less than `member`, and it follows the line 004 drew: assignment says whose work it is, roles say who may edit the board. A viewer can already be handed a task, and a viewer who cannot comment has been handed work with no way to report back on it. A test asserts viewers still cannot mutate the board, so the divergence cannot quietly widen into "viewer means member".
+- **An admin may delete any comment but may never edit one.** An admin who can rewrite your words can put words in your mouth, under your name, with the log recording only that "a comment was edited". Deletion removes a remark; it does not forge one — and a workspace does need a way to take down something abusive, or a wrong agent report at M2 whose author cannot be reached. The line is drawn between the two verbs rather than around a single "moderate" permission.
+- **`before`/`after` became a discriminated union keyed off `action`.** The log stopped being about only tasks at 005, and `action` is what says which snapshot shape a row holds — precisely the growth 003 anticipated when it made the column TEXT rather than an enum. The union is not decoration: it broke the activity feed's test helper, which took a `Partial<ActivityEntry>` and could therefore build a `task.moved` carrying a `CommentSnapshot`. A test helper loose enough to construct impossible data quietly tests a different program.
+- **`CommentSnapshot` records the author, not just the body.** For `comment.deleted` the actor and the author genuinely differ — an admin deleting someone else's remark — and recording only the actor would make the authorship of a deleted comment unrecoverable. 003's lesson, applied to a payload rather than a column: on an append-only table a field skipped is a window of history lost for good. It also carries `commentId`, which `TaskSnapshot` has no equivalent of, because the row's `task_id` points at the comment's *parent*: without it, a task with twenty comments would log twenty indistinguishable edits and M2's undo would have nothing to aim at.
+- **No-ops are not mutations, here too.** An edit that changes nothing writes no row *and* leaves `updated_at` null — rendering "(edited)" on a comment nobody edited is a false claim about a person's words, which is worse than a missing one.
+- **`canEdit`/`canDelete` are computed server-side.** They are the rule, and a rule stated in two places will eventually be stated two ways. The repository re-checks on every write regardless, since anyone can craft a request; the flags exist so the UI knows which buttons to draw, not to decide anything.
+- **The body renders as text and never as markup**, with a test that a later "render markdown" change has to break in order to land. From M2 an agent writes here, and its output is not to be trusted with HTML.
+
+**Deliberately not built:** no threading, no reactions, no @-mentions, no markdown. §8 draws comments flat, and the wedge needs a reporting channel rather than a discussion forum. Mentions are the interesting one — they are how a human would summon an agent — but that is M5's trigger question, not M1's.
 
 ---
 

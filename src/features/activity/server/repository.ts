@@ -7,18 +7,36 @@ import type {
   ActivityAction,
   ActivityEntry,
   Actor,
+  CommentAction,
+  CommentSnapshot,
+  TaskAction,
   TaskSnapshot,
 } from "../types";
 
-export interface ActivityInput {
+interface ActivityInputBase {
   workspaceId: string;
   boardId: number | null;
   taskId: number | null;
   actor: Actor;
-  action: ActivityAction;
-  before?: TaskSnapshot | null;
-  after?: TaskSnapshot | null;
 }
+
+/**
+ * Mirrors the Activity union: the action decides which snapshot shape is legal,
+ * so `comment.created` cannot be logged carrying a TaskSnapshot. Worth the extra
+ * few lines on this table specifically — it is append-only, so a row written
+ * with a mismatched payload is not a bug you fix, it is a bug you keep.
+ */
+export type ActivityInput =
+  | (ActivityInputBase & {
+      action: TaskAction;
+      before?: TaskSnapshot | null;
+      after?: TaskSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: CommentAction;
+      before?: CommentSnapshot | null;
+      after?: CommentSnapshot | null;
+    });
 
 /**
  * Appends one row to the audit trail.

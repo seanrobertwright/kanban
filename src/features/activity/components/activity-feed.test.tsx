@@ -3,13 +3,32 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ActivityFeed } from "./activity-feed";
-import type { ActivityEntry, TaskSnapshot } from "../types";
+import type {
+  ActivityEntry,
+  CommentAction,
+  CommentSnapshot,
+  TaskAction,
+  TaskSnapshot,
+} from "../types";
 
 vi.mock("../client/api", () => ({ fetchTaskActivity: vi.fn() }));
 const { fetchTaskActivity } = await import("../client/api");
 
 const COLUMN_NAMES = { 1: "To Do", 3: "Done" };
 const MEMBER_NAMES = { "user-1": "Alice", "user-2": "Bob" };
+
+/**
+ * One builder per arm of the union, rather than one taking
+ * `Partial<ActivityEntry>`.
+ *
+ * The latter stopped compiling at 005 and that is the type working: a partial of
+ * a union is satisfied by mixing the arms, so it would happily build a
+ * task.moved carrying a CommentSnapshot — a row the app can no longer write, and
+ * so a row the tests should not be able to fake either. A test helper loose
+ * enough to construct impossible data quietly tests a different program.
+ */
+type TaskEntry = Extract<ActivityEntry, { action: TaskAction }>;
+type CommentEntry = Extract<ActivityEntry, { action: CommentAction }>;
 
 function snapshot(over: Partial<TaskSnapshot> = {}): TaskSnapshot {
   return {
@@ -22,7 +41,16 @@ function snapshot(over: Partial<TaskSnapshot> = {}): TaskSnapshot {
   };
 }
 
-function entry(over: Partial<ActivityEntry> = {}): ActivityEntry {
+function commentSnapshot(over: Partial<CommentSnapshot> = {}): CommentSnapshot {
+  return {
+    commentId: 5,
+    body: "Looks good to me",
+    author: { type: "human", id: "user-1" },
+    ...over,
+  };
+}
+
+function entry(over: Partial<TaskEntry> = {}): TaskEntry {
   return {
     id: "1",
     workspaceId: "ws-1",
@@ -35,6 +63,24 @@ function entry(over: Partial<ActivityEntry> = {}): ActivityEntry {
     action: "task.created",
     before: null,
     after: snapshot(),
+    createdAt: new Date().toISOString(),
+    ...over,
+  };
+}
+
+function commentEntry(over: Partial<CommentEntry> = {}): CommentEntry {
+  return {
+    id: "1",
+    workspaceId: "ws-1",
+    boardId: 1,
+    taskId: 7,
+    actorType: "human",
+    actorId: "user-1",
+    actorName: "Alice",
+    actorImage: null,
+    action: "comment.created",
+    before: null,
+    after: commentSnapshot(),
     createdAt: new Date().toISOString(),
     ...over,
   };
@@ -135,10 +181,8 @@ describe("ActivityFeed", () => {
   it("renders an unknown future action without crashing", async () => {
     // `action` is TEXT and the union grows every milestone, so a row written by
     // newer code can reach this component.
-    await renderFeed([
-      entry({ action: "task.archived" as ActivityEntry["action"] }),
-    ]);
-    expect(screen.getByText(/changed this task/)).toBeDefined();
+    await renderFeed([entry({ action: "task.archived" as TaskAction })]);
+    expect(screen.getByText(/changed this/)).toBeDefined();
   });
 
   it("says so when a task has no history", async () => {
@@ -228,6 +272,69 @@ describe("ActivityFeed", () => {
         }),
       ]);
       expect(screen.getByText(/assigned this to Bob/)).toBeDefined();
+    });
+  });
+
+  describe("comments", () => {
+    it("reports a comment without repeating its text", async () => {
+      // The thread renders the body a few inches away. Repeating it here would
+      // be a second copy of the same string, free to drift from the first once
+      // the comment is edited.
+      await renderFeed([commentEntry()]);
+      expect(screen.getByText(/commented/)).toBeDefined();
+      expect(screen.queryByText(/Looks good to me/)).toBeNull();
+    });
+
+    it("reports an edit as an edit", async () => {
+      await renderFeed([
+        commentEntry({
+          action: "comment.updated",
+          before: commentSnapshot({ body: "Old" }),
+          after: commentSnapshot({ body: "New" }),
+        }),
+      ]);
+      expect(screen.getByText(/edited a comment/)).toBeDefined();
+    });
+
+    it("names whose comment an admin deleted", async () => {
+      // The one entry where actor and subject routinely differ, and the reason
+      // CommentSnapshot carries the author at all.
+      await renderFeed([
+        commentEntry({
+          action: "comment.deleted",
+          actorId: "user-1",
+          actorName: "Alice",
+          before: commentSnapshot({ author: { type: "human", id: "user-2" } }),
+          after: null,
+        }),
+      ]);
+      expect(screen.getByText(/deleted Bob's comment/)).toBeDefined();
+    });
+
+    it("distinguishes deleting your own comment", async () => {
+      await renderFeed([
+        commentEntry({
+          action: "comment.deleted",
+          actorId: "user-2",
+          actorName: "Bob",
+          before: commentSnapshot({ author: { type: "human", id: "user-2" } }),
+          after: null,
+        }),
+      ]);
+      expect(screen.getByText(/deleted their comment/)).toBeDefined();
+    });
+
+    it("calls an agent's deleted comment an agent's", async () => {
+      // An agent id will not resolve against the member list, so without the
+      // author's type this would read "deleted a former member's comment".
+      await renderFeed([
+        commentEntry({
+          action: "comment.deleted",
+          before: commentSnapshot({ author: { type: "agent", id: "agent-1" } }),
+          after: null,
+        }),
+      ]);
+      expect(screen.getByText(/deleted an agent's comment/)).toBeDefined();
     });
   });
 });
