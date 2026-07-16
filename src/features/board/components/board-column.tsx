@@ -27,6 +27,7 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { Input } from "@/shared/ui/input";
 import type { Task } from "@/features/tasks/types";
+import type { Label as LabelData } from "@/features/labels/types";
 import type { Member } from "@/features/workspaces/types";
 import type { Column } from "../types";
 import { SortableTaskCard } from "./sortable-task-card";
@@ -35,6 +36,8 @@ interface BoardColumnProps {
   column: Column;
   tasks: Task[];
   membersById: Record<string, Member>;
+  /** Labels by id, for chip colour. The task carries its own names (LabelRef). */
+  labelsById: Record<number, LabelData>;
   /** Member and up: add a task, add/rename/reorder a column. */
   canEdit: boolean;
   /** Admin and up. Deleting can destroy work, so it is gated harder (§7.4). */
@@ -53,6 +56,7 @@ export function BoardColumn({
   column,
   tasks,
   membersById,
+  labelsById,
   canEdit,
   canDelete,
   isFirst,
@@ -178,6 +182,7 @@ export function BoardColumn({
               key={task.id}
               task={task}
               membersById={membersById}
+              labelsById={labelsById}
               onEdit={canEdit ? onEditTask : undefined}
               onDelete={canEdit ? onDeleteTask : undefined}
             />

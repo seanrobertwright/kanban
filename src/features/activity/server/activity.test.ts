@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { getBoard } from "@/features/board/server/repository";
+import { createLabel } from "@/features/labels/server/repository";
 import {
   createTask,
   deleteTask,
@@ -39,6 +40,7 @@ describe("activity log", () => {
   let alice: string;
   let bob: string;
   let boardId: number;
+  let workspaceId: string;
   let todoId: number;
   let doneId: number;
 
@@ -48,7 +50,9 @@ describe("activity log", () => {
     await ensurePersonalWorkspace(alice, "ActAlice");
     await ensurePersonalWorkspace(bob, "ActBob");
 
-    boardId = (await getDefaultBoard(alice))!.id;
+    const board = (await getDefaultBoard(alice))!;
+    boardId = board.id;
+    workspaceId = board.workspaceId;
     const columns = (await getBoard(alice, boardId))!.columns;
     todoId = columns[0].id;
     doneId = columns[2].id;
@@ -142,13 +146,16 @@ describe("activity log", () => {
       // toEqual, not toMatchObject, and deliberately so: it fails whenever the
       // snapshot gains a field, which is the point. Every field a task has must
       // be in here or undo silently restores an incomplete task — assigneeId
-      // arrived at 004 exactly this way, and priority and dueDate at 006.
+      // arrived at 004 exactly this way, priority and dueDate at 006, and labels
+      // at 007. Three for three; the comment has earned its keep.
+      const label = await createLabel(alice, workspaceId, { name: "recoverable" });
       const task = await createTask(alice, {
         columnId: todoId,
         title: "Recoverable",
         description: "with a body",
         priority: "high",
         dueDate: "2026-08-01",
+        labelIds: [label.id],
       });
       await deleteTask(alice, task.id);
 
@@ -161,10 +168,13 @@ describe("activity log", () => {
         assigneeId: null,
         // Set to non-defaults above precisely so this asserts the values were
         // captured, rather than that the keys exist. A snapshot that recorded
-        // 'none' and null for every task would pass a weaker version of this
+        // 'none', null and [] for every task would pass a weaker version of this
         // test and restore the wrong task.
         priority: "high",
         dueDate: "2026-08-01",
+        // Name included: the label is what undo needs to restore, and 007's
+        // whole point is that this stays readable after the label is deleted.
+        labels: [{ id: label.id, name: "recoverable" }],
       });
     });
 

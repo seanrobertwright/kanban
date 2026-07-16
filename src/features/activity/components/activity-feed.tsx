@@ -118,6 +118,29 @@ function describe(
       // tell the two apart, so it takes the weaker "set".
       return from == null ? `set the due date to ${when}` : `moved the due date to ${when}`;
     }
+    case "task.labeled": {
+      if (!entry.before || !entry.after) return "changed the labels";
+      const before = entry.before.labels ?? [];
+      const after = entry.after.labels ?? [];
+      const had = new Set(before.map((l) => l.id));
+      const has = new Set(after.map((l) => l.id));
+      const added = after.filter((l) => !had.has(l.id));
+      const removed = before.filter((l) => !has.has(l.id));
+
+      // The snapshot is a whole set on either side, but a reader wants the
+      // delta: "added bug" is the event, where "labels are now bug, p0,
+      // regression" makes them diff two lists in their head. The names come from
+      // the snapshot rather than the vocabulary, which is what keeps this
+      // readable after a label is deleted — often the very entry being read.
+      const names = (labels: { name: string }[]) =>
+        labels.map((l) => `"${l.name}"`).join(", ");
+
+      if (added.length && removed.length)
+        return `added ${names(added)} and removed ${names(removed)}`;
+      if (added.length) return `added ${names(added)}`;
+      if (removed.length) return `removed ${names(removed)}`;
+      return "changed the labels";
+    }
     // The comment itself is not repeated here. It is rendered in full a few
     // inches away in the thread, and the log's job is to say a thing happened,
     // not to become a second copy of it that can drift from the first.

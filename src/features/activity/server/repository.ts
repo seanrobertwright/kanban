@@ -11,6 +11,8 @@ import type {
   ColumnSnapshot,
   CommentAction,
   CommentSnapshot,
+  LabelAction,
+  LabelSnapshot,
   TaskAction,
   TaskSnapshot,
 } from "../types";
@@ -43,6 +45,11 @@ export type ActivityInput =
       action: ColumnAction;
       before?: ColumnSnapshot | null;
       after?: ColumnSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: LabelAction;
+      before?: LabelSnapshot | null;
+      after?: LabelSnapshot | null;
     });
 
 /**

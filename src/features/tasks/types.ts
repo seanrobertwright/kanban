@@ -1,3 +1,5 @@
+import type { LabelRef } from "@/features/labels/types";
+
 /**
  * Mirrors the `task_priority` enum in 006, in declaration order — which is also
  * sort order, in Postgres and in PRIORITY_ORDER below. Keep the two in step: a
@@ -70,6 +72,15 @@ export interface Task {
    * lexicographically, which covers every question the UI actually asks of it.
    */
   dueDate: string | null;
+  /**
+   * The labels this task wears — id and name, never null, `[]` when unlabelled.
+   *
+   * Names rather than bare ids, unlike assigneeId: the reasoning is LabelRef's,
+   * and it comes from what the log needs rather than what the card wants. The
+   * colour is still a client-side lookup against the workspace vocabulary, which
+   * the picker holds anyway.
+   */
+  labels: LabelRef[];
   createdAt: string;
 }
 
@@ -80,6 +91,8 @@ export interface CreateTaskInput {
   assigneeId?: string | null;
   priority?: TaskPriority;
   dueDate?: string | null;
+  /** Ids, not refs: the caller says which labels, the database knows their names. */
+  labelIds?: number[];
 }
 
 export interface UpdateTaskInput {
@@ -111,6 +124,18 @@ export interface UpdateTaskInput {
    * the absent one. `undefined` leaves the date alone; `null` clears it.
    */
   dueDate?: string | null;
+  /**
+   * Two-valued, and 006's rule is what says so without having to think about it:
+   * a set has a non-null value meaning empty — `[]` — so `null` never needs to
+   * mean "clear", and no supplied-flag is required. `undefined` leaves the labels
+   * alone; `[]` removes them all.
+   *
+   * The whole set, not a delta. The dialog submits a form rather than a stream of
+   * add/remove events, and a set is what lets the log carry a snapshot on either
+   * side — which is what undo restores, and what keeps two people editing the
+   * same task from replaying each other's adds.
+   */
+  labelIds?: number[];
 }
 
 export interface MoveTaskInput {

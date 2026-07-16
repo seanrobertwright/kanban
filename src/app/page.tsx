@@ -5,6 +5,7 @@ import { getSession } from "@/features/auth/server/session";
 import { Board } from "@/features/board/components/board";
 import { getBoard } from "@/features/board/server/repository";
 import type { BoardData } from "@/features/board/types";
+import { listLabels } from "@/features/labels/server/repository";
 import { BoardSwitcher } from "@/features/workspaces/components/board-switcher";
 import { AuthzError } from "@/features/workspaces/server/authz";
 import {
@@ -57,10 +58,16 @@ export default async function Home({
   // the assignee picker needs them the moment a dialog opens, and every card
   // that shows a face needs them on first paint. Both resolve names and avatars
   // from this one list, which is why Task carries only an assignee id.
-  const [workspaces, boards, members] = await Promise.all([
+  //
+  // Labels ride along for the same reason and are read against the *workspace*,
+  // not the board — 007 scopes the vocabulary there, so this list is the same
+  // for every board a user switches between. Cards need it on first paint for
+  // chip colour, and the picker needs it the moment a dialog opens.
+  const [workspaces, boards, members, labels] = await Promise.all([
     listWorkspacesForUser(session.user.id),
     listBoardsForUser(session.user.id),
     listMembers(session.user.id, data.board.workspaceId),
+    listLabels(session.user.id, data.board.workspaceId),
   ]);
   const workspace = workspaces.find((w) => w.id === data.board.workspaceId)!;
   const canEdit = workspace.role !== "viewer";
@@ -100,6 +107,8 @@ export default async function Home({
         columns={data.columns}
         initialTasks={data.tasks}
         members={members}
+        initialLabels={labels}
+        workspaceId={data.board.workspaceId}
         canEdit={canEdit}
         canDeleteColumns={canDeleteColumns}
       />

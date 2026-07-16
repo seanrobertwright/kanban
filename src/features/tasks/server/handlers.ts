@@ -51,6 +51,22 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * is the same everywhere, which makes it the right one to do zone-free
  * arithmetic in.
  */
+/**
+ * Two-valued, unlike isAssigneeId and isDueDate beside it: `[]` is the empty
+ * set, so null is never a legal way to say "clear" and is rejected here rather
+ * than honoured. 006's rule, holding for a third field.
+ *
+ * Whether these ids name labels of *this* workspace is not decided here — that
+ * is a tenancy question, answered in the repository next to the RBAC checks,
+ * against the same transaction that does the write.
+ */
+function isLabelIds(value: unknown): value is number[] | undefined {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((v) => Number.isInteger(v)))
+  );
+}
+
 function isDueDate(value: unknown): value is string | null | undefined {
   if (value === undefined || value === null) return true;
   if (typeof value !== "string" || !ISO_DATE.test(value)) return false;
@@ -73,7 +89,7 @@ export async function handleCreateTask(request: Request) {
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return badRequest("Invalid JSON body");
 
-  const { columnId, title, description, assigneeId, priority, dueDate } =
+  const { columnId, title, description, assigneeId, priority, dueDate, labelIds } =
     body as Record<string, unknown>;
   if (typeof columnId !== "number") return badRequest("columnId is required");
   if (typeof title !== "string" || title.trim() === "")
@@ -89,6 +105,8 @@ export async function handleCreateTask(request: Request) {
     return badRequest(`priority must be one of: ${PRIORITY_ORDER.join(", ")}`);
   if (!isDueDate(dueDate))
     return badRequest("dueDate must be a YYYY-MM-DD date or null");
+  if (!isLabelIds(labelIds))
+    return badRequest("labelIds must be an array of label ids");
 
   try {
     const task = await createTask(session.user.id, {
@@ -98,6 +116,7 @@ export async function handleCreateTask(request: Request) {
       assigneeId,
       priority,
       dueDate,
+      labelIds,
     });
     return Response.json(task, { status: 201 });
   } catch (error) {
@@ -113,8 +132,16 @@ export async function handleUpdateTask(request: Request, id: number) {
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return badRequest("Invalid JSON body");
 
-  const { title, description, columnId, position, assigneeId, priority, dueDate } =
-    body as Record<string, unknown>;
+  const {
+    title,
+    description,
+    columnId,
+    position,
+    assigneeId,
+    priority,
+    dueDate,
+    labelIds,
+  } = body as Record<string, unknown>;
 
   // Presence, not value. `{"assigneeId": null}` is a request to unassign and
   // must be told apart from a PATCH that never mentions the assignee — and
@@ -142,7 +169,8 @@ export async function handleUpdateTask(request: Request, id: number) {
       description !== undefined ||
       setsAssignee ||
       priority !== undefined ||
-      setsDueDate
+      setsDueDate ||
+      labelIds !== undefined
     ) {
       if (title !== undefined && (typeof title !== "string" || !title.trim()))
         return badRequest("title must be a non-empty string");
@@ -154,6 +182,8 @@ export async function handleUpdateTask(request: Request, id: number) {
         return badRequest(`priority must be one of: ${PRIORITY_ORDER.join(", ")}`);
       if (!isDueDate(dueDate))
         return badRequest("dueDate must be a YYYY-MM-DD date or null");
+      if (!isLabelIds(labelIds))
+        return badRequest("labelIds must be an array of label ids");
 
       const updated = await updateTask(session.user.id, id, {
         title: title as string | undefined,
@@ -171,6 +201,10 @@ export async function handleUpdateTask(request: Request, id: number) {
         // whether the date is written, so a stray undefined key would clear the
         // due date on every title-only edit.
         ...(setsDueDate ? { dueDate: dueDate as string | null } : {}),
+        // No spread, like priority: labelIds is two-valued, so the repository
+        // reads its value rather than its presence and an explicit undefined
+        // means exactly what an absent key would.
+        labelIds: labelIds as number[] | undefined,
       });
       if (!updated) return notFound();
       return Response.json(updated);

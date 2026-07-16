@@ -18,6 +18,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
+import { LabelChip } from "@/features/labels/components/label-chip";
+import type { Label as LabelData } from "@/features/labels/types";
 import { formatDueDate, useToday } from "@/shared/lib/due-date";
 import { PRIORITY_LABELS } from "../types";
 import type { Task, TaskPriority } from "../types";
@@ -26,6 +28,13 @@ interface TaskCardProps {
   task: Task;
   /** Members by user id — the card holds an assignee id, not a name. */
   membersById: Record<string, Member>;
+  /**
+   * Labels by id, for their colour only — the task carries its own names
+   * (LabelRef), because the log needs them. A colour is presentation, so it is
+   * looked up against the vocabulary the picker already holds rather than copied
+   * onto every task that wears the label.
+   */
+  labelsById?: Record<number, LabelData>;
   onEdit?: (task: Task) => void;
   onDelete?: (task: Task) => void;
 }
@@ -88,6 +97,7 @@ function DueDate({ date }: { date: string }) {
 export function TaskCard({
   task,
   membersById,
+  labelsById = {},
   onEdit,
   onDelete,
 }: TaskCardProps) {
@@ -137,6 +147,21 @@ export function TaskCard({
           </CardAction>
         )}
       </CardHeader>
+      {task.labels.length > 0 && (
+        <CardContent className="flex flex-wrap gap-1 px-3">
+          {task.labels.map((label) => (
+            // The name comes from the task, the colour from the vocabulary — and
+            // the lookup is allowed to miss, for the moment between someone
+            // deleting a label and this board refetching. LabelChip falls back to
+            // slate rather than crashing, which keeps the name on screen.
+            <LabelChip
+              key={label.id}
+              name={label.name}
+              color={labelsById[label.id]?.color}
+            />
+          ))}
+        </CardContent>
+      )}
       {(task.description || assignee || task.dueDate) && (
         <CardContent className="flex items-end justify-between gap-2 px-3">
           <p className="line-clamp-3 text-xs text-muted-foreground">

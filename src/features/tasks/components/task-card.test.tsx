@@ -19,6 +19,7 @@ function task(over: Partial<Task> = {}): Task {
     assigneeId: null,
     priority: "none",
     dueDate: null,
+    labels: [],
     createdAt: "2026-07-15T00:00:00.000Z",
     ...over,
   };

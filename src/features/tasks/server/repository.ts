@@ -4,10 +4,15 @@ import { queryOne, withTransaction } from "@/shared/db/client";
 import { logActivity } from "@/features/activity/server/repository";
 import type { Actor, TaskSnapshot } from "@/features/activity/types";
 import {
+  assertLabelsInWorkspace,
+  setTaskLabels,
+} from "@/features/labels/server/repository";
+import {
   AuthzError,
   requireColumnRole,
   requireTaskRole,
 } from "@/features/workspaces/server/authz";
+import { taskColumns, taskSnapshot } from "./task-row";
 import type {
   CreateTaskInput,
   MoveTaskInput,
@@ -15,34 +20,7 @@ import type {
   UpdateTaskInput,
 } from "../types";
 
-/**
- * Every column of a task, optionally qualified by a table alias.
- *
- * A function rather than a constant, and exported rather than private, because
- * the constant it replaces could not serve the queries that join — those need
- * `t.id` where a plain read needs `id`, so each of them hand-copied the list
- * instead, and a hand-copied list drifts. It did: 006 added priority and due_date
- * here and getBoard kept selecting the seven columns it already knew, returning
- * tasks that were missing two fields while still being typed as whole ones.
- *
- * That bug is invisible to the compiler, which is the point of centralizing it.
- * `query<Task>` is a cast, not a check — pg cannot see the SQL, so a SELECT that
- * under-fetches type-checks perfectly and fails only in the browser, as an
- * undefined where a value should be. The one defence is that there be one list.
- *
- * Postgres folds unquoted identifiers to lowercase, so `AS columnId` would
- * arrive as `columnid`. The double quotes are load-bearing.
- *
- * due_date needs no cast or to_char: shared/db/client.ts parses DATE to the raw
- * 'YYYY-MM-DD' string globally, which is what keeps a due date from becoming a
- * JS Date at the one boundary where that silently changes the day.
- */
-export function taskColumns(alias = ""): string {
-  const p = alias ? `${alias}.` : "";
-  return `${p}id, ${p}column_id AS "columnId", ${p}title, ${p}description,
-          ${p}position, ${p}assignee_id AS "assigneeId", ${p}priority,
-          ${p}due_date AS "dueDate", ${p}created_at AS "createdAt"`;
-}
+export { taskColumns };
 
 const TASK_COLUMNS = taskColumns();
 
@@ -57,17 +35,7 @@ function human(userId: string): Actor {
   return { type: "human", id: userId };
 }
 
-function snapshot(task: Task): TaskSnapshot {
-  return {
-    title: task.title,
-    description: task.description,
-    columnId: task.columnId,
-    position: task.position,
-    assigneeId: task.assigneeId,
-    priority: task.priority,
-    dueDate: task.dueDate,
-  };
-}
+const snapshot = taskSnapshot;
 
 /**
  * The comparisons below exist so a write only logs what it actually changed. A
@@ -103,6 +71,25 @@ function samePriority(a: TaskSnapshot, b: TaskSnapshot): boolean {
 
 function sameDueDate(a: TaskSnapshot, b: TaskSnapshot): boolean {
   return a.dueDate === b.dueDate;
+}
+
+/**
+ * A set comparison, not an array one. Both sides come back ordered by id from
+ * taskColumns, so a positional compare would work today — but it would be true
+ * by luck, and the luck runs out the moment someone changes that ORDER BY or
+ * sorts the picker's output. Comparing ids as a set says what is meant: the
+ * question is whether the task wears the same labels, not whether two arrays
+ * happen to agree element by element.
+ *
+ * Names are ignored deliberately. A rename changes every task's `labels`, and
+ * the tasks did not change — the vocabulary did. Comparing names here would log
+ * a task.labeled row per card on every rename, which is the bookkeeping
+ * label.updated exists to avoid.
+ */
+function sameLabels(a: TaskSnapshot, b: TaskSnapshot): boolean {
+  const ids = (s: TaskSnapshot) => (s.labels ?? []).map((l) => l.id).sort();
+  const [x, y] = [ids(a), ids(b)];
+  return x.length === y.length && x.every((id, i) => id === y[i]);
 }
 
 /**
@@ -165,17 +152,20 @@ export async function createTask(
     if (input.assigneeId != null) {
       await assertAssignable(client, workspaceId, input.assigneeId);
     }
+    if (input.labelIds?.length) {
+      await assertLabelsInWorkspace(client, workspaceId, input.labelIds);
+    }
 
     // priority falls back to 'none' rather than being left to the column
     // default, so the INSERT states the value it means. due_date has no such
     // fallback to state: null is the value.
-    const { rows } = await client.query<Task>(
+    const { rows } = await client.query<{ id: number }>(
       `INSERT INTO task (column_id, title, description, position, assignee_id,
                          priority, due_date)
        VALUES ($1, $2, $3,
                (SELECT COALESCE(MAX(position) + 1, 0) FROM task WHERE column_id = $1),
                $4, $5, $6)
-       RETURNING ${TASK_COLUMNS}`,
+       RETURNING id`,
       [
         input.columnId,
         input.title,
@@ -185,7 +175,13 @@ export async function createTask(
         input.dueDate ?? null,
       ]
     );
-    const task = rows[0];
+
+    // The labels have to be linked before the task is read back, because
+    // taskColumns resolves them with a subquery — RETURNING on the INSERT would
+    // report a task with no labels no matter what was asked for, and both the
+    // caller and the log row below would believe it.
+    await setTaskLabels(client, rows[0].id, input.labelIds ?? []);
+    const task = (await selectTask(client, rows[0].id))!;
 
     await logActivity(client, {
       workspaceId,
@@ -196,6 +192,10 @@ export async function createTask(
       // No `before`: the task did not exist. Undo inverts this to a delete.
       after: snapshot(task),
     });
+    // A task created with labels logs task.created only. The labels are part of
+    // what was created, not a change to it — there is no `before` for them to
+    // differ from, and a task.labeled row here would invert to "remove the
+    // labels from a task that no longer exists".
     return task;
   });
 }
@@ -223,6 +223,15 @@ export async function updateTask(
 
     if (setsAssignee && input.assigneeId != null) {
       await assertAssignable(client, workspaceId, input.assigneeId);
+    }
+    if (input.labelIds?.length) {
+      await assertLabelsInWorkspace(client, workspaceId, input.labelIds);
+    }
+    // Before the UPDATE, so `after` reads them back. No supplied-flag: `[]` is
+    // "no labels" and undefined is "not supplied", which is 006's rule holding
+    // for a third field without needing to be re-derived.
+    if (input.labelIds !== undefined) {
+      await setTaskLabels(client, id, input.labelIds);
     }
 
     // Both idioms appear below, and which one a field gets is not a style
@@ -321,6 +330,18 @@ export async function updateTask(
         taskId: id,
         actor: human(userId),
         action: "task.scheduled",
+        before: from,
+        after: to,
+      });
+    }
+
+    if (!sameLabels(from, to)) {
+      await logActivity(client, {
+        workspaceId,
+        boardId,
+        taskId: id,
+        actor: human(userId),
+        action: "task.labeled",
         before: from,
         after: to,
       });

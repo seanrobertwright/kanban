@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ActivityFeed } from "@/features/activity/components/activity-feed";
 import { CommentThread } from "@/features/comments/components/comment-thread";
+import { LabelPicker } from "@/features/labels/components/label-picker";
+import type { Label as LabelData } from "@/features/labels/types";
 import type { Member } from "@/features/workspaces/types";
 import { Button } from "@/shared/ui/button";
 import {
@@ -29,6 +31,8 @@ export interface TaskFormValues {
   priority: TaskPriority;
   /** null clears the date. The input always has a value, so never absent. */
   dueDate: string | null;
+  /** Ids, not refs — the form picks from a vocabulary the server already knows. */
+  labelIds: number[];
 }
 
 /** The <option> value standing in for "nobody", since a DOM value is a string. */
@@ -49,6 +53,8 @@ interface TaskDialogProps {
   columnNames: Record<number, string>;
   /** Everyone assignable here — the picker's options, and the feed's names. */
   members: Member[];
+  /** The workspace's vocabulary — the only labels this task may wear. */
+  labels: LabelData[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: TaskFormValues) => Promise<void> | void;
 }
@@ -58,6 +64,7 @@ export function TaskDialog({
   task,
   columnNames,
   members,
+  labels,
   onOpenChange,
   onSubmit,
 }: TaskDialogProps) {
@@ -66,6 +73,7 @@ export function TaskDialog({
   const [assigneeId, setAssigneeId] = useState<string>(UNASSIGNED);
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
+  const [labelIds, setLabelIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   // Bumped by the thread whenever it writes, which makes the feed refetch. Every
   // comment mutation logs a row, so without this the history sitting directly
@@ -84,6 +92,10 @@ export function TaskDialog({
       setAssigneeId(task?.assigneeId ?? UNASSIGNED);
       setPriority(task?.priority ?? "none");
       setDueDate(task?.dueDate ?? NO_DUE_DATE);
+      // Back to ids: the task carries {id, name} because the log needs the name
+      // (LabelRef), but the form's business is which labels, not what they are
+      // called.
+      setLabelIds(task?.labels.map((l) => l.id) ?? []);
     }
   }, [open, task]);
 
@@ -106,6 +118,9 @@ export function TaskDialog({
         // reports, and the API would read it as a malformed date rather than as
         // the clear it is.
         dueDate: dueDate === NO_DUE_DATE ? null : dueDate,
+        // No conversion, like priority: [] is the empty set all the way down,
+        // which is what keeps this field out of the null-vs-absent problem.
+        labelIds,
       });
     } finally {
       setSaving(false);
@@ -205,6 +220,14 @@ export function TaskDialog({
                 onChange={(e) => setDueDate(e.target.value)}
               />
             </div>
+          </div>
+          <div className="grid gap-2">
+            <Label>Labels</Label>
+            <LabelPicker
+              labels={labels}
+              selected={labelIds}
+              onChange={setLabelIds}
+            />
           </div>
           {/* Only an existing task has a thread or history, and only while the
               dialog is open — mounting either otherwise would fetch on every

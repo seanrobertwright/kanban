@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { Label as LabelData } from "@/features/labels/types";
 import type { Member } from "@/features/workspaces/types";
 import { TaskDialog } from "./task-dialog";
 import type { Task } from "../types";
@@ -14,6 +15,23 @@ vi.mock("@/features/activity/components/activity-feed", () => ({
 vi.mock("@/features/comments/components/comment-thread", () => ({
   CommentThread: () => null,
 }));
+
+const LABELS: LabelData[] = [
+  {
+    id: 1,
+    workspaceId: "ws-1",
+    name: "bug",
+    color: "red",
+    createdAt: "2026-07-15T00:00:00.000Z",
+  },
+  {
+    id: 2,
+    workspaceId: "ws-1",
+    name: "p0",
+    color: "amber",
+    createdAt: "2026-07-15T00:00:00.000Z",
+  },
+];
 
 const MEMBERS: Member[] = [
   {
@@ -44,6 +62,7 @@ function task(over: Partial<Task> = {}): Task {
     assigneeId: null,
     priority: "none",
     dueDate: null,
+    labels: [],
     createdAt: "2026-07-15T00:00:00.000Z",
     ...over,
   };
@@ -57,6 +76,7 @@ function renderDialog(over: { task?: Task } = {}) {
       task={over.task}
       columnNames={{ 1: "To Do" }}
       members={MEMBERS}
+      labels={LABELS}
       onOpenChange={vi.fn()}
       onSubmit={onSubmit}
     />
@@ -238,6 +258,85 @@ describe("TaskDialog due date", () => {
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ dueDate: null })
+      )
+    );
+  });
+});
+
+describe("TaskDialog label picker", () => {
+  const openPicker = async () => {
+    fireEvent.click(screen.getByRole("button", { name: /Add labels|selected/ }));
+    // Base UI does not render popup children while closed, so the menu has to be
+    // opened for real — the same reason board-column.test.tsx does this.
+    return screen.findByRole("menuitemcheckbox", { name: /bug/ });
+  };
+
+  it("offers the workspace's vocabulary and no way to add to it", async () => {
+    // The design, not an omission. A task dialog that can mint a label is how a
+    // controlled set rots back into free text: every hurried edit adds one, and
+    // 007's whole value — that an agent chooses rather than invents — goes with
+    // it. This test is what a well-meaning "just let me type a new one here"
+    // change has to break in order to land.
+    renderDialog({ task: task() });
+    await openPicker();
+
+    expect(screen.getByRole("menuitemcheckbox", { name: /bug/ })).toBeDefined();
+    expect(screen.getByRole("menuitemcheckbox", { name: /p0/ })).toBeDefined();
+    expect(screen.queryByPlaceholderText(/new label/i)).toBeNull();
+  });
+
+  it("shows the task's current labels as checked", async () => {
+    renderDialog({ task: task({ labels: [{ id: 2, name: "p0" }] }) });
+    await openPicker();
+
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: /p0/ })
+    ).toHaveProperty("ariaChecked", "true");
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: /bug/ })
+    ).toHaveProperty("ariaChecked", "false");
+  });
+
+  it("submits ids, not names", async () => {
+    // The task carries {id, name} because the log needs the name; the form's
+    // business is which labels. The API takes ids.
+    const { onSubmit } = renderDialog({ task: task() });
+    fireEvent.click(await openPicker());
+    submit();
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ labelIds: [1] })
+      )
+    );
+  });
+
+  it("submits [] — not null — when the last label is unticked", async () => {
+    // The third field in this suite to be asked what "empty" submits, and the
+    // second to answer with a value rather than null. A set has an empty value,
+    // so nothing here has to be three-valued (006's rule).
+    const { onSubmit } = renderDialog({ task: task({ labels: [{ id: 1, name: "bug" }] }) });
+    fireEvent.click(await openPicker());
+    submit();
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ labelIds: [] })
+      )
+    );
+  });
+
+  it("stays open while several labels are picked", async () => {
+    // A CheckboxItem rather than an Item is what buys this. Picking three labels
+    // through a menu that closes on each tick is three trips.
+    const { onSubmit } = renderDialog({ task: task() });
+    fireEvent.click(await openPicker());
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /p0/ }));
+    submit();
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ labelIds: [1, 2] })
       )
     );
   });

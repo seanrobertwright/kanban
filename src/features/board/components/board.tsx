@@ -14,8 +14,10 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 
-import { Plus } from "lucide-react";
+import { Plus, Tags } from "lucide-react";
 
+import { LabelsDialog } from "@/features/labels/components/labels-dialog";
+import type { Label as LabelData } from "@/features/labels/types";
 import * as tasksApi from "@/features/tasks/client/api";
 import { TaskCard } from "@/features/tasks/components/task-card";
 import {
@@ -49,6 +51,14 @@ interface BoardProps {
   initialTasks: Task[];
   /** Everyone assignable on this board, and the source of every rendered face. */
   members: Member[];
+  /**
+   * The workspace's label vocabulary — the picker's options, and the source of
+   * every chip's colour. Held in state rather than read straight from the prop
+   * because the labels dialog can change it, and the board is what re-renders.
+   */
+  initialLabels: LabelData[];
+  /** The vocabulary's owner — labels are workspace-scoped, not per board (007). */
+  workspaceId: string;
   /** False for viewers. The server enforces this too — this only hides the UI. */
   canEdit: boolean;
   /**
@@ -69,6 +79,8 @@ export function Board({
   columns,
   initialTasks,
   members,
+  initialLabels,
+  workspaceId,
   canEdit,
   canDeleteColumns,
 }: BoardProps) {
@@ -90,6 +102,12 @@ export function Board({
   const membersById = useMemo(
     () => Object.fromEntries(members.map((m) => [m.userId, m])),
     [members]
+  );
+  const [labels, setLabels] = useState<LabelData[]>(initialLabels);
+  const [labelsOpen, setLabelsOpen] = useState(false);
+  const labelsById = useMemo(
+    () => Object.fromEntries(labels.map((l) => [l.id, l])),
+    [labels]
   );
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -307,6 +325,21 @@ export function Board({
           {error}
         </p>
       )}
+      {/* Above the board, not inside a column: the vocabulary belongs to the
+          workspace (007), so hanging it off a column's menu — where the column
+          actions live — would say it belonged to this board. Viewers see it too;
+          reading the vocabulary is not an edit, and the dialog hides its own
+          controls. */}
+      <div className="flex justify-end">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground"
+          onClick={() => setLabelsOpen(true)}
+        >
+          <Tags /> Labels
+        </Button>
+      </div>
       <DndContext
         id="board-dnd"
         // No sensors means nothing can start a drag — the read-only path.
@@ -324,6 +357,7 @@ export function Board({
               column={column}
               tasks={items[column.id] ?? []}
               membersById={membersById}
+              labelsById={labelsById}
               canEdit={canEdit}
               canDelete={canDeleteColumns}
               isFirst={index === 0}
@@ -392,7 +426,11 @@ export function Board({
         </div>
         <DragOverlay>
           {activeTask ? (
-            <TaskCard task={activeTask} membersById={membersById} />
+            <TaskCard
+              task={activeTask}
+              membersById={membersById}
+              labelsById={labelsById}
+            />
           ) : null}
         </DragOverlay>
       </DndContext>
@@ -401,10 +439,26 @@ export function Board({
         task={dialog?.task}
         columnNames={columnNames}
         members={members}
+        labels={labels}
         onOpenChange={(open) => {
           if (!open) setDialog(null);
         }}
         onSubmit={handleDialogSubmit}
+      />
+      <LabelsDialog
+        open={labelsOpen}
+        workspaceId={workspaceId}
+        labels={labels}
+        canEdit={canEdit}
+        canDelete={canDeleteColumns}
+        onOpenChange={setLabelsOpen}
+        onChanged={(next) => {
+          setLabels(next);
+          // The vocabulary changed, so the tasks may have too: deleting a label
+          // unlabels every task wearing it, and a rename changes what their
+          // chips say. Both are server-side facts this board is now stale about.
+          void refresh();
+        }}
       />
     </>
   );

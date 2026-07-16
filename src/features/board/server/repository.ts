@@ -1,6 +1,6 @@
 import { query, queryOne } from "@/shared/db/client";
 import { requireBoardRole } from "@/features/workspaces/server/authz";
-import { taskColumns } from "@/features/tasks/server/repository";
+import { taskColumns } from "@/features/tasks/server/task-row";
 import type { Task } from "@/features/tasks/types";
 import type { Board } from "@/features/workspaces/types";
 import type { BoardData, Column } from "../types";

@@ -1,4 +1,7 @@
+import type { LabelRef } from "@/features/labels/types";
 import type { TaskPriority } from "@/features/tasks/types";
+
+export type { LabelRef };
 
 /**
  * Who performed an action. Agents cannot act until M2, but the type is actor-
@@ -78,7 +81,23 @@ export type TaskAction =
    * Named for the act, not the field, following task.assigned. Covers setting,
    * moving, and clearing a date.
    */
-  | "task.scheduled";
+  | "task.scheduled"
+  /**
+   * Passes 006's test on the same clause priority does, and for the same reason:
+   * M2's criterion #1 has an agent *label* twenty bugs, and the changeset review
+   * accepts or rejects "added p0" as a unit. At M5 it is a trigger outright —
+   * "when a bug is labeled P0, assign to the triage agent" is the PRD's own
+   * example, and it reads this action by name.
+   *
+   * One row per task per change of the set, covering adds and removes together:
+   * `before` and `after` carry the whole label set on either side, so a row says
+   * what the task's labels were and became rather than naming a delta. That
+   * matches every other task action — `action` says what the entry is *about*,
+   * the snapshots say what the task looked like — and it means undo restores a
+   * set rather than replaying a sequence of adds and removes that could
+   * interleave with someone else's.
+   */
+  | "task.labeled";
 
 /**
  * Comments are logged like any other mutation (M1's criterion is that *every*
@@ -109,7 +128,28 @@ export type ColumnAction =
   | "column.moved"
   | "column.deleted";
 
-export type ActivityAction = TaskAction | CommentAction | ColumnAction;
+/**
+ * The vocabulary itself changing, as distinct from a task's use of it — the same
+ * split ColumnAction draws, and these rows behave the same way: a null `taskId`,
+ * because the subject is the label, and a null `boardId` too, because a label is
+ * workspace-scoped and belongs to no board (007). Nothing renders them yet; they
+ * are written because the M1 criterion is that *every* mutation writes a row,
+ * and because a workspace feed built later cannot be backfilled onto an
+ * append-only table (003).
+ *
+ * Renaming a label is deliberately not a task mutation, though it changes what
+ * every card says. The tasks did not change — the vocabulary did — and logging
+ * five hundred task.labeled rows for one rename would bury the actual event
+ * under bookkeeping, which is the reasoning task.moved already applies to the
+ * siblings it shifts.
+ */
+export type LabelAction = "label.created" | "label.updated" | "label.deleted";
+
+export type ActivityAction =
+  | TaskAction
+  | CommentAction
+  | ColumnAction
+  | LabelAction;
 
 /** What a task looked like at one instant. */
 export interface TaskSnapshot {
@@ -143,6 +183,34 @@ export interface TaskSnapshot {
    * it would be frozen into JSONB as a UTC instant and be wrong forever.
    */
   dueDate?: string | null;
+  /**
+   * The task's whole label set at this instant — not a delta.
+   *
+   * Optional for 003's reason (pre-007 rows have no key) and, like priority,
+   * never null: a task with no labels has `[]`. That is the same fact that makes
+   * `labelIds` two-valued on update, one layer down — a set has an empty value,
+   * so nothing here needs to mean "cleared" separately from "empty".
+   *
+   * Carries names, where `assigneeId` carries only an id, and the two rules
+   * genuinely point opposite ways here. A user row outlives their membership, so
+   * the feed can resolve a name for someone who has left. A label row does not
+   * outlive its deletion — task_label CASCADEs and the vocabulary entry is gone —
+   * so an id alone would make the record of a labelling unreadable the moment
+   * someone tidies up the label list. This is ColumnSnapshot.title's reasoning
+   * exactly, reached again one migration later. See LabelRef.
+   */
+  labels?: LabelRef[];
+}
+
+/**
+ * What a label looked like at one instant. Carries its own id for the reason
+ * CommentSnapshot and ColumnSnapshot do — the row's task_id is null here, so
+ * nothing else identifies the subject.
+ */
+export interface LabelSnapshot {
+  labelId: number;
+  name: string;
+  color: string;
 }
 
 /**
@@ -183,7 +251,11 @@ export interface ColumnSnapshot {
   position: number;
 }
 
-export type Snapshot = TaskSnapshot | CommentSnapshot | ColumnSnapshot;
+export type Snapshot =
+  | TaskSnapshot
+  | CommentSnapshot
+  | ColumnSnapshot
+  | LabelSnapshot;
 
 interface ActivityBase {
   id: string;
@@ -224,7 +296,17 @@ export interface ColumnActivity extends ActivityBase {
   after: ColumnSnapshot | null;
 }
 
-export type Activity = TaskActivity | CommentActivity | ColumnActivity;
+export interface LabelActivity extends ActivityBase {
+  action: LabelAction;
+  before: LabelSnapshot | null;
+  after: LabelSnapshot | null;
+}
+
+export type Activity =
+  | TaskActivity
+  | CommentActivity
+  | ColumnActivity
+  | LabelActivity;
 
 /**
  * An activity joined to the human who caused it, for rendering.

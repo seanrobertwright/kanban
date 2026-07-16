@@ -45,6 +45,7 @@ function snapshot(over: Partial<TaskSnapshot> = {}): TaskSnapshot {
     // `undefined` and say so.
     priority: "none",
     dueDate: null,
+    labels: [],
     ...over,
   };
 }
@@ -400,6 +401,74 @@ describe("ActivityFeed", () => {
         }),
       ]);
       expect(screen.getByText(/cleared the due date/)).toBeDefined();
+    });
+  });
+
+  describe("labels", () => {
+    const bug = { id: 1, name: "bug" };
+    const p0 = { id: 2, name: "p0" };
+
+    it("names what was added, not what the labels now are", async () => {
+      // The snapshot is a whole set on either side, but "added bug" is the
+      // event. "labels are now bug, p0, regression" makes the reader diff two
+      // lists in their head to find out what happened.
+      await renderFeed([
+        entry({
+          action: "task.labeled",
+          before: snapshot({ labels: [] }),
+          after: snapshot({ labels: [bug] }),
+        }),
+      ]);
+      expect(screen.getByText(/added "bug"/)).toBeDefined();
+    });
+
+    it("names what was removed", async () => {
+      await renderFeed([
+        entry({
+          action: "task.labeled",
+          before: snapshot({ labels: [bug, p0] }),
+          after: snapshot({ labels: [p0] }),
+        }),
+      ]);
+      expect(screen.getByText(/removed "bug"/)).toBeDefined();
+    });
+
+    it("says both when one replaces another", async () => {
+      await renderFeed([
+        entry({
+          action: "task.labeled",
+          before: snapshot({ labels: [bug] }),
+          after: snapshot({ labels: [p0] }),
+        }),
+      ]);
+      expect(screen.getByText(/added "p0" and removed "bug"/)).toBeDefined();
+    });
+
+    it("names a label the vocabulary no longer contains", async () => {
+      // The reason TaskSnapshot.labels carries names rather than ids, and the
+      // entry most likely to be read: the label row is gone, task_label CASCADEd,
+      // and nothing outside this row remembers what it was called.
+      await renderFeed([
+        entry({
+          action: "task.labeled",
+          before: snapshot({ labels: [{ id: 99, name: "deleted-label" }] }),
+          after: snapshot({ labels: [] }),
+        }),
+      ]);
+      expect(screen.getByText(/removed "deleted-label"/)).toBeDefined();
+    });
+
+    it("reads a row written before labels existed without inventing any", async () => {
+      // Pre-007 rows have no labels key. undefined must read as "none", never
+      // crash on .map — 003's rule, third time.
+      await renderFeed([
+        entry({
+          action: "task.labeled",
+          before: snapshot({ labels: undefined }),
+          after: snapshot({ labels: [bug] }),
+        }),
+      ]);
+      expect(screen.getByText(/added "bug"/)).toBeDefined();
     });
   });
 
