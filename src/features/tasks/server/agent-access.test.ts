@@ -174,6 +174,20 @@ describe("agent access", () => {
       expect(entry.actorType).toBe("agent");
       expect(entry.actorName).toBe("Triage Bot");
     });
+
+    it("reads a task's history itself, not only writes to it", async () => {
+      // §7.1's access path runs both ways: an agent that can write the log but
+      // not read it back is blind to what it and everyone else did on a task it
+      // works. listActivityForTask takes a Principal for exactly this.
+      const task = await createTask(alice, { columnId: todoId, title: "Shared" });
+      await updateTask(agent.principal, task.id, { priority: "high" });
+
+      const actions = (await listActivityForTask(agent.principal, task.id)).map(
+        (e) => e.action
+      );
+      expect(actions).toContain("task.prioritized");
+      expect(actions).toContain("task.created");
+    });
   });
 
   describe("is bound by the same RBAC a human is", () => {

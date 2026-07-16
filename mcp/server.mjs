@@ -90,6 +90,13 @@ tool(
 );
 
 tool(
+  "task_history",
+  "Read a task's activity log — every change to it, newest first, with who did it. Read this before acting on a task someone else may have touched, to see what has already happened.",
+  { id: z.number().int() },
+  ({ id }) => api("GET", `/api/tasks/${id}/activity`)
+);
+
+tool(
   "create_task",
   "Create a task in a column (get columnId from list_board). Only title and columnId are required.",
   {

@@ -12,6 +12,7 @@ task's history under the agent's own name.
 |---|---|
 | `list_board` | Columns + top-level tasks (each with a `subtaskCount`). Source of column ids. |
 | `get_task` | One task by id. |
+| `task_history` | A task's activity log — every change, newest first, with who made it. |
 | `create_task` | New task in a column. |
 | `update_task` | Edit a task's fields (only what you pass changes). |
 | `move_task` | Move a task to a column/position — how status changes. |

@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 
 import { query } from "@/shared/db/client";
+import type { Principal } from "@/features/auth/server/principal";
 import { requireTaskRole } from "@/features/workspaces/server/authz";
 import type {
   Activity,
@@ -98,21 +99,29 @@ const ACTIVITY_COLUMNS = `al.id, al.workspace_id AS "workspaceId",
 /**
  * A task's history, newest first.
  *
- * Readable by any workspace member — a viewer who can see the task can see what
- * happened to it. Two LEFT JOINs resolve the actor's display name, one per actor
- * kind, gated on actor_type so each row matches at most one: a human row resolves
- * through "user", an agent row through "agent" (009) — which is what makes the
- * feed read "Triage Bot moved this" rather than attributing it to whoever minted
- * the token. Both tolerate absence: actor_id carries no foreign key, so a deleted
- * user's or a deleted agent's actions survive them as a null name, which the UI
- * renders rather than dropping the row — losing an audit entry because its author
- * left would defeat the purpose.
+ * Readable by any workspace principal — a viewer who can see the task can see
+ * what happened to it, and that includes an agent (009): §7.1's whole point is
+ * that an agent is subject to the same access path a human is, and reading a
+ * task's history is part of that path. requireTaskRole already takes a Principal
+ * and scopes an agent to its own workspace, so an agent reads the history of the
+ * tasks it may act on and no others — the reason this widened from a bare userId.
+ * An agent that writes to the log (claim, comment) but cannot read it back is
+ * blind to what it and everyone else did on a task it is working.
+ *
+ * Two LEFT JOINs resolve the actor's display name, one per actor kind, gated on
+ * actor_type so each row matches at most one: a human row resolves through
+ * "user", an agent row through "agent" (009) — which is what makes the feed read
+ * "Triage Bot moved this" rather than attributing it to whoever minted the token.
+ * Both tolerate absence: actor_id carries no foreign key, so a deleted user's or
+ * a deleted agent's actions survive them as a null name, which the UI renders
+ * rather than dropping the row — losing an audit entry because its author left
+ * would defeat the purpose.
  */
 export async function listActivityForTask(
-  userId: string,
+  principal: string | Principal,
   taskId: number
 ): Promise<ActivityEntry[]> {
-  await requireTaskRole(userId, taskId, "viewer");
+  await requireTaskRole(principal, taskId, "viewer");
   return query<ActivityEntry>(
     `SELECT ${ACTIVITY_COLUMNS},
             COALESCE(u.name, ag.name) AS "actorName",
