@@ -64,6 +64,10 @@ export default async function Home({
   ]);
   const workspace = workspaces.find((w) => w.id === data.board.workspaceId)!;
   const canEdit = workspace.role !== "viewer";
+  // Only deleting a column needs the extra rank — §7.4's blast-radius rule,
+  // applied to people rather than to agent tools.
+  const canDeleteColumns =
+    workspace.role === "admin" || workspace.role === "owner";
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6">
@@ -86,12 +90,18 @@ export default async function Home({
           <UserMenu user={session.user} />
         </div>
       </header>
+      {/* Keyed by board id: the Board holds columns and tasks in state, and
+          switching boards re-renders this page at the same position — without a
+          key, React would keep the previous board's state and show its columns
+          under the new board's name. */}
       <Board
+        key={data.board.id}
         boardId={data.board.id}
         columns={data.columns}
         initialTasks={data.tasks}
         members={members}
         canEdit={canEdit}
+        canDeleteColumns={canDeleteColumns}
       />
     </main>
   );

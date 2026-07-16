@@ -7,6 +7,8 @@ import type {
   ActivityAction,
   ActivityEntry,
   Actor,
+  ColumnAction,
+  ColumnSnapshot,
   CommentAction,
   CommentSnapshot,
   TaskAction,
@@ -36,6 +38,11 @@ export type ActivityInput =
       action: CommentAction;
       before?: CommentSnapshot | null;
       after?: CommentSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: ColumnAction;
+      before?: ColumnSnapshot | null;
+      after?: ColumnSnapshot | null;
     });
 
 /**

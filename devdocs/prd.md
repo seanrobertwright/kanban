@@ -310,7 +310,7 @@ Chosen from Core Work Items **for agent-readiness**, not for coverage. Ordered s
 - ✅ **`activity_log`** (append-only, actor-typed) — audit + undo substrate + the "activity history" criterion.
 - ✅ **Assignees** — the slot an agent will later occupy.
 - ✅ **Comments** — the agent's reporting channel.
-- **User-editable statuses/columns** — agents move tasks *between* states; those states must be user-defined.
+- ✅ **User-editable statuses/columns** — agents move tasks *between* states; those states must be user-defined.
 - **Priority, labels, due dates** — the fields an agent reasons over when triaging.
 - **Subtasks** — an agent decomposing work needs somewhere to put the pieces.
 
@@ -363,6 +363,20 @@ Deferred from this area: checklists, recurring, custom fields, templates, bulk e
 - **The body renders as text and never as markup**, with a test that a later "render markdown" change has to break in order to land. From M2 an agent writes here, and its output is not to be trusted with HTML.
 
 **Deliberately not built:** no threading, no reactions, no @-mentions, no markdown. §8 draws comments flat, and the wedge needs a reporting channel rather than a discussion forum. Mentions are the interesting one — they are how a human would summon an agent — but that is M5's trigger question, not M1's.
+
+**Columns design, as built** (§6.2's 1/limited score closed):
+
+- **No migration.** `board_column` already had id, board_id, title and position — the columns were never *unable* to change, only unexposed. The work was entirely a repository, an API, and a header menu.
+- **Gated by blast radius, not by one rank.** Creating, renaming and reordering take `member`; deleting takes `admin`. This is §7.4's rule for agent tools — "gating is per-tool, defaulted by blast radius" — applied to people, and it is the honest reading of both facts at once: needing an admin to add a "Blocked" column is friction on an ordinary action, while deleting one can destroy work.
+- **Deleting a populated column is refused with 409, and the refusal is load-bearing rather than tidy.** `task.column_id` is `ON DELETE CASCADE`, so the raw DELETE takes every task in the column with it — silently, and without one `activity_log` row to say where they went. That CASCADE is right for what it is actually for (deleting a workspace must take its boards, columns and tasks down) and wrong as the answer to a button. So the button never reaches it. A test deletes a column by raw SQL to prove the CASCADE is real, so the guard's rationale cannot quietly rot.
+- **409, not 403** — an admin is *allowed* to attempt this; the refusal is an invariant, not a permission. The same distinction `members.ts` draws for the last owner.
+- **`FOR UPDATE` is what makes that check an invariant rather than a suggestion.** Without it: count zero, another request inserts a task, delete, and the CASCADE eats a task nobody deleted. The lock closes the window because inserting a task takes a `FOR KEY SHARE` lock on the column row it references — so a concurrent `createTask` blocks, then fails on the foreign key, which is the honest outcome. A test drives both transactions and asserts the block; with the lock removed it reports `inserted`, so the race is demonstrably real and demonstrably closed.
+- **The last column may be deleted.** Unlike the last owner, an empty board is not an unreachable state — you add a column back. Refusing would be ceremony, not an invariant.
+- **Column entries carry a null `task_id`, so nothing renders them yet.** M1 shows per-task history only, and a column has no task to hang under. They are written anyway, because the criterion is that *every* mutation writes a row and because M2's undo replays them — and this is precisely the case 003 recorded `board_id` for, so a board-level feed can be built later without a backfill that would be impossible by then. The task feed's phrasing was deliberately *not* extended to column actions: they cannot reach it, and a board feed will want its own wording.
+- **`ColumnSnapshot` carries the title.** The feed resolves column names by id against the board — which, for a deleted column, no longer has one. Without the title on the row, the record of a deletion could never name what was deleted.
+- **Reordering is buttons, not dragging.** The board's `DndContext` is tuned for cards, and threading a second horizontal sortable through it would put M0's working drag-and-drop at risk for a much rarer action. Menu items are also keyboard-reachable, which a drag is not. Revisit if column dragging is ever asked for.
+- **Deleting is the one column mutation that is not optimistic.** The 409 is an expected answer, not an edge case; removing the column on click and restoring it a moment later would make the ordinary path look like a glitch and flash its tasks out of existence on the way. It waits, then shows the server's sentence, which already counts the tasks in the way.
+- **`page.tsx` now keys `<Board>` by board id.** Columns became client state, and switching boards re-renders the page at the same position — without the key React would keep the previous board's state and render its columns under the new board's name. The same latent hazard existed for `items`; the key closes both.
 
 ---
 

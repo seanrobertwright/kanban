@@ -49,7 +49,25 @@ export type CommentAction =
   | "comment.updated"
   | "comment.deleted";
 
-export type ActivityAction = TaskAction | CommentAction;
+/**
+ * Columns are the states an agent moves tasks between (PRD §9), so who changed
+ * the workflow is audit-relevant in its own right — at M5 these same columns
+ * become automation triggers.
+ *
+ * These rows carry a null `taskId`: the subject is the column, and the board is
+ * what locates it. Nothing renders them yet, since M1 shows per-task history
+ * only — which is exactly the case 003 recorded `board_id` for, and the reason a
+ * board-level feed can be built later without a backfill that is impossible by
+ * then. Written now because the criterion is that *every* mutation writes a row,
+ * and because M2's undo replays them.
+ */
+export type ColumnAction =
+  | "column.created"
+  | "column.updated"
+  | "column.moved"
+  | "column.deleted";
+
+export type ActivityAction = TaskAction | CommentAction | ColumnAction;
 
 /** What a task looked like at one instant. */
 export interface TaskSnapshot {
@@ -90,7 +108,22 @@ export interface CommentSnapshot {
   author: Actor;
 }
 
-export type Snapshot = TaskSnapshot | CommentSnapshot;
+/**
+ * What a column looked like at one instant.
+ *
+ * Carries its own id for the reason CommentSnapshot does — the row's task_id
+ * cannot identify it, and here it is null outright. `title` is what makes a
+ * deleted column's entries still readable: the feed resolves column names by id
+ * against a board that no longer has the column, so without the title recorded
+ * here, the record of a deletion could never name what was deleted.
+ */
+export interface ColumnSnapshot {
+  columnId: number;
+  title: string;
+  position: number;
+}
+
+export type Snapshot = TaskSnapshot | CommentSnapshot | ColumnSnapshot;
 
 interface ActivityBase {
   id: string;
@@ -125,7 +158,13 @@ export interface CommentActivity extends ActivityBase {
   after: CommentSnapshot | null;
 }
 
-export type Activity = TaskActivity | CommentActivity;
+export interface ColumnActivity extends ActivityBase {
+  action: ColumnAction;
+  before: ColumnSnapshot | null;
+  after: ColumnSnapshot | null;
+}
+
+export type Activity = TaskActivity | CommentActivity | ColumnActivity;
 
 /**
  * An activity joined to the human who caused it, for rendering.

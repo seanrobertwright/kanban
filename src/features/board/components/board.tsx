@@ -14,6 +14,8 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 
+import { Plus } from "lucide-react";
+
 import * as tasksApi from "@/features/tasks/client/api";
 import { TaskCard } from "@/features/tasks/components/task-card";
 import {
@@ -22,6 +24,9 @@ import {
 } from "@/features/tasks/components/task-dialog";
 import type { Task } from "@/features/tasks/types";
 import type { Member } from "@/features/workspaces/types";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import * as boardApi from "../client/api";
 import { fetchBoard } from "../client/api";
 import type { Column } from "../types";
 import { BoardColumn } from "./board-column";
@@ -46,6 +51,12 @@ interface BoardProps {
   members: Member[];
   /** False for viewers. The server enforces this too — this only hides the UI. */
   canEdit: boolean;
+  /**
+   * Admin and up. Only deletion needs the extra rank: creating and renaming are
+   * cheap and reversible, deleting can destroy work (§7.4's blast-radius rule,
+   * applied to people). The server enforces both — these only hide the UI.
+   */
+  canDeleteColumns: boolean;
 }
 
 interface DialogState {
@@ -59,13 +70,22 @@ export function Board({
   initialTasks,
   members,
   canEdit,
+  canDeleteColumns,
 }: BoardProps) {
+  // Columns are state now rather than a prop read straight through: they stopped
+  // being seed data at M1 and the board edits them in place. page.tsx keys this
+  // component by board id, so switching boards remounts rather than leaving this
+  // state describing the board you just left.
+  const [cols, setCols] = useState<Column[]>(columns);
   const [items, setItems] = useState<ItemsByColumn>(() =>
     groupTasks(columns, initialTasks)
   );
+  const [error, setError] = useState<string | null>(null);
+  const [addingColumn, setAddingColumn] = useState(false);
+  const [newColumnTitle, setNewColumnTitle] = useState("");
   const columnNames = useMemo(
-    () => Object.fromEntries(columns.map((c) => [c.id, c.title])),
-    [columns]
+    () => Object.fromEntries(cols.map((c) => [c.id, c.title])),
+    [cols]
   );
   const membersById = useMemo(
     () => Object.fromEntries(members.map((m) => [m.userId, m])),
@@ -83,6 +103,7 @@ export function Board({
   const refresh = useCallback(async () => {
     try {
       const data = await fetchBoard(boardId);
+      setCols(data.columns);
       setItems(groupTasks(data.columns, data.tasks));
     } catch {
       // Keep optimistic state if the server is unreachable.
@@ -215,8 +236,77 @@ export function Board({
     tasksApi.deleteTask(task.id).catch(refresh);
   }
 
+  async function handleAddColumn() {
+    const title = newColumnTitle.trim();
+    if (!title) return;
+    try {
+      const created = await boardApi.createColumn(boardId, title);
+      setCols((prev) => [...prev, created]);
+      setItems((prev) => ({ ...prev, [created.id]: [] }));
+      setNewColumnTitle("");
+      setAddingColumn(false);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add the column");
+    }
+  }
+
+  function handleRenameColumn(column: Column, title: string) {
+    setCols((prev) =>
+      prev.map((c) => (c.id === column.id ? { ...c, title } : c))
+    );
+    boardApi.renameColumn(column.id, title).catch((e) => {
+      setError(e instanceof Error ? e.message : "Could not rename the column");
+      refresh();
+    });
+  }
+
+  function handleMoveColumn(column: Column, by: -1 | 1) {
+    const from = cols.findIndex((c) => c.id === column.id);
+    const to = from + by;
+    if (from === -1 || to < 0 || to >= cols.length) return;
+    setCols((prev) => arrayMove(prev, from, to));
+    boardApi.moveColumn(column.id, to).catch((e) => {
+      setError(e instanceof Error ? e.message : "Could not move the column");
+      refresh();
+    });
+  }
+
+  /**
+   * The one column mutation that is NOT optimistic, and deliberately.
+   *
+   * The server refuses to delete a column that still holds tasks — that 409 is
+   * the expected answer, not an edge case. Removing the column on click and
+   * putting it back a moment later would make the ordinary path look like a
+   * glitch, and would flash the tasks out of existence on their way. So this
+   * waits, and on refusal shows the server's sentence, which already says how
+   * many tasks are in the way.
+   */
+  async function handleDeleteColumn(column: Column) {
+    try {
+      await boardApi.deleteColumn(column.id);
+      setCols((prev) => prev.filter((c) => c.id !== column.id));
+      setItems((prev) => {
+        const next = { ...prev };
+        delete next[column.id];
+        return next;
+      });
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete the column");
+    }
+  }
+
   return (
     <>
+      {error && (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/50 px-3 py-2 text-sm text-destructive"
+        >
+          {error}
+        </p>
+      )}
       <DndContext
         id="board-dnd"
         // No sensors means nothing can start a drag — the read-only path.
@@ -228,20 +318,77 @@ export function Board({
         onDragCancel={() => setActiveTask(null)}
       >
         <div className="flex items-start gap-4 overflow-x-auto pb-4">
-          {columns.map((column) => (
+          {cols.map((column, index) => (
             <BoardColumn
               key={column.id}
               column={column}
               tasks={items[column.id] ?? []}
               membersById={membersById}
               canEdit={canEdit}
+              canDelete={canDeleteColumns}
+              isFirst={index === 0}
+              isLast={index === cols.length - 1}
               onAddTask={() => setDialog({ columnId: column.id })}
               onEditTask={(task) =>
                 setDialog({ columnId: task.columnId, task })
               }
               onDeleteTask={handleDelete}
+              onRename={(title) => handleRenameColumn(column, title)}
+              onMove={(by) => handleMoveColumn(column, by)}
+              onDelete={() => handleDeleteColumn(column)}
             />
           ))}
+          {canEdit && (
+            <div className="w-72 shrink-0">
+              {addingColumn ? (
+                <div className="grid gap-1.5 rounded-xl border bg-muted/50 p-2">
+                  <Input
+                    value={newColumnTitle}
+                    autoFocus
+                    aria-label="New column title"
+                    placeholder="Column name"
+                    className="h-8"
+                    onChange={(e) => setNewColumnTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void handleAddColumn();
+                      if (e.key === "Escape") {
+                        setNewColumnTitle("");
+                        setAddingColumn(false);
+                      }
+                    }}
+                  />
+                  <div className="flex gap-1.5">
+                    <Button
+                      size="sm"
+                      disabled={!newColumnTitle.trim()}
+                      onClick={handleAddColumn}
+                    >
+                      Add
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setNewColumnTitle("");
+                        setAddingColumn(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start text-muted-foreground"
+                  onClick={() => setAddingColumn(true)}
+                >
+                  <Plus /> Add column
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         <DragOverlay>
           {activeTask ? (
