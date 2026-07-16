@@ -131,6 +131,20 @@ tool(
 );
 
 tool(
+  "claim_task",
+  "Claim a task before working it — an exclusive hold that stops another agent grabbing the same one. Take it when you start; a task already claimed by someone else is refused. Claiming your own hold again is fine.",
+  { id: z.number().int() },
+  ({ id }) => api("POST", `/api/tasks/${id}/claim`)
+);
+
+tool(
+  "release_task",
+  "Release your claim on a task — do this when you stop working it or after you close it, so it is free again. Releasing a task you do not hold is a no-op.",
+  { id: z.number().int() },
+  ({ id }) => api("DELETE", `/api/tasks/${id}/claim`)
+);
+
+tool(
   "comment_on_task",
   "Add a comment to a task — the agent's channel for reporting what it did or asking a question. Posts under the agent's name.",
   { id: z.number().int(), body: z.string().min(1) },

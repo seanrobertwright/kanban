@@ -44,6 +44,8 @@ export function taskColumns(alias = ""): string {
   return `${p}id, ${p}column_id AS "columnId", ${p}title, ${p}description,
           ${p}position, ${p}assignee_id AS "assigneeId", ${p}priority,
           ${p}due_date AS "dueDate", ${p}parent_id AS "parentId",
+          ${claimedByObject(p)} AS "claimedBy",
+          ${p}claimed_at AS "claimedAt",
           ${p}created_at AS "createdAt",
           ${labelsSubquery(self)} AS labels,
           ${subtaskCountSubquery(self)} AS "subtaskCount"`;
@@ -74,6 +76,26 @@ export function taskColumns(alias = ""): string {
  */
 function subtaskCountSubquery(taskRef: string): string {
   return `(SELECT COUNT(*)::int FROM task s WHERE s.parent_id = ${taskRef})`;
+}
+
+/**
+ * The claim holder as a json {type, id} object, or NULL when the task is free.
+ *
+ * Assembled in SQL rather than returned as two flat columns for the reader to
+ * reassemble, which is the shape labelsSubquery already established: taskColumns
+ * casts its result straight to Task, so the object that lands must already be
+ * Task-shaped. claimed_by and claimed_by_type move together (010's CHECK), so
+ * one NULL means both are — the CASE keys on claimed_by and trusts the invariant.
+ *
+ * json_build_object renders the actor_type enum as its text label ('human' /
+ * 'agent'), which is exactly Actor.type. No alias qualification trap here as in
+ * labelsSubquery: these are the outer row's own columns, so the caller's prefix
+ * (`t.` or none) is all they need.
+ */
+function claimedByObject(p: string): string {
+  return `CASE WHEN ${p}claimed_by IS NULL THEN NULL
+               ELSE json_build_object('type', ${p}claimed_by_type,
+                                      'id', ${p}claimed_by) END`;
 }
 
 /**
@@ -142,6 +164,11 @@ export function taskSnapshot(task: Task): TaskSnapshot {
     // one thing snapshots are for: undo recreating a deleted piece under the
     // parent it was a piece of. See TaskSnapshot.parentId.
     parentId: task.parentId,
+    // The claim holder, so undo of a delete restores the hold and undo of a
+    // release re-claims for whoever held it. claimedAt is not carried — undo
+    // re-stamps now() and the exact instant means nothing to a later reader. See
+    // TaskSnapshot.claimedBy.
+    claimedBy: task.claimedBy,
     // No subtaskCount: a count of other rows is not state this task holds, and
     // restoring the parent restores the pieces that make it true.
   };

@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 
 import { query, queryOne, withTransaction } from "@/shared/db/client";
-import { unassignFromWorkspace } from "@/features/tasks/server/repository";
+import {
+  releaseClaimsOf,
+  unassignFromWorkspace,
+} from "@/features/tasks/server/repository";
 import { AuthzError, requireWorkspaceRole, ROLE_RANK } from "./authz";
 import type { Invitation, Member, WorkspaceRole } from "../types";
 
@@ -210,10 +213,13 @@ export async function removeMember(
   // whoever removed them, which is the truth: an admin removing a member is the
   // actor behind every card that comes free.
   return withTransaction(async (client) => {
-    await unassignFromWorkspace(client, workspaceId, userId, {
-      type: "human",
-      id: actorId,
-    });
+    const actor = { type: "human" as const, id: actorId };
+    await unassignFromWorkspace(client, workspaceId, userId, actor);
+    // Their assignments AND their claims — a claim is state, not history (010),
+    // so a hold left behind blocks the task for everyone until an admin breaks
+    // it. Same transaction, same actor: whoever removed the member is behind
+    // every card that comes free and every hold that drops.
+    await releaseClaimsOf(client, workspaceId, userId, actor);
 
     const { rows } = await client.query(
       `DELETE FROM workspace_member

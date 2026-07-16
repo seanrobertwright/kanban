@@ -14,6 +14,7 @@ import {
 } from "@/features/labels/server/repository";
 import {
   AuthzError,
+  ROLE_RANK,
   requireColumnRole,
   requireTaskRole,
 } from "@/features/workspaces/server/authz";
@@ -551,6 +552,217 @@ export async function moveTask(
     }
     return after;
   });
+}
+
+/**
+ * Two actors are the same principal when their kind and id both match. A human
+ * and an agent can never collide — the ids come from different spaces — but the
+ * type is compared anyway, because a claim's identity is (type, id) and half of
+ * it is not identity.
+ */
+function sameActor(a: Actor, b: Actor): boolean {
+  return a.type === b.type && a.id === b.id;
+}
+
+/**
+ * Locks a task row for the duration of the caller's transaction and reads it
+ * back, or undefined if it is gone. FOR UPDATE is what makes claim and release
+ * check-then-act atomic: two actors racing to claim the same free task serialize
+ * here — the second blocks until the first commits, then reads the row the first
+ * claimed and is refused. This is 007's column-delete guard, one table over and
+ * for a different column.
+ *
+ * The lock and the read are two statements rather than one `SELECT … FOR UPDATE`
+ * because taskColumns carries correlated subqueries (labels, subtaskCount), and
+ * FOR UPDATE on a select that aggregates in the target list is a footgun not
+ * worth walking up to. The lock is a bare primary-key select; the snapshot reads
+ * the whole row on the connection that now holds the lock.
+ */
+async function lockTask(
+  client: PoolClient,
+  id: number
+): Promise<Task | undefined> {
+  const locked = await client.query("SELECT id FROM task WHERE id = $1 FOR UPDATE", [
+    id,
+  ]);
+  if (locked.rowCount === 0) return undefined;
+  return selectTask(client, id);
+}
+
+/**
+ * Takes the exclusive working claim on a task (010, PRD §4.3) — the hold that
+ * keeps a second agent off a task a first is already working. Acceptance
+ * criterion #4 in one function: two agents cannot claim the same task.
+ *
+ * "member", not "viewer": a claim asserts "I am going to work this", and working
+ * a task is a board mutation. 004's line holds — a viewer can be *assigned* a
+ * task (whose work it is) but cannot claim one (declaring active work on it),
+ * the same split moveTask draws. It is also §7.4's auto tier, so the rank is the
+ * floor a board mutation already asks, not more.
+ *
+ * Idempotent for the holder, and that is not a nicety but a correctness
+ * requirement of the door it serves: an external agent (009) that retries after
+ * a dropped MCP connection must not be told the task it already holds is taken.
+ * Re-claiming your own hold returns the task and writes nothing — a no-op is not
+ * a mutation, the rule the whole updateTask no-op machinery rests on.
+ *
+ * "conflict" for a claim held by another, not "forbidden": the caller has the
+ * rank and is allowed to attempt this; the task's state refuses it. That is the
+ * 409-vs-403 line members.ts and columns.ts already draw — an invariant blocking
+ * an allowed action, not a rank the caller lacks.
+ */
+export async function claimTask(
+  actor: string | Principal,
+  id: number
+): Promise<Task | undefined> {
+  const by = principalActor(asPrincipal(actor));
+  const { boardId, workspaceId } = await requireTaskRole(actor, id, "member");
+
+  return withTransaction(async (client) => {
+    const before = await lockTask(client, id);
+    if (!before) return undefined;
+
+    if (before.claimedBy) {
+      if (sameActor(before.claimedBy, by)) return before;
+      throw new AuthzError("conflict", "This task is already claimed");
+    }
+
+    await client.query(
+      `UPDATE task
+          SET claimed_by = $2, claimed_by_type = $3, claimed_at = now()
+        WHERE id = $1`,
+      [id, by.id, by.type]
+    );
+    const after = (await selectTask(client, id))!;
+
+    await logActivity(client, {
+      workspaceId,
+      boardId,
+      taskId: id,
+      actor: by,
+      action: "task.claimed",
+      before: snapshot(before),
+      after: snapshot(after),
+    });
+    return after;
+  });
+}
+
+/**
+ * Drops a claim (010). The holder releases their own; an admin may release
+ * anyone's, and that escape hatch is not optional — it is the answer to the
+ * failure mode claiming introduces. An external agent that crashes mid-run
+ * leaves a hold nothing will ever drop, and without a way to break it that task
+ * is locked forever. So the rule is the one "an admin may delete any comment"
+ * drew (005): the ordinary member acts on what is theirs, and an admin has a
+ * moderator's reach over what is stuck.
+ *
+ * "forbidden", not "conflict", when a member reaches for another's claim: this
+ * one *is* a rank the caller lacks — breaking someone else's hold requires
+ * admin, and a member simply is not one. Contrast claimTask's conflict, where
+ * the caller had the rank and the state refused them. The difference is exactly
+ * authz.ts's: forbidden is "you lack the rank", conflict is "the state says no".
+ *
+ * Releasing an unclaimed task is a no-op, not an error — it returns the task and
+ * logs nothing. An agent closing out a task it never formally claimed should not
+ * fail on the release; there is simply nothing to release.
+ */
+export async function releaseTask(
+  actor: string | Principal,
+  id: number
+): Promise<Task | undefined> {
+  const by = principalActor(asPrincipal(actor));
+  const { boardId, workspaceId, role } = await requireTaskRole(actor, id, "member");
+
+  return withTransaction(async (client) => {
+    const before = await lockTask(client, id);
+    if (!before) return undefined;
+    if (!before.claimedBy) return before;
+
+    if (!sameActor(before.claimedBy, by) && ROLE_RANK[role] < ROLE_RANK.admin) {
+      throw new AuthzError(
+        "forbidden",
+        "Only an admin can release a claim held by someone else"
+      );
+    }
+
+    await client.query(
+      `UPDATE task
+          SET claimed_by = NULL, claimed_by_type = NULL, claimed_at = NULL
+        WHERE id = $1`,
+      [id]
+    );
+    const after = (await selectTask(client, id))!;
+
+    await logActivity(client, {
+      workspaceId,
+      boardId,
+      taskId: id,
+      actor: by,
+      action: "task.released",
+      before: snapshot(before),
+      after: snapshot(after),
+    });
+    return after;
+  });
+}
+
+/**
+ * Releases every claim a departing human holds across a workspace, logging each.
+ *
+ * The exact companion to unassignFromWorkspace, and it exists for the identical
+ * reason: claimTask keeps a non-member from *taking* a claim, but says nothing
+ * about the claims a member already holds — and membership is revocable. A claim
+ * is current state, not history (010), so a hold by someone who has left is
+ * stale and blocks the task for everyone else until an admin breaks it by hand.
+ * An invariant enforced on the way in and abandoned on the way out is not one.
+ *
+ * Only claimed_by_type = 'human': a departing user's holds, not an agent's. An
+ * agent belongs to one workspace and is only deleted by that workspace's
+ * deletion, which CASCADEs the tasks away — so there is never a stale agent claim
+ * to sweep, and typing the filter says so rather than leaving it to chance.
+ *
+ * Takes the caller's transaction client, like unassignFromWorkspace and for its
+ * reason: these releases must commit with the membership deletion that caused
+ * them. One log row per task, never one summarizing the batch — a reader of a
+ * task's history is the only audience for why its claim vanished.
+ */
+export async function releaseClaimsOf(
+  client: PoolClient,
+  workspaceId: string,
+  userId: string,
+  actor: Actor
+): Promise<number> {
+  const { rows } = await client.query<Task & { boardId: number }>(
+    `SELECT ${taskColumns("t")}, bc.board_id AS "boardId"
+       FROM task t
+       JOIN board_column bc ON bc.id = t.column_id
+       JOIN board b ON b.id = bc.board_id
+      WHERE b.workspace_id = $1
+        AND t.claimed_by = $2 AND t.claimed_by_type = 'human'`,
+    [workspaceId, userId]
+  );
+  if (rows.length === 0) return 0;
+
+  await client.query(
+    `UPDATE task
+        SET claimed_by = NULL, claimed_by_type = NULL, claimed_at = NULL
+      WHERE id = ANY($1::int[])`,
+    [rows.map((t) => t.id)]
+  );
+
+  for (const task of rows) {
+    await logActivity(client, {
+      workspaceId,
+      boardId: task.boardId,
+      taskId: task.id,
+      actor,
+      action: "task.released",
+      before: snapshot(task),
+      after: { ...snapshot(task), claimedBy: null },
+    });
+  }
+  return rows.length;
 }
 
 /**

@@ -83,6 +83,30 @@ export type TaskAction =
    */
   | "task.scheduled"
   /**
+   * The exclusive working hold an actor takes on a task and later drops (010,
+   * PRD §4.3). Two actions rather than one task.updated, and 006's test decides
+   * it outright: an action exists when its inverse is something someone would
+   * want to apply on its own, and the inverse of a claim IS a release — the two
+   * are each other's undo, so they cannot be folded into a single event whose
+   * before/after diff a reader has to read to tell which happened.
+   *
+   * They are also §7.4's auto-tier in the flesh: claiming is listed there among
+   * the "cheap, internally reversible, externally silent" actions that execute
+   * with no interrupt and an undo window. A claim touches nothing outside the
+   * board and is reversed by a release, which is exactly the property that tier
+   * requires — so these are the first two actions built already knowing which
+   * approval tier they will sit in at M2's gate.
+   *
+   * task.claimed carries before (claimedBy null) and after (claimedBy the actor);
+   * task.released the reverse. The actor and the holder usually coincide, but not
+   * always: an admin may release a claim someone else left stuck (a crashed
+   * agent), and then the row's actor_id and before.claimedBy differ — which is
+   * why the holder is recorded in the snapshot and not inferred from the actor,
+   * the same reasoning CommentSnapshot.author reached for comment.deleted.
+   */
+  | "task.claimed"
+  | "task.released"
+  /**
    * Passes 006's test on the same clause priority does, and for the same reason:
    * M2's criterion #1 has an agent *label* twenty bugs, and the changeset review
    * accepts or rejects "added p0" as a unit. At M5 it is a trigger outright —
@@ -224,6 +248,27 @@ export interface TaskSnapshot {
    * restores the count without anyone recording it. See Task.subtaskCount.
    */
   parentId?: number | null;
+  /**
+   * Who holds the exclusive working claim (010), or null if the task is free.
+   *
+   * Optional for 003's reason, one milestone on again: rows written before 010
+   * have no such key, and no backfill can invent one. Three-valued like
+   * assigneeId — `undefined` means "written before claiming existed", `null`
+   * means "was unclaimed", an Actor means "was held by that principal".
+   *
+   * An Actor (type + id), not a bare id, where assigneeId carries only an id:
+   * a claim's holder is polymorphic — a human or an agent (010) — so the id
+   * alone would not say which table it points at, and a reader resolving a name
+   * would not know where to look. This is CommentSnapshot.author's shape and its
+   * reasoning: the holder is an actor, so it is recorded actor-shaped.
+   *
+   * No claimed_at beside it. A claim's timestamp is not state undo must restore —
+   * re-claiming on undo takes a fresh now(), and the exact prior instant carries
+   * no meaning a later reader depends on. What undo needs is *who* held it, which
+   * is this. The same subtaskCount/createdAt cut: on the snapshot only what the
+   * inverse mutation has to replay.
+   */
+  claimedBy?: Actor | null;
 }
 
 /**

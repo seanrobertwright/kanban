@@ -22,6 +22,8 @@ function task(over: Partial<Task> = {}): Task {
     labels: [],
     parentId: null,
     subtaskCount: 0,
+    claimedBy: null,
+    claimedAt: null,
     createdAt: "2026-07-15T00:00:00.000Z",
     ...over,
   };
@@ -48,6 +50,21 @@ describe("TaskCard priority", () => {
     // would cost the space and say nothing.
     render(card({ priority: "none" }));
     expect(screen.queryByRole("img", { name: /Priority/ })).toBeNull();
+  });
+});
+
+describe("TaskCard claim", () => {
+  it("shows an agent's hold in words, not only an icon", () => {
+    // A claimed card is one an agent is actively working — the wedge on a card.
+    // The lock is decorative; the sentence is the content, for a reader who
+    // cannot see it.
+    render(card({ claimedBy: { type: "agent", id: "a1" } }));
+    expect(screen.getByText("An agent is working on this")).toBeDefined();
+  });
+
+  it("says nothing about a claim on a free task", () => {
+    render(card({ claimedBy: null }));
+    expect(screen.queryByText(/working on this/)).toBeNull();
   });
 });
 

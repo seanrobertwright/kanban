@@ -1,6 +1,6 @@
 "use client";
 
-import { ListTree, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ListTree, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
 import type { Member } from "@/features/workspaces/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
@@ -170,7 +170,8 @@ export function TaskCard({
       {(task.description ||
         assignee ||
         task.dueDate ||
-        task.subtaskCount > 0) && (
+        task.subtaskCount > 0 ||
+        task.claimedBy) && (
         <CardContent className="flex items-end justify-between gap-2 px-3">
           <p className="line-clamp-3 text-xs text-muted-foreground">
             {task.description}
@@ -179,6 +180,31 @@ export function TaskCard({
               it has, when it is due, and whose it is — kept together on the
               trailing edge so a column of cards lines them up. */}
           <div className="flex shrink-0 items-center gap-2">
+            {/* A held task is one someone — often an agent — is actively working,
+                which is the wedge made visible on a card. The lock is the sign;
+                the word carries it for anyone who cannot see the icon. The
+                holder's name is not resolved here: only humans are in a
+                client-side roster today, so an agent's hold reads generically
+                until an agent list lands with the rest of M2. */}
+            {task.claimedBy && (
+              <span
+                title={
+                  task.claimedBy.type === "agent"
+                    ? "An agent is working on this"
+                    : "Being worked on"
+                }
+              >
+                <Lock
+                  className="size-3.5 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="sr-only">
+                  {task.claimedBy.type === "agent"
+                    ? "An agent is working on this"
+                    : "Being worked on"}
+                </span>
+              </span>
+            )}
             {/* The count only, never a "2 of 5 done": completion would need a
                 second query per card (how many pieces sit in a done column, and
                 which columns are "done" is user-defined and unknowable here).

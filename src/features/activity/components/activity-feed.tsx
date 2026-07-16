@@ -141,6 +141,23 @@ function describe(
       if (removed.length) return `removed ${names(removed)}`;
       return "changed the labels";
     }
+    case "task.claimed":
+      // Who took it is the actor, named in bold beside this line already, so the
+      // phrasing does not repeat it. "started working" rather than "claimed" reads
+      // as the event it stands for — a claim is the working hold, not paperwork.
+      return "started working on this";
+    case "task.released": {
+      const held = entry.before?.claimedBy;
+      // Actor and holder usually coincide — someone dropping their own hold — and
+      // then it is simply "stopped working". They diverge in the one case worth
+      // its own phrasing: an admin breaking a hold a crashed agent left stuck,
+      // which is why the holder is recorded in the snapshot (see task.claimed).
+      if (!held) return "released this";
+      if (held.type === entry.actorType && held.id === entry.actorId)
+        return "stopped working on this";
+      if (held.type === "agent") return "released an agent's claim";
+      return `released ${person(held.id)}'s claim`;
+    }
     // The comment itself is not repeated here. It is rendered in full a few
     // inches away in the thread, and the log's job is to say a thing happened,
     // not to become a second copy of it that can drift from the first.

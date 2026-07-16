@@ -15,6 +15,8 @@ task's history under the agent's own name.
 | `create_task` | New task in a column. |
 | `update_task` | Edit a task's fields (only what you pass changes). |
 | `move_task` | Move a task to a column/position — how status changes. |
+| `claim_task` | Take an exclusive hold before working a task; refused if another agent holds it. |
+| `release_task` | Drop your hold when you stop or finish. |
 | `comment_on_task` | Post a comment under the agent's name. |
 | `create_subtask` | Decompose a task into a piece (a whole task with its own status). |
 
@@ -60,5 +62,9 @@ task's history under the agent's own name.
 
 - The token's only copy is the create-agent output; the database stores just its
   hash. Lose it and mint a new agent.
+- **Claiming** prevents two agents working the same task: `claim_task` takes an
+  exclusive hold, and a second agent's claim on a held task is refused. Claim
+  when you start, release when you finish. A workspace admin can break a hold a
+  crashed agent left stuck (from the board, once that UI lands).
 - Deleting or archiving is deliberately **not** exposed — this cut is read + add +
-  edit. Approval tiers, claiming, and native (hosted) agents are later M2 work.
+  edit + claim. Approval tiers and native (hosted) agents are later M2 work.

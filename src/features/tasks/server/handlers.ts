@@ -4,11 +4,13 @@ import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import { PRIORITY_ORDER, isTaskPriority } from "../types";
 import type { TaskPriority } from "../types";
 import {
+  claimTask,
   createTask,
   deleteTask,
   getTask,
   listSubtasks,
   moveTask,
+  releaseTask,
   updateTask,
 } from "./repository";
 
@@ -268,6 +270,46 @@ export async function handleUpdateTask(request: Request, id: number) {
     }
 
     const task = await getTask(principal, id);
+    return task ? Response.json(task) : notFound();
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/**
+ * Take the exclusive working claim on a task — PRD §4.3's hold, exposed to the
+ * MCP door's claim_task tool. No body: the claimer is the request's principal,
+ * the task is the id, and that is the whole input. A claim already held by
+ * someone else surfaces as the repository's 409 through authzErrorResponse, which
+ * is what an agent reads to know the task is taken.
+ */
+export async function handleClaimTask(request: Request, id: number) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  if (!Number.isInteger(id)) return badRequest("Invalid task id");
+
+  try {
+    const task = await claimTask(principal, id);
+    return task ? Response.json(task) : notFound();
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/**
+ * Drop a claim — the inverse of handleClaimTask, and DELETE on the same claim
+ * sub-resource. The holder releases their own; an admin may release another's,
+ * and a member reaching for someone else's hold gets the repository's 403. A
+ * release of an unclaimed task is a no-op that still returns the task, so an
+ * agent closing out work it never formally claimed does not fail here.
+ */
+export async function handleReleaseTask(request: Request, id: number) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  if (!Number.isInteger(id)) return badRequest("Invalid task id");
+
+  try {
+    const task = await releaseTask(principal, id);
     return task ? Response.json(task) : notFound();
   } catch (error) {
     return authzErrorResponse(error);

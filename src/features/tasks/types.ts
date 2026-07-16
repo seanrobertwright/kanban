@@ -1,3 +1,4 @@
+import type { Actor } from "@/features/activity/types";
 import type { LabelRef } from "@/features/labels/types";
 
 /**
@@ -114,6 +115,28 @@ export interface Task {
    * the picker holds anyway.
    */
   labels: LabelRef[];
+  /**
+   * Who holds the exclusive working claim (010), or null if the task is free.
+   *
+   * An Actor (type + id), not a bare id like assigneeId, because a claim's
+   * holder is polymorphic — a human or an agent — and the type is what says
+   * which. This is the wedge made visible: a card can show that an *agent* is
+   * actively working a task, the peer to an assignee that §4.3 calls for.
+   *
+   * Resolved server-side from claimed_by + claimed_by_type into one object, so a
+   * reader never has to reassemble it — see taskColumns. Name and avatar are
+   * still resolved by the reader (assigneeId's rule), though only humans are in
+   * a client-side list today; an agent renders as a generic "claimed" mark until
+   * an agent roster lands with the rest of M2.
+   */
+  claimedBy: Actor | null;
+  /**
+   * When the current claim was taken, ISO-8601, or null if unclaimed. Present on
+   * the task but absent from TaskSnapshot: it lets a reader (or an agent) see how
+   * long a hold has sat — a stale-lock signal — but undo has no use for the exact
+   * instant, so a snapshot does not carry it. See TaskSnapshot.claimedBy.
+   */
+  claimedAt: string | null;
   createdAt: string;
 }
 

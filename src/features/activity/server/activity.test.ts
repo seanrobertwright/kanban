@@ -147,7 +147,8 @@ describe("activity log", () => {
       // snapshot gains a field, which is the point. Every field a task has must
       // be in here or undo silently restores an incomplete task — assigneeId
       // arrived at 004 exactly this way, priority and dueDate at 006, labels at
-      // 007, and parentId at 008. Four for four; the comment has earned its keep.
+      // 007, parentId at 008, and claimedBy at 010. Five for five; the comment
+      // has earned its keep.
       const label = await createLabel(alice, workspaceId, { name: "recoverable" });
       const task = await createTask(alice, {
         columnId: todoId,
@@ -180,6 +181,10 @@ describe("activity log", () => {
         // a snapshot missing this field would put the piece back on the board as
         // a card that was never there. See TaskSnapshot.parentId (008).
         parentId: null,
+        // Null, because this task was never claimed — but present, because undo
+        // of a delete restores the hold, and a snapshot missing this field would
+        // bring a claimed task back free. See TaskSnapshot.claimedBy (010).
+        claimedBy: null,
       });
     });
 
