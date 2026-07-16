@@ -72,6 +72,12 @@ interface BoardProps {
 interface DialogState {
   columnId: number;
   task?: Task;
+  /**
+   * The parent, when the dialog is showing one of its subtasks. Set only while
+   * navigated into a piece — it powers the "back" affordance and is why a piece
+   * can be reached at all, since none of them are on the board (008).
+   */
+  parent?: Task;
 }
 
 export function Board({
@@ -437,13 +443,43 @@ export function Board({
       <TaskDialog
         open={dialog !== null}
         task={dialog?.task}
+        parentTask={dialog?.parent}
         columnNames={columnNames}
+        columns={cols}
         members={members}
         labels={labels}
         onOpenChange={(open) => {
           if (!open) setDialog(null);
         }}
         onSubmit={handleDialogSubmit}
+        // Opening a piece keeps the dialog open and swaps the task inside it,
+        // stashing the current one as the parent to return to. Depth is 1, so the
+        // task being opened is always top-level — there is no deeper stack.
+        onOpenSubtask={(sub) =>
+          setDialog((prev) => ({
+            columnId: sub.columnId,
+            task: sub,
+            parent: prev?.task,
+          }))
+        }
+        onBack={() =>
+          setDialog((prev) =>
+            prev?.parent
+              ? { columnId: prev.parent.columnId, task: prev.parent }
+              : prev
+          )
+        }
+        // A piece's status is a move, committed when made. A large position
+        // appends it to the destination column's pieces; the server clamps. On
+        // failure the board refetches, which also reconciles the parent's count.
+        onMoveSubtask={(id, columnId) =>
+          tasksApi
+            .moveTask(id, { columnId, position: Number.MAX_SAFE_INTEGER })
+            .catch(refresh)
+        }
+        // Adding or removing a piece changes the parent's count, which the card
+        // renders — so the board is stale and refetches.
+        onSubtasksChanged={refresh}
       />
       <LabelsDialog
         open={labelsOpen}

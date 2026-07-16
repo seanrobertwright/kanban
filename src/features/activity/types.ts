@@ -200,6 +200,30 @@ export interface TaskSnapshot {
    * exactly, reached again one migration later. See LabelRef.
    */
   labels?: LabelRef[];
+  /**
+   * The task this one decomposes, or null if top-level.
+   *
+   * Optional for 003's reason, one more milestone on: rows written before 008
+   * have no such key, and no backfill can invent one. Three-valued like
+   * assigneeId and dueDate — `undefined` means "written before subtasks existed",
+   * `null` means "was top-level" — but for a different reason than either. Those
+   * two could not be backfilled because the answer was unknowable; this one
+   * cannot because 008's DEFAULT NULL is only *usually* the truth. Every pre-008
+   * task is top-level, so the column's backfill is honest in the way 006's
+   * 'none' was — yet a snapshot is what the task looked like at an instant, and
+   * at that instant it had no parent to look like. The distinction survives.
+   *
+   * Recorded even though it never changes, and that is exactly why it is here:
+   * `undo` of task.deleted recreates the task from `before`, and a piece restored
+   * without its parent is restored to the board as a card that was never there.
+   * The one field a snapshot needs least for *diffing* is the one it needs most
+   * for replay.
+   *
+   * No subtaskCount beside it. That is derived from other rows rather than state
+   * this task holds, and undoing a parent's deletion restores its pieces, which
+   * restores the count without anyone recording it. See Task.subtaskCount.
+   */
+  parentId?: number | null;
 }
 
 /**

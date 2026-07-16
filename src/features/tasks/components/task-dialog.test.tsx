@@ -7,13 +7,16 @@ import type { Member } from "@/features/workspaces/types";
 import { TaskDialog } from "./task-dialog";
 import type { Task } from "../types";
 
-// The dialog mounts both of these for an existing task, and each would
-// otherwise fetch. They are covered by their own suites.
+// The dialog mounts these for an existing task, and each would otherwise fetch.
+// They are covered by their own suites.
 vi.mock("@/features/activity/components/activity-feed", () => ({
   ActivityFeed: () => null,
 }));
 vi.mock("@/features/comments/components/comment-thread", () => ({
   CommentThread: () => null,
+}));
+vi.mock("./subtask-list", () => ({
+  SubtaskList: () => null,
 }));
 
 const LABELS: LabelData[] = [
@@ -63,6 +66,8 @@ function task(over: Partial<Task> = {}): Task {
     priority: "none",
     dueDate: null,
     labels: [],
+    parentId: null,
+    subtaskCount: 0,
     createdAt: "2026-07-15T00:00:00.000Z",
     ...over,
   };
@@ -339,5 +344,93 @@ describe("TaskDialog label picker", () => {
         expect.objectContaining({ labelIds: [1, 2] })
       )
     );
+  });
+});
+
+/**
+ * A subtask is edited by this same dialog — "a subtask is a whole task" is the
+ * whole design — with two differences from a top-level task, and both are here.
+ * It gains a Status control, because a piece is never on the board and so cannot
+ * be dragged between columns; and it gains a way back to the parent it decomposes,
+ * because that parent is the only place it was reached from.
+ */
+describe("TaskDialog subtask", () => {
+  const COLUMNS = [
+    { id: 1, title: "To Do" },
+    { id: 2, title: "Doing" },
+    { id: 3, title: "Done" },
+  ];
+
+  function renderSubtaskDialog(
+    over: Partial<React.ComponentProps<typeof TaskDialog>> = {}
+  ) {
+    const onMoveSubtask = vi.fn();
+    const onBack = vi.fn();
+    render(
+      <TaskDialog
+        open
+        task={task({ id: 11, parentId: 5, columnId: 2 })}
+        parentTask={task({ id: 5, title: "build auth" })}
+        columnNames={{ 1: "To Do", 2: "Doing", 3: "Done" }}
+        columns={COLUMNS}
+        members={MEMBERS}
+        labels={LABELS}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        onMoveSubtask={onMoveSubtask}
+        onBack={onBack}
+        {...over}
+      />
+    );
+    return { onMoveSubtask, onBack };
+  }
+
+  it("offers a Status control set to the piece's current column", () => {
+    // The one field a piece has that a top-level task edits by dragging. A piece
+    // cannot be dragged — it is not on the board — so this is where its status
+    // lives.
+    renderSubtaskDialog();
+    const status = screen.getByLabelText("Status") as HTMLSelectElement;
+    expect([...status.options].map((o) => o.text)).toEqual([
+      "To Do",
+      "Doing",
+      "Done",
+    ]);
+    expect(status.value).toBe("2");
+  });
+
+  it("moves the piece the moment its status changes, not on save", () => {
+    // A move is its own mutation, committed when made — exactly as dragging a
+    // card commits one on drop. Waiting for "Save changes" would make status the
+    // odd field out; firing here makes it the same event a drag is.
+    const { onMoveSubtask } = renderSubtaskDialog();
+    fireEvent.change(screen.getByLabelText("Status"), {
+      target: { value: "3" },
+    });
+    expect(onMoveSubtask).toHaveBeenCalledWith(11, 3);
+  });
+
+  it("offers a way back to the parent it decomposes", () => {
+    const { onBack } = renderSubtaskDialog();
+    fireEvent.click(screen.getByRole("button", { name: /build auth/ }));
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  it("gives a top-level task no Status control", () => {
+    // The control is a subtask's alone. A top-level task moves by drag on the
+    // board, so a Status select here would be a second, redundant way to do it.
+    render(
+      <TaskDialog
+        open
+        task={task()}
+        columnNames={{ 1: "To Do" }}
+        columns={COLUMNS}
+        members={MEMBERS}
+        labels={LABELS}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    );
+    expect(screen.queryByLabelText("Status")).toBeNull();
   });
 });

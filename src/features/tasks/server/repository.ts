@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg";
 
-import { queryOne, withTransaction } from "@/shared/db/client";
+import { query, queryOne, withTransaction } from "@/shared/db/client";
 import { logActivity } from "@/features/activity/server/repository";
 import type { Actor, TaskSnapshot } from "@/features/activity/types";
 import {
@@ -128,12 +128,100 @@ async function assertAssignable(
   }
 }
 
+/**
+ * Enforces the two rules 008 states but cannot express — that a subtask sits on
+ * its parent's board, and that a subtask has no subtasks of its own.
+ *
+ * The authz check is requireTaskRole rather than a hand-written lookup, and that
+ * is what makes the 404-vs-403 split come out right without restating it. A
+ * parent in another workspace is "not_found" — the id space must not become an
+ * oracle. A parent on another board of a workspace the caller *does* belong to is
+ * "forbidden", which leaks nothing they cannot already see. That is exactly
+ * moveTask's pair of checks, one level out, and for the same reason: an authz
+ * check proves the caller may touch each side, never that the two sides belong
+ * together.
+ *
+ * "member", not "viewer": creating a subtask is a board mutation, so the rank is
+ * the one createTask already demanded of the column. A viewer being handed a
+ * piece is 004's rule and a different question — that is assignment, not
+ * authorship.
+ *
+ * The depth check needs no lock, and the absence is the interesting part. 007's
+ * column guard had to take FOR UPDATE because it counted rows and a count changes
+ * underneath you. This reads parent_id, which 008's trigger makes immutable — so
+ * the answer is permanent the instant it is read, and there is no window to
+ * close. The invariant is held by the value not moving rather than by us holding
+ * it still.
+ *
+ * "conflict", not "forbidden": the caller is allowed to attempt this, and the
+ * refusal is an invariant rather than a permission. The same distinction
+ * members.ts draws for the last owner and columns.ts for a populated column.
+ */
+async function assertDecomposable(
+  client: PoolClient,
+  userId: string,
+  parentId: number,
+  boardId: number
+): Promise<void> {
+  const parent = await requireTaskRole(userId, parentId, "member");
+  if (parent.boardId !== boardId) {
+    throw new AuthzError(
+      "forbidden",
+      "A subtask must be on the same board as its task"
+    );
+  }
+
+  const { rows } = await client.query<{ parentId: number | null }>(
+    `SELECT parent_id AS "parentId" FROM task WHERE id = $1`,
+    [parentId]
+  );
+  // rows[0] exists: requireTaskRole just resolved this task through three joins.
+  if (rows[0].parentId !== null) {
+    throw new AuthzError(
+      "conflict",
+      "A subtask cannot have subtasks of its own"
+    );
+  }
+}
+
 export async function getTask(
   userId: string,
   id: number
 ): Promise<Task | undefined> {
   await requireTaskRole(userId, id, "viewer");
   return queryOne<Task>(`SELECT ${TASK_COLUMNS} FROM task WHERE id = $1`, [id]);
+}
+
+/**
+ * A task's subtasks, grouped by status in the board's own column order.
+ *
+ * "viewer", matching getTask: reading a task's pieces is reading the task.
+ *
+ * Ordered by the column's position rather than the subtask's alone, because a
+ * piece's position is scoped to (column_id, parent_id) — so three pieces spread
+ * across three columns are each at position 0, and ordering by position alone
+ * would interleave them arbitrarily. Sorting by the column first groups the
+ * pieces by status in the same left-to-right order the board shows, which is the
+ * order the reader already has in their head. `bc.id` breaks ties for the same
+ * reason getBoard's column read does.
+ *
+ * Fetched per dialog rather than ridden along on getBoard, which is the shape
+ * comments already established. The board renders a count; the pieces are a
+ * second board's worth of rows that nobody is looking at until they open one.
+ */
+export async function listSubtasks(
+  userId: string,
+  taskId: number
+): Promise<Task[]> {
+  await requireTaskRole(userId, taskId, "viewer");
+  return query<Task>(
+    `SELECT ${taskColumns("t")}
+       FROM task t
+       JOIN board_column bc ON bc.id = t.column_id
+      WHERE t.parent_id = $1
+      ORDER BY bc.position, bc.id, t.position`,
+    [taskId]
+  );
 }
 
 export async function createTask(
@@ -149,6 +237,10 @@ export async function createTask(
   // Now a transaction: the insert and its log entry must land together, or a
   // crash between them leaves a task nobody can prove the creation of.
   return withTransaction(async (client) => {
+    const parentId = input.parentId ?? null;
+    if (parentId !== null) {
+      await assertDecomposable(client, userId, parentId, boardId);
+    }
     if (input.assigneeId != null) {
       await assertAssignable(client, workspaceId, input.assigneeId);
     }
@@ -159,12 +251,25 @@ export async function createTask(
     // priority falls back to 'none' rather than being left to the column
     // default, so the INSERT states the value it means. due_date has no such
     // fallback to state: null is the value.
+    //
+    // The position subquery is scoped to (column_id, parent_id), which is what
+    // 008 generalized position to mean — the order among the tasks this one
+    // renders beside. Without the parent clause a subtask would take the next
+    // position in the *column*, leaving a hole the board renders as a gap and
+    // the drag maths reads as a card that is not there.
+    //
+    // IS NOT DISTINCT FROM, not `=`: parent_id is NULL for every top-level task,
+    // and `NULL = NULL` is NULL, so `=` would match no rows and hand every
+    // top-level task position 0. That is the ordinary path, so it would be a bug
+    // in every board rather than only in subtasks — which is why the operator is
+    // worth naming rather than pattern-matching from the query above it.
     const { rows } = await client.query<{ id: number }>(
       `INSERT INTO task (column_id, title, description, position, assignee_id,
-                         priority, due_date)
+                         priority, due_date, parent_id)
        VALUES ($1, $2, $3,
-               (SELECT COALESCE(MAX(position) + 1, 0) FROM task WHERE column_id = $1),
-               $4, $5, $6)
+               (SELECT COALESCE(MAX(position) + 1, 0) FROM task
+                 WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $7),
+               $4, $5, $6, $7)
        RETURNING id`,
       [
         input.columnId,
@@ -173,6 +278,7 @@ export async function createTask(
         input.assigneeId ?? null,
         input.priority ?? "none",
         input.dueDate ?? null,
+        parentId,
       ]
     );
 
@@ -196,6 +302,14 @@ export async function createTask(
     // what was created, not a change to it — there is no `before` for them to
     // differ from, and a task.labeled row here would invert to "remove the
     // labels from a task that no longer exists".
+    //
+    // Creating a subtask logs task.created too, with no new action beside it, and
+    // 006's rule is what says so without a fresh argument: an action exists when
+    // its inverse is something someone would want to apply on its own. The
+    // inverse of "created a piece of this" is "delete that piece" — which is
+    // task.deleted, already here. `after.parentId` is what makes the row say it
+    // was a piece, which is all a reader or an undo needs. A `task.decomposed`
+    // would be task.created spelled twice.
     return task;
   });
 }
@@ -373,26 +487,42 @@ export async function moveTask(
     const before = await selectTask(client, id);
     if (!before) return undefined;
 
-    // Close the gap the task leaves behind in its source column.
+    // Every position query below is scoped to the moving task's siblings — the
+    // rows sharing its column AND its parent (008). The parent is not read from
+    // the input because it cannot be changed: a task is born a piece of something
+    // or is never one, so a move is always within one sibling set, and this value
+    // is the same before and after.
+    //
+    // Unscoped, these three queries shuffle every row in the column, including
+    // the subtasks the board cannot see — and the drag silently does the wrong
+    // thing. See 008 for the worked case; it is a two-card column and it fails.
+    const { parentId } = before;
+
+    // Close the gap the task leaves behind among its siblings.
     await client.query(
-      "UPDATE task SET position = position - 1 WHERE column_id = $1 AND position > $2",
-      [before.columnId, before.position]
+      `UPDATE task SET position = position - 1
+        WHERE column_id = $1 AND position > $2
+          AND parent_id IS NOT DISTINCT FROM $3`,
+      [before.columnId, before.position, parentId]
     );
 
-    // Clamp the target position to the end of the destination column.
+    // Clamp the target position to the end of the destination sibling set.
     // COUNT(*) is bigint, which pg returns as a *string* — ::int keeps the
     // Math.min below doing arithmetic rather than string comparison.
     const { rows } = await client.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM task WHERE column_id = $1 AND id <> $2`,
-      [input.columnId, id]
+      `SELECT COUNT(*)::int AS count FROM task
+        WHERE column_id = $1 AND id <> $2
+          AND parent_id IS NOT DISTINCT FROM $3`,
+      [input.columnId, id, parentId]
     );
     const position = Math.max(0, Math.min(input.position, rows[0].count));
 
     // Make room at the target position.
     await client.query(
       `UPDATE task SET position = position + 1
-        WHERE column_id = $1 AND position >= $2 AND id <> $3`,
-      [input.columnId, position, id]
+        WHERE column_id = $1 AND position >= $2 AND id <> $3
+          AND parent_id IS NOT DISTINCT FROM $4`,
+      [input.columnId, position, id, parentId]
     );
 
     await client.query(
@@ -481,6 +611,27 @@ export async function unassignFromWorkspace(
   return rows.length;
 }
 
+/**
+ * Deleting a task deletes its subtasks, and the two decisions that shape this are
+ * 007's — reached the same way and landing opposite ways.
+ *
+ * **It is allowed, where deleting a populated column is refused with a 409.** The
+ * difference is what the CASCADE destroys, which is the line 007 already drew
+ * between board_column and task_label. A column is a workflow state, and the
+ * tasks in it are other people's work that merely happens to be there — so the
+ * button that would take them is refused. A subtask is not incidentally under its
+ * parent; it *is* part of it. Deleting "build auth" and being told to hand-delete
+ * its three pieces first would be ceremony, which is the same call 007 made for
+ * the last column.
+ *
+ * **But it cannot just DELETE and let the CASCADE run**, which is precisely what
+ * 007's guard exists to prevent one table over: the pieces would vanish without a
+ * single activity_log row to say where they went. So each is logged first.
+ * unassignFromWorkspace's rule, for the third time — one row per task, never one
+ * summarizing the batch, because a reader of a task's history is the only
+ * audience for why it disappeared, and undo needs to recreate each piece rather
+ * than a count of them.
+ */
 export async function deleteTask(userId: string, id: number): Promise<boolean> {
   const { boardId, workspaceId } = await requireTaskRole(userId, id, "member");
 
@@ -488,11 +639,41 @@ export async function deleteTask(userId: string, id: number): Promise<boolean> {
     const before = await selectTask(client, id);
     if (!before) return false;
 
+    // Read before the DELETE, because after it the CASCADE has taken them and
+    // there is nothing left to snapshot. Depth is 1, so this needs no recursion:
+    // a piece has no pieces, and 008's trigger is what keeps that true.
+    const { rows: subtasks } = await client.query<Task>(
+      `SELECT ${TASK_COLUMNS} FROM task WHERE parent_id = $1`,
+      [id]
+    );
+
     await client.query("DELETE FROM task WHERE id = $1", [id]);
     await client.query(
-      "UPDATE task SET position = position - 1 WHERE column_id = $1 AND position > $2",
-      [before.columnId, before.position]
+      `UPDATE task SET position = position - 1
+        WHERE column_id = $1 AND position > $2
+          AND parent_id IS NOT DISTINCT FROM $3`,
+      [before.columnId, before.position, before.parentId]
     );
+
+    // The pieces first, the parent last — so that read newest-first, which is the
+    // only order the log is read in, the parent's deletion comes before the
+    // pieces'. Undo replays inverses in that order and needs the parent to exist
+    // before it can recreate anything under it. A piece restored to a parent that
+    // is not back yet is a foreign key violation at best.
+    //
+    // No position fix-up for the pieces: they are gone, and their siblings under
+    // this parent are gone with them. The only rows whose positions moved are the
+    // parent's own siblings, closed above.
+    for (const subtask of subtasks) {
+      await logActivity(client, {
+        workspaceId,
+        boardId,
+        taskId: subtask.id,
+        actor: human(userId),
+        action: "task.deleted",
+        before: snapshot(subtask),
+      });
+    }
 
     // Logged after the DELETE, and it survives it: activity_log.task_id carries
     // no foreign key precisely so the record of a deletion outlives its subject.

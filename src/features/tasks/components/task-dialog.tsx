@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft } from "lucide-react";
 
 import { ActivityFeed } from "@/features/activity/components/activity-feed";
 import { CommentThread } from "@/features/comments/components/comment-thread";
+import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
 import type { Label as LabelData } from "@/features/labels/types";
 import type { Member } from "@/features/workspaces/types";
@@ -51,22 +53,55 @@ interface TaskDialogProps {
   task?: Task;
   /** Column titles by id, so history can name the columns a task moved between. */
   columnNames: Record<number, string>;
+  /**
+   * The board's columns, in order. Two jobs, both about subtasks: the first
+   * column is where a new piece starts, and the full list is the options for a
+   * piece's Status control — which exists because a subtask never reaches the
+   * board and so cannot be dragged between columns the way a task is.
+   */
+  columns?: readonly { id: number; title: string }[];
+  /**
+   * The parent, when this dialog is editing one of its subtasks. A piece is
+   * reached only from its parent, so this is set iff `task.parentId != null`, and
+   * it is what the "back" affordance names and returns to.
+   */
+  parentTask?: Task;
   /** Everyone assignable here — the picker's options, and the feed's names. */
   members: Member[];
   /** The workspace's vocabulary — the only labels this task may wear. */
   labels: LabelData[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: TaskFormValues) => Promise<void> | void;
+  /** Open one of this task's pieces in this same dialog (a piece is a task). */
+  onOpenSubtask?: (task: Task) => void;
+  /** Return from a piece to its parent without closing the dialog. */
+  onBack?: () => void;
+  /**
+   * Move a piece to another column. Fired the moment the Status control changes,
+   * not on save: a move is its own mutation with its own log row, committed when
+   * it is made — exactly as dragging a card commits one on drop, with no "save"
+   * step. The content fields still persist on submit; only status is immediate,
+   * because only status is a move.
+   */
+  onMoveSubtask?: (id: number, columnId: number) => void;
+  /** After a piece is added or removed — the parent card's count is now stale. */
+  onSubtasksChanged?: () => void;
 }
 
 export function TaskDialog({
   open,
   task,
   columnNames,
+  columns = [],
+  parentTask,
   members,
   labels,
   onOpenChange,
   onSubmit,
+  onOpenSubtask,
+  onBack,
+  onMoveSubtask,
+  onSubtasksChanged,
 }: TaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -74,7 +109,16 @@ export function TaskDialog({
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
   const [labelIds, setLabelIds] = useState<number[]>([]);
+  // A piece has a status but no board to be dragged on, so its column is edited
+  // here. Only meaningful when editing a subtask; the control is hidden for
+  // top-level tasks, which move by drag.
+  const [columnId, setColumnId] = useState<number>(0);
   const [saving, setSaving] = useState(false);
+
+  // A subtask is any task with a parent. It is edited exactly like a task, minus
+  // one thing it cannot have (subtasks of its own, depth being 1) and plus one it
+  // needs a control for (its status).
+  const isSubtask = task?.parentId != null;
   // Bumped by the thread whenever it writes, which makes the feed refetch. Every
   // comment mutation logs a row, so without this the history sitting directly
   // below the comment you just posted would deny it happened.
@@ -96,6 +140,7 @@ export function TaskDialog({
       // (LabelRef), but the form's business is which labels, not what they are
       // called.
       setLabelIds(task?.labels.map((l) => l.id) ?? []);
+      setColumnId(task?.columnId ?? 0);
     }
   }, [open, task]);
 
@@ -132,10 +177,28 @@ export function TaskDialog({
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>{task ? "Edit task" : "New task"}</DialogTitle>
+            {/* Only a subtask has a parent to go back to. The button carries the
+                parent's title so the reader knows what they are a piece of, and
+                returns without closing — the dialog stays open, the task inside
+                it changes. */}
+            {parentTask && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="-mt-1 mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ChevronLeft className="size-3.5 shrink-0" />
+                <span className="truncate">{parentTask.title}</span>
+              </button>
+            )}
+            <DialogTitle>
+              {task ? (isSubtask ? "Edit subtask" : "Edit task") : "New task"}
+            </DialogTitle>
             <DialogDescription>
               {task
-                ? "Update the task details below."
+                ? isSubtask
+                  ? "Update the subtask details below."
+                  : "Update the task details below."
                 : "Add a task to this column."}
             </DialogDescription>
           </DialogHeader>
@@ -180,6 +243,32 @@ export function TaskDialog({
               ))}
             </select>
           </div>
+          {/* Status, for a piece only. A top-level task's column is its place on
+              the board and it moves there by drag; a piece has no place on the
+              board (008), so this is the one place its status can be set. The
+              change commits immediately — see onMoveSubtask — because a move is a
+              move whether it happens by drag or by this select. */}
+          {isSubtask && columns.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="task-status">Status</Label>
+              <select
+                id="task-status"
+                value={columnId}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  setColumnId(next);
+                  if (task) onMoveSubtask?.(task.id, next);
+                }}
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                {columns.map((column) => (
+                  <option key={column.id} value={column.id}>
+                    {column.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {/* Side by side because they are one thought — PRD §9 calls these
               "the fields an agent reasons over when triaging", and a human
               triaging does the same: how urgent, and by when. */}
@@ -239,6 +328,19 @@ export function TaskDialog({
               at M2 it is where an agent reports what it did. */}
           {task && open && (
             <div className="grid gap-4 border-t pt-3">
+              {/* A piece has no pieces of its own — depth is 1 (008) — so the
+                  section is here for a top-level task only. It is the sole way to
+                  reach a subtask, since none of them are on the board. */}
+              {!isSubtask && (
+                <SubtaskList
+                  key={`subtasks-${task.id}`}
+                  parentId={task.id}
+                  defaultColumnId={columns[0]?.id ?? null}
+                  columnNames={columnNames}
+                  onOpenSubtask={(sub) => onOpenSubtask?.(sub)}
+                  onChanged={onSubtasksChanged}
+                />
+              )}
               <CommentThread
                 key={`comments-${task.id}`}
                 taskId={task.id}

@@ -44,7 +44,40 @@ export interface Task {
   columnId: number;
   title: string;
   description: string;
+  /**
+   * This task's order among the tasks it renders beside — its column's other
+   * top-level tasks, or its parent's other pieces in the same column. See 008:
+   * the scope is (columnId, parentId), and for a top-level task that is exactly
+   * what position has always meant.
+   */
   position: number;
+  /**
+   * The task this one decomposes, or null if it is top-level.
+   *
+   * Immutable — 008 enforces that with a trigger, because the depth-1 invariant
+   * is race-free only while this cannot change. Hence its absence from
+   * UpdateTaskInput, which is a design decision rather than an omission.
+   *
+   * A subtask is a whole task: it has its own status, assignee, priority, due
+   * date, labels and comments, and at M2 an agent claims and works one exactly as
+   * it would any other. What it does not have is a place on the board, which
+   * renders top-level tasks only — the pieces live in the parent.
+   */
+  parentId: number | null;
+  /**
+   * How many subtasks this task has. Always 0 for a subtask, since depth is 1.
+   *
+   * Derived rather than stored, and absent from TaskSnapshot for the same reason:
+   * it is a fact about other rows, not state this task holds. Undo restores what
+   * a task *was*, and a count is not that — recreating a deleted parent restores
+   * its pieces, which restores the count on its own.
+   *
+   * The card needs it and nothing else does, which is why the pieces themselves
+   * are fetched only when a dialog opens (the shape comments already use). A
+   * count is one integer per card; the subtasks are a second board's worth of
+   * rows nobody is looking at.
+   */
+  subtaskCount: number;
   /**
    * The member this task is assigned to, or null. Peer to the `agentId` that
    * lands at M2 (PRD §8) — the picker treats agents as another kind of
@@ -93,8 +126,27 @@ export interface CreateTaskInput {
   dueDate?: string | null;
   /** Ids, not refs: the caller says which labels, the database knows their names. */
   labelIds?: number[];
+  /**
+   * The task this one decomposes. Absent means top-level — the only two states
+   * there are, so this is two-valued and needs no supplied-flag. 006's rule does
+   * not even have to be consulted: a field that cannot be updated cannot have an
+   * update semantics problem.
+   *
+   * The only place a parent is ever set. 008 makes it immutable, so a task is
+   * born a piece of something or is never one.
+   */
+  parentId?: number;
 }
 
+/**
+ * Conspicuously without `parentId`, and that is the design.
+ *
+ * 008 makes the column immutable and enforces it with a trigger, because the
+ * depth-1 check reads the parent's own parent without a lock — which is only
+ * sound while that value cannot change. Adding a field here would compile, and
+ * fail at the database, which is the intended outcome: re-parenting costs a lock
+ * and a cycle check, and no milestone asks for it.
+ */
 export interface UpdateTaskInput {
   title?: string;
   description?: string;

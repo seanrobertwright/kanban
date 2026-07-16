@@ -20,6 +20,8 @@ function task(over: Partial<Task> = {}): Task {
     priority: "none",
     dueDate: null,
     labels: [],
+    parentId: null,
+    subtaskCount: 0,
     createdAt: "2026-07-15T00:00:00.000Z",
     ...over,
   };
@@ -102,5 +104,30 @@ describe("TaskCard due date", () => {
         future.replace(FAR_FUTURE, "D").replace("1 Jan 2999", "F")
       );
     });
+  });
+});
+
+describe("TaskCard subtask count", () => {
+  it("shows the count when a task has pieces", () => {
+    // The one fact the card carries about a task's pieces — the pieces
+    // themselves are a dialog's fetch away (008). A number, not "2 of 5 done":
+    // completion is a second query and depends on which columns are "done",
+    // which is user-defined and unknowable from a card.
+    render(card({ subtaskCount: 3 }));
+    expect(screen.getByText("3")).toBeDefined();
+    // Stated in words for a screen reader, not left to the icon alone.
+    expect(screen.getByTitle("3 subtasks")).toBeDefined();
+  });
+
+  it("says subtask, singular, when there is one", () => {
+    render(card({ subtaskCount: 1 }));
+    expect(screen.getByTitle("1 subtask")).toBeDefined();
+  });
+
+  it("shows nothing when a task has no pieces", () => {
+    // Most tasks have none, and a "0" on every card is noise that costs the
+    // space to say nothing — the same call the priority dot makes for 'none'.
+    render(card({ subtaskCount: 0 }));
+    expect(screen.queryByText("0")).toBeNull();
   });
 });

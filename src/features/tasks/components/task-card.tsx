@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ListTree, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
 import type { Member } from "@/features/workspaces/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
@@ -53,7 +53,12 @@ const PRIORITY_DOTS: Record<Exclude<TaskPriority, "none">, string> = {
   urgent: "bg-destructive",
 };
 
-function PriorityDot({ priority }: { priority: TaskPriority }) {
+/**
+ * Exported because the subtask list renders the same dot — a piece is a whole
+ * task and its priority reads the same way there as on a card. One dot, one set
+ * of colours, one accessibility argument, rather than a second copy to drift.
+ */
+export function PriorityDot({ priority }: { priority: TaskPriority }) {
   if (priority === "none") return null;
   return (
     <span
@@ -162,15 +167,34 @@ export function TaskCard({
           ))}
         </CardContent>
       )}
-      {(task.description || assignee || task.dueDate) && (
+      {(task.description ||
+        assignee ||
+        task.dueDate ||
+        task.subtaskCount > 0) && (
         <CardContent className="flex items-end justify-between gap-2 px-3">
           <p className="line-clamp-3 text-xs text-muted-foreground">
             {task.description}
           </p>
-          {/* The two facts a card is scanned for after its title — when it is
-              due and whose it is — kept together on the trailing edge so a
-              column of cards lines them up. */}
+          {/* The facts a card is scanned for after its title — how many pieces
+              it has, when it is due, and whose it is — kept together on the
+              trailing edge so a column of cards lines them up. */}
           <div className="flex shrink-0 items-center gap-2">
+            {/* The count only, never a "2 of 5 done": completion would need a
+                second query per card (how many pieces sit in a done column, and
+                which columns are "done" is user-defined and unknowable here).
+                The number says there is work inside; the dialog says what. */}
+            {task.subtaskCount > 0 && (
+              <span
+                className="flex items-center gap-0.5 text-xs tabular-nums text-muted-foreground"
+                title={`${task.subtaskCount} subtask${
+                  task.subtaskCount === 1 ? "" : "s"
+                }`}
+              >
+                <ListTree className="size-3.5" aria-hidden="true" />
+                <span className="sr-only">Subtasks: </span>
+                {task.subtaskCount}
+              </span>
+            )}
             {task.dueDate && <DueDate date={task.dueDate} />}
             {assignee && (
               <span title={`Assigned to ${assignee.name}`}>

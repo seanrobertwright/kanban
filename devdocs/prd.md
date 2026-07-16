@@ -313,7 +313,7 @@ Chosen from Core Work Items **for agent-readiness**, not for coverage. Ordered s
 - ✅ **User-editable statuses/columns** — agents move tasks *between* states; those states must be user-defined.
 - ✅ **Priority and due dates** — two of the three fields an agent reasons over when triaging.
 - ✅ **Labels** — the third, and a controlled vocabulary rather than free text.
-- **Subtasks** — an agent decomposing work needs somewhere to put the pieces.
+- ✅ **Subtasks** — an agent decomposing work needs somewhere to put the pieces.
 
 **Sequencing correction (built):** v2 listed `activity_log` third. It is built **first**, because its acceptance criterion is that *every* mutation writes a row — so anything built before it must be reopened and retrofitted with logging. Built first, it establishes a logged-mutation path that every later M1 feature is born writing through. Same work, done once.
 

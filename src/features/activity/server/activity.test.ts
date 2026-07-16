@@ -146,8 +146,8 @@ describe("activity log", () => {
       // toEqual, not toMatchObject, and deliberately so: it fails whenever the
       // snapshot gains a field, which is the point. Every field a task has must
       // be in here or undo silently restores an incomplete task — assigneeId
-      // arrived at 004 exactly this way, priority and dueDate at 006, and labels
-      // at 007. Three for three; the comment has earned its keep.
+      // arrived at 004 exactly this way, priority and dueDate at 006, labels at
+      // 007, and parentId at 008. Four for four; the comment has earned its keep.
       const label = await createLabel(alice, workspaceId, { name: "recoverable" });
       const task = await createTask(alice, {
         columnId: todoId,
@@ -175,6 +175,11 @@ describe("activity log", () => {
         // Name included: the label is what undo needs to restore, and 007's
         // whole point is that this stays readable after the label is deleted.
         labels: [{ id: label.id, name: "recoverable" }],
+        // Null, because this task is top-level — but present, because undo of a
+        // subtask's deletion restores it under the parent it was a piece of, and
+        // a snapshot missing this field would put the piece back on the board as
+        // a card that was never there. See TaskSnapshot.parentId (008).
+        parentId: null,
       });
     });
 

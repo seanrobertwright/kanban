@@ -9,6 +9,7 @@ import {
   createTask,
   deleteTask,
   getTask,
+  listSubtasks,
   moveTask,
   updateTask,
 } from "./repository";
@@ -89,8 +90,16 @@ export async function handleCreateTask(request: Request) {
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return badRequest("Invalid JSON body");
 
-  const { columnId, title, description, assigneeId, priority, dueDate, labelIds } =
-    body as Record<string, unknown>;
+  const {
+    columnId,
+    title,
+    description,
+    assigneeId,
+    priority,
+    dueDate,
+    labelIds,
+    parentId,
+  } = body as Record<string, unknown>;
   if (typeof columnId !== "number") return badRequest("columnId is required");
   if (typeof title !== "string" || title.trim() === "")
     return badRequest("title is required");
@@ -98,6 +107,13 @@ export async function handleCreateTask(request: Request) {
     return badRequest("description must be a string");
   if (!isAssigneeId(assigneeId))
     return badRequest("assigneeId must be a user id or null");
+  // Two-valued: absent means top-level, and there is no third state to encode —
+  // 008 makes the field immutable, so "clear it" is not a request anyone can
+  // make. Whether the id names a task on *this* board, and one that is not itself
+  // a piece, is not decided here: both are tenancy and invariant questions,
+  // answered in the repository against the same transaction that does the write.
+  if (parentId !== undefined && !Number.isInteger(parentId))
+    return badRequest("parentId must be a task id");
   // Not `!isTaskPriority(priority)`: undefined is legal here and means "use the
   // default", which is what the repository's ?? 'none' supplies. An unknown
   // string is not — it would reach Postgres and fail the enum cast as a 500.
@@ -117,8 +133,21 @@ export async function handleCreateTask(request: Request) {
       priority,
       dueDate,
       labelIds,
+      parentId: parentId as number | undefined,
     });
     return Response.json(task, { status: 201 });
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleListSubtasks(request: Request, id: number) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  if (!Number.isInteger(id)) return badRequest("Invalid task id");
+
+  try {
+    return Response.json(await listSubtasks(session.user.id, id));
   } catch (error) {
     return authzErrorResponse(error);
   }
@@ -153,6 +182,17 @@ export async function handleUpdateTask(request: Request, id: number) {
   // rejection below rather than being honoured as a clear.
   const setsAssignee = "assigneeId" in body;
   const setsDueDate = "dueDate" in body;
+
+  // Refused rather than ignored, and the difference matters because the failure
+  // is otherwise invisible. UpdateTaskInput has no parentId, so a PATCH carrying
+  // one would be destructured into nothing, write nothing, and return 200 with
+  // the unchanged task — telling the caller their re-parenting worked. 008's
+  // trigger cannot save us here: it only fires on a write we never attempt.
+  //
+  // 400, not 409: a conflict is an action that would break an invariant, and this
+  // one is not an action at all. There is no such request to make.
+  if ("parentId" in body)
+    return badRequest("parentId cannot be changed; it is set at creation");
 
   try {
     // A move request carries columnId + position; a content edit carries

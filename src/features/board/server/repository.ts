@@ -38,11 +38,22 @@ export async function getBoard(
   // added priority and due_date, the tasks repository knew, and this did not.
   // `query<Task>` cannot catch that — it is a cast, not a check — so the cards
   // rendered an undefined priority and no due date while every test passed.
+  //
+  // `parent_id IS NULL` is what makes the board a board rather than a list of
+  // everything: 008's subtasks are whole tasks, so without this a parent and the
+  // three pieces it was decomposed into arrive as four sibling cards. The pieces
+  // are reached through their parent — the card carries a count, and the dialog
+  // fetches them (listSubtasks).
+  //
+  // It is also the clause the drag maths depends on. Positions are scoped to
+  // (column_id, parent_id), so filtering to parent_id IS NULL yields exactly one
+  // sibling set per column, contiguous from 0 — which is the array the client
+  // reorders and sends indexes into. See 008.
   const tasks = await query<Task>(
     `SELECT ${taskColumns("t")}
        FROM task t
        JOIN board_column bc ON bc.id = t.column_id
-      WHERE bc.board_id = $1
+      WHERE bc.board_id = $1 AND t.parent_id IS NULL
       ORDER BY t.column_id, t.position`,
     [boardId]
   );

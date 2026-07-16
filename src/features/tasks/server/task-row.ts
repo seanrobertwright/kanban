@@ -36,14 +36,44 @@ import type { Task } from "../types";
  */
 export function taskColumns(alias = ""): string {
   const p = alias ? `${alias}.` : "";
-  // The subquery's reference to the outer row is qualified even when the rest of
-  // the list is not — see labelsSubquery. `task.id` is in scope unaliased in a
+  // The subqueries' references to the outer row are qualified even when the rest
+  // of the list is not — see labelsSubquery. `task.id` is in scope unaliased in a
   // plain SELECT and in an UPDATE's RETURNING, which are the only two places the
   // no-alias form is used.
+  const self = alias ? `${alias}.id` : "task.id";
   return `${p}id, ${p}column_id AS "columnId", ${p}title, ${p}description,
           ${p}position, ${p}assignee_id AS "assigneeId", ${p}priority,
-          ${p}due_date AS "dueDate", ${p}created_at AS "createdAt",
-          ${labelsSubquery(alias ? `${alias}.id` : "task.id")} AS labels`;
+          ${p}due_date AS "dueDate", ${p}parent_id AS "parentId",
+          ${p}created_at AS "createdAt",
+          ${labelsSubquery(self)} AS labels,
+          ${subtaskCountSubquery(self)} AS "subtaskCount"`;
+}
+
+/**
+ * How many subtasks a task has.
+ *
+ * Here rather than in the one query that needs it, for 9edeff3's reason and with
+ * labels as the precedent: a read that forgot it would be typed as a whole Task
+ * and render a card whose count is undefined. `query<Task>` is a cast, not a
+ * check, so nothing but this list stands between that and the browser.
+ *
+ * The cost is one more correlated subquery per task row, on top of labels'. Both
+ * are index lookups — idx_task_parent leads with parent_id — and a board reads a
+ * hundred tasks at most. Worth revisiting together when boards are paginated
+ * (M3), not before.
+ *
+ * ::int because COUNT(*) is bigint, which node-postgres hands back as a *string*
+ * rather than a number — the same trap moveTask's clamp already documents. Left
+ * as-is it would type-check perfectly and render "3" from `subtaskCount > 0`
+ * being true for the string "0".
+ *
+ * `taskRef` must be qualified, and this is labelsSubquery's bug waiting to
+ * happen again: the inner scope has its own `id`, so a bare `WHERE s.parent_id =
+ * id` would compile and quietly compare a parent_id against the subtask's own id.
+ * The alias `s` is what keeps the outer reference reachable at all.
+ */
+function subtaskCountSubquery(taskRef: string): string {
+  return `(SELECT COUNT(*)::int FROM task s WHERE s.parent_id = ${taskRef})`;
 }
 
 /**
@@ -108,5 +138,11 @@ export function taskSnapshot(task: Task): TaskSnapshot {
     priority: task.priority,
     dueDate: task.dueDate,
     labels: task.labels,
+    // Never changes, so it is dead weight to every diff and load-bearing to the
+    // one thing snapshots are for: undo recreating a deleted piece under the
+    // parent it was a piece of. See TaskSnapshot.parentId.
+    parentId: task.parentId,
+    // No subtaskCount: a count of other rows is not state this task holds, and
+    // restoring the parent restores the pieces that make it true.
   };
 }
