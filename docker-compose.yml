@@ -18,5 +18,30 @@ services:
       timeout: 5s
       retries: 10
 
+  app:
+    build: .
+    container_name: kanban-app
+    restart: unless-stopped
+    # Wait until Postgres is accepting connections, or the startup migrations
+    # race the database and the first boot fails.
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Secrets (BETTER_AUTH_SECRET, GITHUB_*, ANTHROPIC_API_KEY) come from the same
+    # .env.local the dev server reads. Optional, so the stack still comes up on a
+    # machine that has none — the affected features simply stay off.
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      # Overrides .env.local's value (which points at the host port 5434): inside
+      # the compose network the app reaches Postgres by service name on 5432.
+      # `environment` wins over `env_file`, so this is the one that takes effect.
+      DATABASE_URL: postgres://kanban:kanban_dev_password@postgres:5432/kanban
+      # Where the app is served and what better-auth signs callbacks against.
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+
 volumes:
   kanban_pgdata:

@@ -1,0 +1,21 @@
+# Rebuilt inside the image — never copy the host's.
+node_modules
+.next
+
+# Secrets and local config never belong in the image. .env.local reaches the
+# container at RUNTIME via compose's env_file, not baked into a layer.
+.env
+.env.*
+.mcp.json
+
+# Not needed to build or run.
+.git
+.gitignore
+Dockerfile
+.dockerignore
+docker-compose.yml
+npm-debug.log*
+coverage
+*.md
+devdocs
+docs
