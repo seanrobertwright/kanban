@@ -6,6 +6,11 @@ adapter over the same REST API the web UI uses, so an agent is subject to the
 exact RBAC and audit trail a human is. Every action the agent takes shows in a
 task's history under the agent's own name.
 
+> **Speak HTTP, not MCP?** This server is only a convenience wrapper. The same
+> board is drivable directly over HTTP with an agent key — see the
+> [Agent HTTP API reference](../docs/agent-api.md). The MCP tools below map
+> one-to-one onto those endpoints.
+
 ## Tools
 
 | Tool | What it does |
@@ -37,6 +42,13 @@ task's history under the agent's own name.
 
    `--workspace` takes the workspace slug (from the board URL) or its id. `--role`
    defaults to `member`; a `viewer` agent can read and comment but not move cards.
+
+   That mints an **external** agent (Door 2 — this server). For a **native**
+   agent (Door 1 — one the app hosts and drives), add
+   `--kind native --model claude-opus-4-8 [--prompt ./prompt.md]`: it carries a
+   model and prompt instead of a token, and assigning a task to it starts a run
+   (no MCP config, no `KANBAN_AGENT_KEY`). Native runs need `ANTHROPIC_API_KEY`
+   in the app's environment.
 
 3. **Register the server** in your coding agent's MCP config, passing the token as
    `KANBAN_AGENT_KEY`. For Claude Code (`.mcp.json` or user config):

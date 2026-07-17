@@ -33,6 +33,11 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# local MCP config — carries a live KANBAN_AGENT_KEY (a workspace-scoped board
+# credential), so it must never be committed. mcp/README.md documents the shape;
+# each machine writes its own with its own agent token.
+.mcp.json
+
 # vercel
 .vercel
 

@@ -125,10 +125,20 @@ async function requireCommentAccess(
  * name, which the UI renders rather than dropping the row.
  */
 export async function listCommentsForTask(
-  userId: string,
+  actor: string | Principal,
   taskId: number
 ): Promise<CommentEntry[]> {
-  const { role } = await requireTaskRole(userId, taskId, "viewer");
+  const { role } = await requireTaskRole(actor, taskId, "viewer");
+  // The id the canEdit/canDelete flags compare against. An agent (§7.1) reads
+  // the thread it reports into — "an author that writes but cannot read is blind"
+  // (the same reason activity is agent-readable) — and gets false edit/delete
+  // flags, which is correct: there is no agent path that edits a comment.
+  const userId =
+    typeof actor === "string"
+      ? actor
+      : actor.kind === "human"
+        ? actor.userId
+        : actor.agentId;
 
   const rows = await query<
     Comment & { authorName: string | null; authorImage: string | null }

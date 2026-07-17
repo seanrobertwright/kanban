@@ -1,3 +1,4 @@
+import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
 import {
   getSessionFromRequest,
   unauthorized,
@@ -32,11 +33,14 @@ function readName(value: unknown): string | { error: string } {
 }
 
 export async function handleListLabels(request: Request, workspaceId: string) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  // Agent-capable: an agent needs the vocabulary to label a task over the API.
+  // Creating/editing/deleting labels below stays human-only — that is workspace
+  // administration, not board work.
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
 
   try {
-    return Response.json(await listLabels(session.user.id, workspaceId));
+    return Response.json(await listLabels(principal, workspaceId));
   } catch (error) {
     return authzErrorResponse(error);
   }

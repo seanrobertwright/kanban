@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import { ActivityFeed } from "@/features/activity/components/activity-feed";
 import type { Actor } from "@/features/activity/types";
 import type { AgentSummary } from "@/features/agents/types";
+import { RunReview } from "@/features/agents/components/run-review";
 import { CommentThread } from "@/features/comments/components/comment-thread";
 import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
@@ -392,6 +393,16 @@ export function TaskDialog({
                   onChanged={onSubtasksChanged}
                 />
               )}
+              {/* An agent run's review sits above the thread: it is what a human
+                  came to this task to resolve when the agent has proposed work.
+                  Renders nothing when the task has never had a run. Accepting or
+                  undoing writes activity, so it bumps the same version the feed
+                  reads — the receipt below updates in step. */}
+              <RunReview
+                key={`run-${task.id}`}
+                taskId={task.id}
+                onChanged={() => setActivityVersion((v) => v + 1)}
+              />
               <CommentThread
                 key={`comments-${task.id}`}
                 taskId={task.id}
