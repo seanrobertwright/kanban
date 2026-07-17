@@ -1,5 +1,34 @@
 import type { WorkspaceRole } from "@/features/workspaces/types";
 
+/** §7.4's three approval gates — the tier an agent_action passed through (013). */
+export type AgentTier = "auto" | "changeset" | "block";
+
+/** One gated tool call, as the review panel reads it. */
+export interface AgentActionView {
+  id: string;
+  tool: string;
+  tier: AgentTier;
+  input: unknown;
+  result: unknown;
+  before: unknown;
+  after: unknown;
+  approvedBy: string | null;
+  revertedAt: string | null;
+  createdAt: string;
+}
+
+/** One agent run with its action trail and pending changeset (013) — the shape
+ *  behind the task dialog's review panel. */
+export interface RunDetail {
+  id: string;
+  agentId: string;
+  taskId: number | null;
+  status: string;
+  costMicros: number;
+  actions: AgentActionView[];
+  changeset: { id: string; status: string } | null;
+}
+
 /**
  * An agent as the board sees it — enough to render it as an assignee beside the
  * humans, and no more. The mirror of Member (workspaces/types), deliberately:

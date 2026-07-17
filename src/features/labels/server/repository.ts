@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 
 import { logActivity } from "@/features/activity/server/repository";
 import type { Actor, LabelRef, LabelSnapshot } from "@/features/activity/types";
+import type { Principal } from "@/features/auth/server/principal";
 import { taskColumns, taskSnapshot } from "@/features/tasks/server/task-row";
 import type { Task } from "@/features/tasks/types";
 import { query, withTransaction } from "@/shared/db/client";
@@ -55,10 +56,14 @@ async function requireLabelRole(
  * plain ORDER BY name gives, since uppercase sorts first in most collations.
  */
 export async function listLabels(
-  userId: string,
+  actor: string | Principal,
   workspaceId: string
 ): Promise<Label[]> {
-  await requireWorkspaceRole(userId, workspaceId, "viewer");
+  // Agent-readable (viewer+): a native or external agent needs the label ids to
+  // label a task (set_labels / update_task), and a vocabulary is not PII the way
+  // the member list's emails are. requireWorkspaceRole scopes an agent to its own
+  // workspace, so it reads only its own workspace's labels.
+  await requireWorkspaceRole(actor, workspaceId, "viewer");
   return query<Label>(
     `SELECT ${LABEL_COLUMNS} FROM label WHERE workspace_id = $1
       ORDER BY lower(name)`,

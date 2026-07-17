@@ -33,14 +33,17 @@ function parseBody(value: unknown): string | null {
 }
 
 export async function handleListComments(request: Request, id: string) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  // getPrincipalFromRequest, not getSessionFromRequest: §7.1 makes an agent a
+  // citizen of the same access path a human is, and reading the thread it comments
+  // into is part of that path — the same widening the activity feed already has.
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
 
   const taskId = Number(id);
   if (!Number.isInteger(taskId)) return badRequest("Invalid task id");
 
   try {
-    return Response.json(await listCommentsForTask(session.user.id, taskId));
+    return Response.json(await listCommentsForTask(principal, taskId));
   } catch (error) {
     return authzErrorResponse(error);
   }

@@ -12,6 +12,7 @@ import {
   assertLabelsInWorkspace,
   setTaskLabels,
 } from "@/features/labels/server/repository";
+import { dispatchRun, enqueueRun } from "@/features/agents/server/runtime";
 import {
   AuthzError,
   ROLE_RANK,
@@ -375,7 +376,8 @@ export async function updateTask(
   const setsAssignee = "assignee" in input;
   const setsDueDate = "dueDate" in input;
 
-  return withTransaction(async (client) => {
+  let queuedRunId: string | null = null;
+  const updated = await withTransaction(async (client) => {
     const before = await selectTask(client, id);
     if (!before) return undefined;
 
@@ -515,8 +517,30 @@ export async function updateTask(
         after: to,
       });
     }
+
+    // The trigger seam 011 named: assigning a task to a *native* agent starts a
+    // run. Enqueued in this same transaction, right after the task.assigned it
+    // follows, so the 'queued' run and the assignment commit together — the run
+    // is the durable record that work was requested, not a side effect a crash
+    // after commit could drop. enqueueRun returns null for a human or an external
+    // agent, which start no native run.
+    const newAssignee = to.assignee;
+    if (!sameAssignee(from, to) && newAssignee?.type === "agent") {
+      queuedRunId = await enqueueRun(client, {
+        agentId: newAssignee.id,
+        taskId: id,
+        workspaceId,
+      });
+    }
     return after;
   });
+
+  // Off the request path: after() runs executeRun once the response is sent, so
+  // this PATCH returns immediately. dispatchRun no-ops outside a request scope
+  // (a test, the isolated script), leaving the run queued for the endpoint or a
+  // worker to drain — the recoverability that making a run a record buys (017).
+  if (queuedRunId) dispatchRun(queuedRunId);
+  return updated;
 }
 
 export async function moveTask(
