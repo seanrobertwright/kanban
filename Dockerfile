@@ -14,11 +14,21 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Source, then build. next build needs network the first time — next/font/google
-# fetches Inter and Geist Mono at build time (a standard Next constraint; the
-# build has no offline fallback for them).
+# Source, then build. Two build-time notes:
+#
+# - next build fetches Inter and Geist Mono from Google Fonts (next/font/google),
+#   so the build needs network — a standard Next constraint with no offline
+#   fallback.
+# - "Collecting page data" IMPORTS every route handler, which constructs the pg
+#   Pool at module load (shared/db/client.ts) and the better-auth instance. Those
+#   need a DATABASE_URL and secret to *exist*, but never connect or sign anything
+#   during the build — every DB route is force-dynamic, so nothing runs. Hence the
+#   throwaway values, scoped to THIS RUN only (inline env does not persist into
+#   the image); compose injects the real DATABASE_URL/secret at runtime.
 COPY . .
-RUN npm run build
+RUN DATABASE_URL="postgres://build:build@localhost:5432/build" \
+    BETTER_AUTH_SECRET="build-only-placeholder" \
+    npm run build
 
 EXPOSE 3000
 
