@@ -1,20 +1,28 @@
 # syntax=docker/dockerfile:1
 
-# The kanban app in one image. Debian-based node (not alpine) on purpose: the
-# dependency tree pulls native modules with glibc prebuilds (sharp via next,
-# better-sqlite3 via better-auth) that are a fight to build against alpine's musl.
-FROM node:22-bookworm-slim
-
+# Multi-stage. One Dockerfile, two shipped targets:
+#
+#   builder — full deps + full source. Runs `next build`, and is reused as the
+#             image for the one-shot `migrate` service (dev-time schema tooling:
+#             @better-auth/cli + scripts/migrate.mjs) and for the dev server
+#             (`next dev`, via docker-compose.override.yml).
+#   runner  — slim: only the standalone bundle + static assets, non-root. The
+#             production `app` service. This is the default target.
+#
+# Debian-based node (not alpine) on purpose: the dependency tree pulls native
+# modules with glibc prebuilds (sharp via next, better-sqlite3 via better-auth)
+# that are a fight to build against alpine's musl.
+FROM node:22-bookworm-slim AS base
 WORKDIR /app
 
-# Install dependencies first so the layer caches across source changes. FULL
-# deps, including dev: this image both BUILDS the app (next build) and, at
-# startup, applies migrations (scripts/migrate.mjs + the better-auth CLI) — both
-# of which are dev-time tooling, so a production-only prune would break the boot.
+# ---- deps: install once so the layer caches across source changes. FULL deps,
+# including dev: the build needs them, and the migrate service runs dev-time
+# tooling. A production-only prune here would break both. ----
+FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Source, then build. Two build-time notes:
+# ---- builder: source, then build. Two build-time notes:
 #
 # - next build fetches Inter and Geist Mono from Google Fonts (next/font/google),
 #   so the build needs network — a standard Next constraint with no offline
@@ -24,23 +32,34 @@ RUN npm ci
 #   need a DATABASE_URL and secret to *exist*, but never connect or sign anything
 #   during the build — every DB route is force-dynamic, so nothing runs. Hence the
 #   throwaway values, scoped to THIS RUN only (inline env does not persist into
-#   the image); compose injects the real DATABASE_URL/secret at runtime.
+#   the image); compose injects the real values at runtime.
+#
+# `output: standalone` (next.config.ts) makes this emit .next/standalone. ----
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN DATABASE_URL="postgres://build:build@localhost:5432/build" \
     BETTER_AUTH_SECRET="build-only-placeholder" \
     npm run build
 
-EXPOSE 3000
+# ---- runner: the production image. Nothing but the standalone bundle and the
+# assets it cannot serve on its own. ----
+FROM base AS runner
+ENV NODE_ENV=production
 
-# On boot: apply the better-auth schema and our SQL migrations, then serve. Both
-# steps are idempotent (better-auth is a no-op if applied; migrate.mjs skips what
-# is already in _migration), so running them every start is safe — and it is what
-# makes `docker compose up` against a fresh Postgres volume work with no manual
-# setup step.
-#
-# Called directly rather than via `npm run db:setup`, because db:migrate passes
-# `--env-file=.env.local` — a file that does not exist in the image (env arrives
-# as real variables from compose, not a file). Both readers take DATABASE_URL
-# straight from process.env, so no --env-file is needed here. -H 0.0.0.0 binds the
-# port so it is reachable from outside the container.
-CMD ["sh", "-c", "npm run db:auth && node scripts/migrate.mjs && npx next start -H 0.0.0.0"]
+# standalone's server.js does NOT bundle public/ or .next/static (they are meant
+# for a CDN) — copy them in so the single container serves everything. --chown so
+# the unprivileged user owns them (Next may write to .next/cache at runtime).
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/public ./public
+
+# Drop root: node:bookworm ships an unprivileged `node` user.
+USER node
+
+EXPOSE 3000
+# server.js reads HOSTNAME/PORT from env. 0.0.0.0 so it is reachable outside the
+# container. Migrations are NOT run here — the compose `migrate` service applies
+# them once, and `app` waits for it (service_completed_successfully).
+ENV HOSTNAME=0.0.0.0 PORT=3000
+CMD ["node", "server.js"]

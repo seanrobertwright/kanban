@@ -18,15 +18,39 @@ services:
       timeout: 5s
       retries: 10
 
-  app:
-    build: .
-    container_name: kanban-app
-    restart: unless-stopped
-    # Wait until Postgres is accepting connections, or the startup migrations
-    # race the database and the first boot fails.
+  # One-shot: apply the better-auth schema + our SQL migrations, then exit.
+  # Split out of the app's boot so (a) the slim runner image needs none of the
+  # dev-time migration tooling, and (b) scaling app to >1 replica cannot race
+  # the same migrations. Built from `builder` (full deps + source). Both steps
+  # are idempotent, so re-running on every `up` is safe.
+  migrate:
+    build:
+      context: .
+      target: builder
+    container_name: kanban-migrate
     depends_on:
       postgres:
         condition: service_healthy
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgres://kanban:kanban_dev_password@postgres:5432/kanban
+    command: sh -c "npm run db:auth && node scripts/migrate.mjs"
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    container_name: kanban-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Do not serve until migrations have applied and exited 0.
+      migrate:
+        condition: service_completed_successfully
     # Secrets (BETTER_AUTH_SECRET, GITHUB_*, ANTHROPIC_API_KEY) come from the same
     # .env.local the dev server reads. Optional, so the stack still comes up on a
     # machine that has none — the affected features simply stay off.
@@ -42,6 +66,18 @@ services:
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
     ports:
       - "3000:3000"
+    # No curl/wget in the slim image; Node 22 has global fetch. Any response
+    # under 500 (incl. the 307 auth redirect) counts as up.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   kanban_pgdata:
