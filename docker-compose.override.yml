@@ -1,0 +1,27 @@
+# Dev override — auto-merged by `docker compose up` on top of docker-compose.yml.
+# Turns the `app` service from a prod build (next build + next start, source
+# baked into the image) into a live-reload dev server bind-mounting the host.
+#
+# Next's own docs (node_modules/next/dist/docs/.../local-development.md) warn
+# that Docker dev on Windows/Mac makes HMR slow (seconds–minutes) because the
+# host filesystem crosses into the Linux container. Fast path is still local
+# `npm run dev`. Use this only when you need app + Postgres wired together.
+#
+# Bundler note: forced to --webpack. Turbopack (Next 16 default) has no polling
+# knob, and a Windows-host bind mount drops the inotify events its watcher needs
+# -> no reload. Webpack honors WATCHPACK_POLLING, so it reloads reliably.
+services:
+  app:
+    # Same idempotent boot as prod, but serve with the dev server, not `start`.
+    command: sh -c "npm run db:auth && node scripts/migrate.mjs && npx next dev --webpack -H 0.0.0.0"
+    volumes:
+      # Host source live into the container.
+      - .:/app
+      # Anonymous volumes SHADOW the bind mount for these two: keep the image's
+      # Linux-built node_modules (never the host's) and the container's own
+      # build cache, instead of the host copies clobbering them.
+      - /app/node_modules
+      - /app/.next
+    environment:
+      # Windows bind mount loses fs events -> webpack must poll to see edits.
+      WATCHPACK_POLLING: "true"
