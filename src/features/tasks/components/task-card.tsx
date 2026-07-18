@@ -118,7 +118,7 @@ function DueDate({ date }: { date: string }) {
  * the lookup succeeds. `isAgent` is what the card marks visibly: an agent holding
  * a task is the wedge on a card, the peer to a person §4.3 calls for.
  */
-function resolveAssignee(
+export function resolveAssignee(
   assignee: Task["assignee"],
   membersById: Record<string, Member>,
   agentsById: Record<string, AgentSummary>

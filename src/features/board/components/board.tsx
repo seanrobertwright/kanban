@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 
-import { Plus, Tags } from "lucide-react";
+import { CalendarDays, Columns3, List, Plus, Tags } from "lucide-react";
 
 import type { AgentSummary } from "@/features/agents/types";
 import { LabelsDialog } from "@/features/labels/components/labels-dialog";
@@ -29,6 +29,7 @@ import type { Task } from "@/features/tasks/types";
 import type { Member } from "@/features/workspaces/types";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/shared/ui/toggle-group";
 import * as boardApi from "../client/api";
 import { fetchBoard } from "../client/api";
 import type { Column } from "../types";
@@ -40,6 +41,10 @@ import {
   taskMatchesFilter,
   type BoardFilter,
 } from "./board-filter-bar";
+import { CalendarView } from "./calendar-view";
+import { ListView } from "./list-view";
+
+type BoardViewMode = "board" | "list" | "calendar";
 
 type ItemsByColumn = Record<number, Task[]>;
 
@@ -136,6 +141,11 @@ export function Board({
   );
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+
+  // Which lens the same tasks are shown through. The board is the only one that
+  // can drag; list and calendar are read-and-open. Filtering (below) applies to
+  // all three — they are all fed `visibleItems`.
+  const [view, setView] = useState<BoardViewMode>("board");
 
   // A view over `items`, not a second copy of it. Filtering is purely client-side
   // (every task is already loaded) so it costs nothing to recompute per keystroke.
@@ -386,16 +396,55 @@ export function Board({
           matched={matchedCount}
           total={totalCount}
         />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground"
-          onClick={() => setLabelsOpen(true)}
-        >
-          <Tags /> Labels
-        </Button>
+        <div className="flex items-center gap-2">
+          <ToggleGroup
+            value={[view]}
+            onValueChange={(v) => {
+              // Single-select, but base-ui hands back an array; ignore the empty
+              // case so clicking the active lens does not deselect into nothing.
+              if (v[0]) setView(v[0] as BoardViewMode);
+            }}
+          >
+            <ToggleGroupItem value="board">
+              <Columns3 /> Board
+            </ToggleGroupItem>
+            <ToggleGroupItem value="list">
+              <List /> List
+            </ToggleGroupItem>
+            <ToggleGroupItem value="calendar">
+              <CalendarDays /> Calendar
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setLabelsOpen(true)}
+          >
+            <Tags /> Labels
+          </Button>
+        </div>
       </div>
-      <DndContext
+      {view === "list" ? (
+        <ListView
+          columns={cols}
+          itemsByColumn={visibleItems}
+          membersById={membersById}
+          agentsById={agentsById}
+          labelsById={labelsById}
+          onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
+        />
+      ) : view === "calendar" ? (
+        <CalendarView
+          columns={cols}
+          itemsByColumn={visibleItems}
+          membersById={membersById}
+          agentsById={agentsById}
+          labelsById={labelsById}
+          onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
+        />
+      ) : (
+        <DndContext
         id="board-dnd"
         // No sensors means nothing can start a drag — the read-only path, and
         // also the filtered path: reordering a subset would write positions
@@ -494,6 +543,7 @@ export function Board({
           ) : null}
         </DragOverlay>
       </DndContext>
+      )}
       <TaskDialog
         open={dialog !== null}
         task={dialog?.task}
