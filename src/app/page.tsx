@@ -19,6 +19,7 @@ import {
   listBoardsForUser,
   listWorkspacesForUser,
 } from "@/features/workspaces/server/repository";
+import { listSavedViews } from "@/features/views/server/repository";
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
 
 export const dynamic = "force-dynamic";
@@ -68,13 +69,17 @@ export default async function Home({
   // shows them as another kind of assignee, and every card with an agent on it
   // resolves that agent's name and face from this one roster on first paint —
   // which is why Task carries only an assignee's {type, id}, not its display data.
-  const [workspaces, boards, members, agents, labels] = await Promise.all([
-    listWorkspacesForUser(session.user.id),
-    listBoardsForUser(session.user.id),
-    listMembers(session.user.id, data.board.workspaceId),
-    listWorkspaceAgents(session.user.id, data.board.workspaceId),
-    listLabels(session.user.id, data.board.workspaceId),
-  ]);
+  const [workspaces, boards, members, agents, labels, savedViews] =
+    await Promise.all([
+      listWorkspacesForUser(session.user.id),
+      listBoardsForUser(session.user.id),
+      listMembers(session.user.id, data.board.workspaceId),
+      listWorkspaceAgents(session.user.id, data.board.workspaceId),
+      listLabels(session.user.id, data.board.workspaceId),
+      // Private to this user (015), scoped to the workspace — the same for every
+      // board they switch to within it.
+      listSavedViews(session.user.id, data.board.workspaceId),
+    ]);
   const workspace = workspaces.find((w) => w.id === data.board.workspaceId)!;
   const canEdit = workspace.role !== "viewer";
   // Only deleting a column needs the extra rank — §7.4's blast-radius rule,
@@ -116,6 +121,7 @@ export default async function Home({
         agents={agents}
         initialLabels={labels}
         workspaceId={data.board.workspaceId}
+        initialSavedViews={savedViews}
         canEdit={canEdit}
         canDeleteColumns={canDeleteColumns}
       />

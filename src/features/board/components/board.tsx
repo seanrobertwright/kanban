@@ -43,8 +43,8 @@ import {
 } from "./board-filter-bar";
 import { CalendarView } from "./calendar-view";
 import { ListView } from "./list-view";
-
-type BoardViewMode = "board" | "list" | "calendar";
+import { SavedViews } from "@/features/views/components/saved-views";
+import type { BoardViewMode, SavedView } from "@/features/views/types";
 
 type ItemsByColumn = Record<number, Task[]>;
 
@@ -78,6 +78,8 @@ interface BoardProps {
   initialLabels: LabelData[];
   /** The vocabulary's owner — labels are workspace-scoped, not per board (007). */
   workspaceId: string;
+  /** This member's private saved views for the workspace (015). */
+  initialSavedViews: SavedView[];
   /** False for viewers. The server enforces this too — this only hides the UI. */
   canEdit: boolean;
   /**
@@ -107,6 +109,7 @@ export function Board({
   agents,
   initialLabels,
   workspaceId,
+  initialSavedViews,
   canEdit,
   canDeleteColumns,
 }: BoardProps) {
@@ -146,6 +149,7 @@ export function Board({
   // can drag; list and calendar are read-and-open. Filtering (below) applies to
   // all three — they are all fed `visibleItems`.
   const [view, setView] = useState<BoardViewMode>("board");
+  const [savedViews, setSavedViews] = useState<SavedView[]>(initialSavedViews);
 
   // A view over `items`, not a second copy of it. Filtering is purely client-side
   // (every task is already loaded) so it costs nothing to recompute per keystroke.
@@ -396,7 +400,18 @@ export function Board({
           matched={matchedCount}
           total={totalCount}
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <SavedViews
+            workspaceId={workspaceId}
+            views={savedViews}
+            onViewsChange={setSavedViews}
+            currentView={view}
+            currentFilter={filter}
+            onApply={(v) => {
+              setView(v.viewMode);
+              setFilter(v.filter);
+            }}
+          />
           <ToggleGroup
             value={[view]}
             onValueChange={(v) => {
