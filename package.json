@@ -10,7 +10,7 @@
     "db:up": "docker compose up -d postgres",
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down",
-    "db:auth": "better-auth migrate --y",
+    "db:auth": "better-auth migrate --yes --config src/features/auth/server/auth.ts",
     "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
     "db:setup": "npm run db:auth && npm run db:migrate",
     "create-agent": "node --env-file=.env.local scripts/create-agent.mjs",
@@ -40,6 +40,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@better-auth/cli": "^1.4.21",
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
