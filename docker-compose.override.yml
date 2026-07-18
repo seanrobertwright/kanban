@@ -13,6 +13,14 @@
 #
 # Migrations are NOT here — the base file's one-shot `migrate` service still runs
 # and `app` still waits on it (service_completed_successfully).
+#
+# GOTCHA when flipping between prod and dev on the same project: prod builds the
+# app as target `runner` (slim, no `next` binary), dev as `builder`. A plain
+# `up -d` reuses the cached image AND the stale /app/node_modules anon volume
+# (Docker seeds an anon volume once, from whichever image ran first, then reuses
+# it) — so you get `next: not found`. After switching modes, force both:
+#     docker compose up -d --build --renew-anon-volumes
+# Within one mode, a plain `up -d` is fine once it has been built.
 services:
   app:
     # Build the full stage (deps + source + next dev), not the slim runner.

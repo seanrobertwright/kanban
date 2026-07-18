@@ -33,6 +33,13 @@ import * as boardApi from "../client/api";
 import { fetchBoard } from "../client/api";
 import type { Column } from "../types";
 import { BoardColumn } from "./board-column";
+import {
+  BoardFilterBar,
+  EMPTY_FILTER,
+  isFilterActive,
+  taskMatchesFilter,
+  type BoardFilter,
+} from "./board-filter-bar";
 
 type ItemsByColumn = Record<number, Task[]>;
 
@@ -129,6 +136,27 @@ export function Board({
   );
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+
+  // A view over `items`, not a second copy of it. Filtering is purely client-side
+  // (every task is already loaded) so it costs nothing to recompute per keystroke.
+  const [filter, setFilter] = useState<BoardFilter>(EMPTY_FILTER);
+  const filtering = isFilterActive(filter);
+  const visibleItems = useMemo(() => {
+    if (!filtering) return items;
+    const out: ItemsByColumn = {};
+    for (const id in items) {
+      out[id] = items[id].filter((t) => taskMatchesFilter(t, filter));
+    }
+    return out;
+  }, [items, filter, filtering]);
+  const totalCount = useMemo(
+    () => Object.values(items).reduce((n, list) => n + list.length, 0),
+    [items]
+  );
+  const matchedCount = useMemo(
+    () => Object.values(visibleItems).reduce((n, list) => n + list.length, 0),
+    [visibleItems]
+  );
 
   const sensors = useSensors(
     // The distance constraint lets plain clicks reach buttons inside cards
@@ -348,7 +376,16 @@ export function Board({
           actions live — would say it belonged to this board. Viewers see it too;
           reading the vocabulary is not an edit, and the dialog hides its own
           controls. */}
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <BoardFilterBar
+          filter={filter}
+          onChange={setFilter}
+          labels={labels}
+          members={members}
+          agents={agents}
+          matched={matchedCount}
+          total={totalCount}
+        />
         <Button
           variant="ghost"
           size="sm"
@@ -360,8 +397,11 @@ export function Board({
       </div>
       <DndContext
         id="board-dnd"
-        // No sensors means nothing can start a drag — the read-only path.
-        sensors={canEdit ? sensors : []}
+        // No sensors means nothing can start a drag — the read-only path, and
+        // also the filtered path: reordering a subset would write positions
+        // computed against gaps the hidden tasks still occupy. Clear the filter
+        // to rearrange.
+        sensors={canEdit && !filtering ? sensors : []}
         collisionDetection={closestCorners}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
@@ -373,7 +413,7 @@ export function Board({
             <BoardColumn
               key={column.id}
               column={column}
-              tasks={items[column.id] ?? []}
+              tasks={visibleItems[column.id] ?? []}
               membersById={membersById}
               agentsById={agentsById}
               labelsById={labelsById}
