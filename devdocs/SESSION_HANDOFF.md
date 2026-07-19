@@ -1,162 +1,97 @@
-# Session Handoff — Feature Build-out (cont.)
+# Session Handoff — Feature Breadth Sweep
 
-**Date:** 2026-07-19 · **Branch:** master (this session's work committed + pushed to origin)
+**Date:** 2026-07-19 · **Branch:** master
 
 ## ⚠️ Read first: communication style
 
-`CLAUDE.md` contains **"You must always speak caveman."** (committed `2733806`, at
-the owner's request). Honour it in your prose to the user. Keep *deliverables*
-exact — code, commit messages, migration comments, and this handoff are written in
-normal precise English; caveman is for the conversational narration only.
+`CLAUDE.md` contains **"You must always speak caveman."** Honour it in your prose
+to the user. Deliverables — code, commits, migrations, this handoff — stay in
+normal precise English; caveman is conversational narration only.
 
 ## What this session did
 
-Shipped one feature, fully verified, one commit:
+The largest single-session build-out so far: **nine feature batches, nine feature
+commits + one security fix**, working through `docs/task_management_feature_summary.md`
+(the 140-criterion reference model), which now carries a ✅/❌ status mark on every
+row. Each batch followed the recipe (migration → types → repository → handlers →
+route → client → UI) with real-DB tests, tsc/eslint/build clean per batch.
 
 | Commit | Feature |
 |--------|---------|
-| `e749179` | **Agent-management UI** — a workspace admin can now create/list/retire agents and set the §7.3 budget cap from the app (Board switcher → **Agents**), instead of via `scripts/create-agent.mjs` + raw SQL. Read the commit message for the full design reasoning — token-once contract, owner-escalation guard, delete-with-cleanup (409 on active run; sweep stranded claims/assignments, logged), human-session-gating. No migration (009/012/014 already carried every column). |
+| `50fc0f8` | **Task type + estimate** (022) — task/bug/story enum + story points; TypeMark and estimate chip on cards; fixes a pre-existing tsc error in `admin.test.ts`. |
+| `af84a4f` | **WIP limits** (023) — `board_column.wip_limit`; "4/3" header goes loud when over, never blocks; member-gated editor in the column header. |
+| `813cdfa` | **Bulk edit** — POST `/api/tasks/bulk` loops per-task mutations (each keeps authz + log rows); checkbox column + bulk bar in the list view. |
+| `7824deb` | **CSV/JSON export** — GET `/api/board/[id]/export`; RFC-4180, names via listAssignees (email-free), subtasks included; Export dropdown. |
+| `cc54dd0` | **@mentions + comment resolution** (024) — server-parsed `comment_mention` (exact member name after `@`); bell says "mentioned you on"; resolve/reopen member-gated with two new actions. |
+| `a79ec40` | **Flow insights** — `/api/board/[id]/analytics` replays activity_log (lead/cycle time, weekly throughput, 30-day CFD) + workload; SVG charts in an Insights dialog. |
+| `d521a7c` | **Outbound webhooks** (025) — activity stream over HTTP, HMAC-signed (x-kanban-signature-256), queued post-commit from `logActivity` via after(); admin/human-only management in board switcher. |
+| `29b5319` | **SSRF gate** — webhook targets refuse loopback/RFC1918/link-local/metadata literals; `WEBHOOK_ALLOW_PRIVATE_NETWORK=1` is the self-hosted escape hatch (tests set it). |
+| `ddff98f` | **Milestones** (026) — board-scoped, task.milestone_id SET NULL on delete; progress vs done column; picker in task dialog, Milestones dialog, export column, `milestone.*` actions. |
+| `feb486c` | **Time tracking** (027) — `time_entry` minutes ledger; viewer-open logging, own-or-admin delete; `time.logged/deleted` actions with TimeSnapshot; Time section in the task dialog. |
 
-**Read `git show e749179` before touching this area — it is the design record.**
+Read each commit message before touching its area — they are the design records.
 
-## The headline correction to the previous handoff
+## Migrations
 
-The prior handoff framed M2 as "much scaffolding exists." A full re-map of
-`src/features/agents/**` this session found that framing undersold it badly:
-
-> **The M2 agent wedge is essentially fully built and tested, not stubbed.**
-
-Both doors, the shared tool layer, the three-tier approval model + changeset review
-UI, task claiming, budget enforcement, cost telemetry, and undo are all implemented
-and covered by real-DB tests. `mcp/README.md:83` ("Approval tiers and native agents
-are later M2 work") is **stale** — that work landed. What remains in M2 is polish,
-not construction (list below). The map lives only in this session's context; the
-build-vs-stub summary is reproduced under "Next up".
-
-Concretely, what already works end-to-end:
-- **Door 1** (`agents/server/runtime.ts`): `@anthropic-ai/sdk` `toolRunner` loop on
-  `claude-opus-4-8`, adaptive thinking, prompt-cached board prefix, per-turn cost
-  metering + budget halt. Triggered by assigning a task to a **native** agent.
-- **Door 2** (`mcp/server.mjs`): 10 tools over stdio, `x-agent-key` auth. This is
-  how Claude Code drives the board (see the auto-memory note).
-- **Approval** (`agents/server/gate.ts` + `review.ts`, UI `run-review.tsx`): auto /
-  changeset / block per §7.4, mounted in `task-dialog.tsx`.
-- **Budget** (`agents/server/budget.ts`, cap on `workspace.agent_budget_micros`).
-- **Claiming** (`010`, `tasks/server/claim.test.ts`), **undo** of auto-tier actions.
-
-## Current environment state (unchanged from prior handoff — still accurate)
-
-- **Dev stack** via `docker compose up -d` (auto-merges `docker-compose.override.yml`
-  → `next dev --webpack`, source **bind-mounted**, http://localhost:3000). Includes
-  **MinIO**: S3 API :9000, console :9001 (`minio` / `minio_dev_password`), volume
-  `kanban_minio`. Postgres on host **:5434**. All three containers were healthy this
-  session. Because source is bind-mounted, the running dev app picks up edits without
-  a rebuild — this session's new routes were confirmed live (401, not 404) against the
-  already-running container.
-- **Migrations 001–021 applied.** Apply new ones with:
-  `DATABASE_URL=$(grep '^DATABASE_URL=' .env.local | cut -d= -f2-) node scripts/migrate.mjs`
-- **Board is EMPTY** unless you created tasks. Sign in + create to see cards.
-- **`.env.local` (gitignored)** holds `DATABASE_URL`, `BETTER_AUTH_SECRET`, and the
-  S3 vars (`S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET=attachments`, `S3_ACCESS_KEY`,
-  `S3_SECRET_KEY`). The compose `app` service overrides `S3_ENDPOINT` to
-  `http://minio:9000`. `.mcp.json` (gitignored) holds a **live external agent key** —
-  do not print or commit it.
-
-## The recipe (unchanged) + verification bar
-
-Migration → types → repository → handlers → route → client api → UI wired into
-`board.tsx` / `task-dialog.tsx` / `page.tsx` / `board-switcher.tsx`. Per feature, all
-must pass before commit:
-- `npx tsc --noEmit` — clean.
-- `npx eslint <changed>` — clean. **Two pre-existing `react-hooks/set-state-in-effect`
-  errors are grandfathered and not yours:** `task-dialog.tsx` (form-sync effect) and
-  `members-dialog.tsx` (load-on-open effect). Any new dialog that mirrors the
-  load-on-open pattern (this session's `agents-dialog.tsx` does) inherits the same one
-  — that is accepted, not a regression.
-- `npm run build` with throwaway `DATABASE_URL`/`BETTER_AUTH_SECRET` — compiles; confirm
-  new routes appear in the route table.
-- Real side-effects get a **real-DB vitest** in `src/features/**/server/*.test.ts`.
-  Harness: create user(s)/workspace/board, act, assert, clean up in `afterAll` (delete
-  the workspace — it CASCADEs — and the users, then `pool.end()`). See
-  `agents/server/admin.test.ts` (this session), `agent-api.test.ts`, `claim.test.ts`.
-  Run with env exported:
-  `export DATABASE_URL=… BETTER_AUTH_SECRET=… S3_ENDPOINT=http://localhost:9000
-  S3_REGION=us-east-1 S3_BUCKET=attachments S3_ACCESS_KEY=minio
-  S3_SECRET_KEY=minio_dev_password; npx vitest run`.
-- Full suite is **355 tests / 26 files** green as of `e749179` (+7 from `admin.test.ts`).
+**001–027 applied** (022 type/estimate, 023 wip_limit, 024 comment thread,
+025 webhook, 026 milestone, 027 time_entry). Apply with
+`DATABASE_URL=$(grep '^DATABASE_URL=' .env.local | cut -d= -f2-) node scripts/migrate.mjs`.
 
 ## Gotchas (new this session, plus carried-over)
 
-- **`releaseClaimsOf`'s premise changed.** Its comment used to assert "an agent is
-  only deleted by workspace deletion, so there is never a stale agent claim to sweep."
-  Deleting an agent from the new UI breaks that — so `tasks/server/repository.ts` now
-  has `releaseAgentClaims` / `unassignAgent` (agent twins of the human sweeps), and
-  `deleteAgent` (`agents/server/admin.ts`) calls both before dropping the row. If you
-  add another way to delete an agent, route it through `deleteAgent`, not a raw DELETE.
-- **Agent management is human-session-gated, never agent-key.** `agents/server/handlers.ts`
-  splits: the runtime/review handlers use `getPrincipalFromRequest` (accepts an agent
-  key); the management handlers (`handleListAgents`/`handleCreateAgent`/`handleDeleteAgent`/
-  budget) use `getSessionFromRequest` (human only). Keep that split — an external token
-  must not mint or delete its peers.
-- **`queryOne` returns `undefined`, not `null`, for no row.** Assert `.toBeUndefined()`.
-- **An external agent's token is returned exactly once**, from `createAgent`'s result.
-  The list read has only the sha256 hash. The dialog surfaces it once in an amber box;
-  there is no way to re-fetch it. Minting reuses `hashAgentToken` (agent-auth) and the
-  `kbn_`+32-byte shape from `create-agent.mjs`, so both paths mint interchangeable keys.
-- **Assigning a task to a NATIVE agent triggers a run** (`updateTask` → `enqueueRun` →
-  `dispatchRun`). Tests that set up agent assignments/claims should use an **external**
-  agent or set the columns via raw SQL, to avoid firing the Anthropic loop.
-- Carried over: adding a `Task` field breaks 3 inline fixtures in
-  `tasks/components/{task-card,subtask-list,task-dialog}.test.tsx` (this session added
-  no `Task` field, so untouched); `task-dialog.test.tsx` mocks self-fetching sections;
-  **Next 16 ≠ standard Next** (read `node_modules/next/dist/docs/**`); dev↔prod compose
-  flip needs `--build --renew-anon-volumes`; React purity lint is strict; LF→CRLF git
-  warnings on commit are benign (Windows).
+- **A new snapshot family costs four touches**: the `*Action` union + `*Snapshot`
+  in `activity/types.ts`, the `Activity` union arm (feed rendering narrows on it),
+  the `ActivityInput` arm in `activity/server/repository.ts`, and bell verbs in
+  `notification-bell.tsx`. Milestone and Time both walked this path — copy them.
+- **`logActivity` now queues webhook delivery** (`webhooks/server/dispatch.ts`)
+  and RETURNING id. Delivery re-reads the row post-commit (rollback-safe) and is
+  a no-op outside a request scope; tests call `deliverActivity` directly.
+- **Webhook tests need `WEBHOOK_ALLOW_PRIVATE_NETWORK=1`** in the env (they
+  deliver to a 127.0.0.1 listener the SSRF gate rightly refuses otherwise).
+- **The 3 inline Task fixtures** (`task-card/subtask-list/task-dialog.test.tsx`)
+  grew `type`, `estimate`, `milestoneId`; the next Task field grows them again.
+  `board-column.test.tsx` now inlines a Column (wipLimit). `task-dialog.test.tsx`
+  mocks TimeSection alongside the other self-fetching sections.
+- **Milestone tenancy**: `assertMilestoneOnBoard` refuses cross-board aims with
+  not_found (anti-oracle). Deleting a milestone is member-level because SET NULL
+  un-aims without destroying.
+- Carried over: `queryOne` returns `undefined`; external-agent tokens (and now
+  webhook secrets) surface exactly once; assigning a task to a NATIVE agent fires
+  a run (tests use external agents); Next 16 ≠ standard Next; grandfathered
+  `react-hooks/set-state-in-effect` in task-dialog/members-dialog (agents-dialog,
+  and any load-on-open dialog, inherits it); LF→CRLF warnings benign.
 
-## Next up
+## Verification bar (unchanged) + suite size
 
-The M3 catalog is exhausted and the M2 wedge is built, so remaining work is **M2
-polish** (recommended — stay on the bet) or **`features.md` breadth** (coverage).
+tsc clean; eslint clean (grandfathered errors only); `npm run build` compiles
+with routes visible; real-DB vitest per feature. Full suite is now
+**390 tests / 36 files** (was 355/26).
 
-**M2 hardening — the real stub/gap list from the re-map (pick one, follow the recipe):**
-1. **`flag_blocker` tool** — named in §7.1's tool layer, exists in **neither** door.
-   Would let an agent record a `task_dependency` blocked-by edge (migration 018 already
-   exists), audited like every other action. Ties the runtime to the dependency feature.
-   *Recommended next slice.*
-2. **Durable run-queue drainer** — `dispatchRun` relies on `next/server after()`. A run
-   enqueued then interrupted (crash, or enqueued outside a request scope) stays `queued`
-   with no worker to pick it up. Recoverability is designed-for (`runtime.ts:283-302`)
-   but the drainer isn't built.
-3. **`agent_action.activity_id`** — column defined (013) but never populated by
-   `recordAction` (`gate.ts`). The action→activity_log link is dead; wiring it tightens
-   the audit story the wedge sells.
-4. **Haiku in the cost table** — `cost.ts` prices only `claude-opus-4-8`; §7.3's triage
-   model `claude-haiku-4-5` isn't there, so a haiku run would meter as $0.
-5. Stale doc: `mcp/README.md:83` still calls approval tiers + native agents "later work."
+## The feature-summary scoreboard
 
-**`features.md` breadth (steps off the wedge):** watchers/subscriptions, @mentions in
-comments, bulk actions, CSV/JSON export, keyboard shortcuts, card cover from an
-attachment. Surface **export formats** and anything touching **agent behaviour/budgets**
-via `AskUserQuestion` before building (product forks, per `devdocs/prd.md` §7/§12).
+`docs/task_management_feature_summary.md` now marks all 140 rows: **55 ✅ / 85 ❌**.
+The ❌s cluster where the honest answer is "different product" (docs/wiki, chat,
+sprints/Scrum, portfolio, SAFe), "certification not code" (SOC 2, ISO, HIPAA,
+uptime SLA), or "hosted-vendor integration" (Slack, Teams, Google/M365, Zapier).
 
-## Suggested skills for the next session
+## Next up (candidates, roughly by value)
 
-- **`AskUserQuestion`** — the direction is a genuine fork (M2 polish vs. breadth) and
-  export/agent-budget choices are product decisions; ask rather than silently pick. This
-  session used it to land on the agent-management UI.
-- **`Explore` / `general-purpose` agent** — to re-confirm a subsystem's state before
-  building; the M2 re-map this session materially corrected the prior handoff.
-- **`/code-review`** or **`/simplify`** — before shipping, at the chosen effort.
-- **`/handoff`** — regenerate **this file** (`devdocs/SESSION_HANDOFF.md`) at session end.
-  (Note: the generic skill default is to write to an OS temp dir; in this project the
-  handoff is the checked-in doc the next session reads, so it is regenerated here and
-  committed as `docs: update handoff`.)
+1. **Sprints/velocity/burndown** — the largest remaining coherent cluster;
+   estimate + done-column machinery is now in place to compute both charts.
+2. **M2 hardening leftovers from the previous handoff** — `flag_blocker` tool,
+   durable run-queue drainer, `agent_action.activity_id`, Haiku pricing in
+   `cost.ts`, stale `mcp/README.md:83`.
+3. **Timeline view** — needs a start-date field; estimate/milestone groundwork helps.
+4. **Threaded comments / rich text** — steps toward the Collaboration column.
+5. **Agent tools for the new fields** — set_estimate/set_type/aim_at_milestone in
+   both doors, so the wedge can use what this session built.
 
 ## To resume
 
-1. `docker compose up -d` (Postgres + MinIO + app; `--build --renew-anon-volumes` if the
-   last run was in prod mode or the app container lacks a dep).
-2. Confirm http://localhost:3000 serves; sign in; create a task if the board is empty.
-   To exercise the new agent UI: as an admin, open the board switcher → **Agents**.
-3. Pick the next slice (M2 hardening recommended — `flag_blocker` is the cleanest);
-   follow the recipe + verification bar; one commit; push. **Speak caveman.**
+1. `docker compose up -d`; confirm http://localhost:3000; migrations are applied
+   in the dev DB already.
+2. Exercise the new UI: list view checkboxes (bulk bar), board header (Milestones /
+   Insights / Export), column menu (WIP limit), board switcher (Webhooks), task
+   dialog (Type, Estimate, Milestone, Time, comment Resolve).
+3. Pick the next slice; follow the recipe + verification bar; one commit per
+   feature; push. **Speak caveman.**
