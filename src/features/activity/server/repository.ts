@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 
 import { query } from "@/shared/db/client";
 import type { Principal } from "@/features/auth/server/principal";
+import { queueDelivery } from "@/features/webhooks/server/dispatch";
 import {
   requireTaskRole,
   requireWorkspaceRole,
@@ -76,10 +77,11 @@ export async function logActivity(
   client: PoolClient,
   entry: ActivityInput
 ): Promise<void> {
-  await client.query(
+  const { rows } = await client.query<{ id: string }>(
     `INSERT INTO activity_log
        (workspace_id, board_id, task_id, actor_type, actor_id, action, before, after)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id`,
     [
       entry.workspaceId,
       entry.boardId,
@@ -91,6 +93,11 @@ export async function logActivity(
       entry.after ?? null,
     ]
   );
+  // Webhooks ride the log (025): every mutation already lands here, so this is
+  // the one seam that reaches them all. Queued, not sent — the delivery runs
+  // via after(), post-commit, and re-reads the row first so a rollback after
+  // this INSERT delivers nothing. See webhooks/server/dispatch.ts.
+  queueDelivery(rows[0].id);
 }
 
 // `id` is BIGSERIAL: pg returns int8 as a string rather than a number, because

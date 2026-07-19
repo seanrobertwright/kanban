@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, Check, ChevronDown, Plus, Users } from "lucide-react";
+import { Bot, Check, ChevronDown, Plus, Users, Webhook } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -16,6 +16,7 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import * as api from "../client/api";
 import { AgentsDialog } from "@/features/agents/components/agents-dialog";
+import { WebhooksDialog } from "@/features/webhooks/components/webhooks-dialog";
 import { CreateDialog } from "./create-dialog";
 import { MembersDialog } from "./members-dialog";
 import type { Board, WorkspaceMembership } from "../types";
@@ -38,6 +39,7 @@ export function BoardSwitcher({
   const router = useRouter();
   const [membersOpen, setMembersOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
+  const [webhooksOpen, setWebhooksOpen] = useState(false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   /** The workspace a new board is being created in, or null when idle. */
   const [newBoardIn, setNewBoardIn] = useState<WorkspaceMembership | null>(null);
@@ -147,6 +149,15 @@ export function BoardSwitcher({
                 <Bot /> Agents
               </DropdownMenuItem>
             )}
+            {/* Webhooks are infrastructure, so admin+ like agents (025). */}
+            {(currentWorkspace.role === "owner" ||
+              currentWorkspace.role === "admin") && (
+              <DropdownMenuItem
+                onClick={() => openLater(() => setWebhooksOpen(true))}
+              >
+                <Webhook /> Webhooks
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={() => openLater(() => setNewWorkspaceOpen(true))}
             >
@@ -166,6 +177,12 @@ export function BoardSwitcher({
       <AgentsDialog
         open={agentsOpen}
         onOpenChange={setAgentsOpen}
+        workspace={currentWorkspace}
+      />
+
+      <WebhooksDialog
+        open={webhooksOpen}
+        onOpenChange={setWebhooksOpen}
         workspace={currentWorkspace}
       />
 
