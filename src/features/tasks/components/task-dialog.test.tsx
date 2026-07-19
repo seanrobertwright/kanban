@@ -80,6 +80,7 @@ function task(over: Partial<Task> = {}): Task {
     parentId: null,
     subtaskCount: 0,
     blockedByCount: 0,
+    blockedByOpenCount: 0,
     recurrence: null,
     attachmentCount: 0,
     checklist: { total: 0, done: 0 },

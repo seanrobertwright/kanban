@@ -50,6 +50,7 @@ export function taskColumns(alias = ""): string {
           ${labelsSubquery(self)} AS labels,
           ${subtaskCountSubquery(self)} AS "subtaskCount",
           ${blockedBySubquery(self)} AS "blockedByCount",
+          ${blockedByOpenSubquery(self)} AS "blockedByOpenCount",
           ${recurrenceSubquery(self)} AS recurrence,
           ${attachmentCountSubquery(self)} AS "attachmentCount",
           ${checklistSubquery(self)} AS checklist`;
@@ -104,6 +105,35 @@ function recurrenceSubquery(taskRef: string): string {
 function blockedBySubquery(taskRef: string): string {
   return `(SELECT COUNT(*)::int FROM task_dependency td
              WHERE td.task_id = ${taskRef})`;
+}
+
+/**
+ * How many of this task's blockers are still *open* — not yet in their board's
+ * done column (018 + 020). This is the "blocked vs unblocked" the dependency
+ * feature deferred for want of a completion notion; 020's board.done_column_id is
+ * that notion, so the answer can finally be computed.
+ *
+ * The honest zero is the load-bearing part: a blocker counts as open only when a
+ * done column EXISTS (done_column_id IS NOT NULL) and the blocker is not in it. A
+ * board with no done column has no notion of "finished", so this returns 0 rather
+ * than claiming every dependency blocks — the card then shows the neutral "depends
+ * on N" it always did, never a false "blocked". blockedByCount stays the total, so
+ * the card can tell "blocked by unfinished work" from "depends on work that is
+ * done".
+ *
+ * ::int for the bigint-as-string trap; `taskRef` qualified for labelsSubquery's.
+ * The joins walk each blocker to its own board's done column — a blocker is always
+ * on the same board (addDependency enforces it), but the join makes no assumption.
+ */
+function blockedByOpenSubquery(taskRef: string): string {
+  return `(SELECT COUNT(*)::int
+             FROM task_dependency td
+             JOIN task blk ON blk.id = td.depends_on_task_id
+             JOIN board_column bbc ON bbc.id = blk.column_id
+             JOIN board bb ON bb.id = bbc.board_id
+            WHERE td.task_id = ${taskRef}
+              AND bb.done_column_id IS NOT NULL
+              AND blk.column_id <> bb.done_column_id)`;
 }
 
 /**

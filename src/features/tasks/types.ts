@@ -122,6 +122,14 @@ export interface Task {
    */
   blockedByCount: number;
   /**
+   * How many blockers are still *open* — not yet in their board's done column
+   * (020). The "blocked vs unblocked" the dependency card deferred: when this is
+   * > 0 the task is genuinely blocked by unfinished work; when it is 0 the
+   * blockers (if any) are all done, or the board has no done column to judge by.
+   * Always ≤ blockedByCount. Derived, and absent from TaskSnapshot for its reason.
+   */
+  blockedByOpenCount: number;
+  /**
    * The cadence this task repeats on (020), or null if it does not recur.
    *
    * The live occurrence carries the rule; completing it (moving it into the

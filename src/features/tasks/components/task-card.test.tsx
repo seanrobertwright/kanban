@@ -37,6 +37,7 @@ function task(over: Partial<Task> = {}): Task {
     parentId: null,
     subtaskCount: 0,
     blockedByCount: 0,
+    blockedByOpenCount: 0,
     recurrence: null,
     attachmentCount: 0,
     checklist: { total: 0, done: 0 },
@@ -189,5 +190,34 @@ describe("TaskCard subtask count", () => {
     // space to say nothing — the same call the priority dot makes for 'none'.
     render(card({ subtaskCount: 0 }));
     expect(screen.queryByText("0")).toBeNull();
+  });
+});
+
+describe("TaskCard dependency state", () => {
+  it("reads as blocked, with the open count, when blockers are unfinished", () => {
+    // blockedByOpenCount > 0 is the real "blocked" (020's done column made it
+    // knowable): the task waits on unfinished work, so the badge shows how many
+    // are still open and says so for a screen reader.
+    render(card({ blockedByCount: 3, blockedByOpenCount: 2 }));
+    expect(screen.getByTitle("Blocked by 2 unfinished tasks")).toBeDefined();
+    expect(screen.getByText("2")).toBeDefined();
+  });
+
+  it("says one unfinished task, singular", () => {
+    render(card({ blockedByCount: 1, blockedByOpenCount: 1 }));
+    expect(screen.getByTitle("Blocked by 1 unfinished task")).toBeDefined();
+  });
+
+  it("reads as a neutral dependency when every blocker is done", () => {
+    // Has blockers, none open — all finished, or no done column to judge by. Not
+    // blocked, so the neutral "depends on N" rather than the destructive state.
+    render(card({ blockedByCount: 2, blockedByOpenCount: 0 }));
+    expect(screen.getByTitle("Depends on 2 tasks")).toBeDefined();
+    expect(screen.queryByTitle(/unfinished/)).toBeNull();
+  });
+
+  it("shows no dependency badge when a task depends on nothing", () => {
+    render(card({ blockedByCount: 0, blockedByOpenCount: 0 }));
+    expect(screen.queryByTitle(/Depends on|Blocked by/)).toBeNull();
   });
 });

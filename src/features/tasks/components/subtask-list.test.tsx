@@ -29,6 +29,7 @@ function subtask(over: Partial<Task> = {}): Task {
     parentId: 1,
     subtaskCount: 0,
     blockedByCount: 0,
+    blockedByOpenCount: 0,
     recurrence: null,
     attachmentCount: 0,
     checklist: { total: 0, done: 0 },

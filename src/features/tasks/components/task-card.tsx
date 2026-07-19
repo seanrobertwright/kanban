@@ -256,23 +256,36 @@ export function TaskCard({
                 </span>
               </span>
             )}
-            {/* How many tasks must finish first (018). The count only, never
-                "blocked" vs "unblocked" — that needs to know a blocker is done,
-                and "done" needs a completion notion the board does not have
-                (columns are user-defined). The link icon says this card is part
-                of a chain; the dialog says what it waits on. */}
-            {task.blockedByCount > 0 && (
-              <span
-                className="flex items-center gap-0.5 text-xs tabular-nums text-muted-foreground"
-                title={`Blocked by ${task.blockedByCount} task${
-                  task.blockedByCount === 1 ? "" : "s"
-                }`}
-              >
-                <Link2 className="size-3.5" aria-hidden="true" />
-                <span className="sr-only">Blocked by: </span>
-                {task.blockedByCount}
-              </span>
-            )}
+            {/* Dependencies (018), now with a real blocked state (020's done
+                column made it knowable). Two readings, and colour tells them
+                apart: blockedByOpenCount > 0 means the task waits on unfinished
+                work — the destructive red and the count of what is still open.
+                Otherwise the blockers are all done (or there is no done column to
+                judge by), so it reads as a neutral "depends on N". */}
+            {task.blockedByCount > 0 &&
+              (task.blockedByOpenCount > 0 ? (
+                <span
+                  className="flex items-center gap-0.5 text-xs tabular-nums font-medium text-destructive"
+                  title={`Blocked by ${task.blockedByOpenCount} unfinished task${
+                    task.blockedByOpenCount === 1 ? "" : "s"
+                  }`}
+                >
+                  <Link2 className="size-3.5" aria-hidden="true" />
+                  <span className="sr-only">Blocked by: </span>
+                  {task.blockedByOpenCount}
+                </span>
+              ) : (
+                <span
+                  className="flex items-center gap-0.5 text-xs tabular-nums text-muted-foreground"
+                  title={`Depends on ${task.blockedByCount} task${
+                    task.blockedByCount === 1 ? "" : "s"
+                  }`}
+                >
+                  <Link2 className="size-3.5" aria-hidden="true" />
+                  <span className="sr-only">Depends on: </span>
+                  {task.blockedByCount}
+                </span>
+              ))}
             {/* The count only, never a "2 of 5 done": completion would need a
                 second query per card (how many pieces sit in a done column, and
                 which columns are "done" is user-defined and unknowable here).
