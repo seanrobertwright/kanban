@@ -1,5 +1,5 @@
-import { queryOne } from "@/shared/db/client";
-import { AuthzError } from "@/features/workspaces/server/authz";
+import { query, queryOne } from "@/shared/db/client";
+import { AuthzError, requireWorkspaceRole } from "@/features/workspaces/server/authz";
 
 /**
  * The per-workspace agent budget — §7.3's "non-negotiable" financial guardrail,
@@ -72,4 +72,40 @@ export async function assertUnderBudget(workspaceId: string): Promise<void> {
       "This workspace has reached its agent budget cap for the month"
     );
   }
+}
+
+/**
+ * The budget as the settings surface reads it — getBudget behind an admin gate.
+ * Admin, not viewer: the cap is a financial control and the spend is spend, both
+ * of a piece with the agent-management surface (admin.ts) it is shown beside, not
+ * with the assignee-picker roster any member sees.
+ */
+export async function getBudgetFor(
+  actorId: string,
+  workspaceId: string
+): Promise<Budget> {
+  await requireWorkspaceRole(actorId, workspaceId, "admin");
+  return getBudget(workspaceId);
+}
+
+/**
+ * Sets or clears the workspace cap (§7.3). Admin-only — it decides how much the
+ * workspace may spend on agents, which is the same class of decision as who may
+ * act in it. `null` clears the cap back to uncapped (014's honest default until
+ * pricing is decided, §12 Q1); a number is micro-dollars, the unit the column
+ * and cost_micros share so the loop's compare needs no conversion. The caller
+ * (handler) has already rejected a negative or non-integer value; this trusts a
+ * clean input and returns the budget as it now stands, spend included.
+ */
+export async function setBudget(
+  actorId: string,
+  workspaceId: string,
+  capMicros: number | null
+): Promise<Budget> {
+  await requireWorkspaceRole(actorId, workspaceId, "admin");
+  await query(`UPDATE workspace SET agent_budget_micros = $2 WHERE id = $1`, [
+    workspaceId,
+    capMicros,
+  ]);
+  return getBudget(workspaceId);
 }

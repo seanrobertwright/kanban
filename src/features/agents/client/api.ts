@@ -1,4 +1,10 @@
-import type { RunDetail } from "../types";
+import type {
+  AgentDetail,
+  CreatedAgent,
+  NewAgentInput,
+  RunDetail,
+  WorkspaceBudget,
+} from "../types";
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -41,4 +47,58 @@ export function revertAction(actionId: string): Promise<void> {
       );
     }
   });
+}
+
+// --- Agent management (admin) ---
+
+/** Every agent in a workspace (admin-only server-side). */
+export function fetchAgents(workspaceId: string): Promise<AgentDetail[]> {
+  return fetch(`/api/workspaces/${workspaceId}/agents`, {
+    cache: "no-store",
+  }).then((res) => jsonOrThrow<AgentDetail[]>(res));
+}
+
+/** Mint an agent. The returned `token` (external kind only) is shown once. */
+export function createAgent(
+  workspaceId: string,
+  input: NewAgentInput
+): Promise<CreatedAgent> {
+  return fetch(`/api/workspaces/${workspaceId}/agents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((res) => jsonOrThrow<CreatedAgent>(res));
+}
+
+/** Retire an agent. Rejects (409) if it has a run in flight. */
+export function deleteAgent(workspaceId: string, agentId: string): Promise<void> {
+  return fetch(`/api/workspaces/${workspaceId}/agents/${agentId}`, {
+    method: "DELETE",
+  }).then(async (res) => {
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(
+        (body as { error?: string } | null)?.error ?? `Request failed (${res.status})`
+      );
+    }
+  });
+}
+
+/** The workspace's agent budget — cap and month-to-date spend, micro-dollars. */
+export function fetchBudget(workspaceId: string): Promise<WorkspaceBudget> {
+  return fetch(`/api/workspaces/${workspaceId}/budget`, {
+    cache: "no-store",
+  }).then((res) => jsonOrThrow<WorkspaceBudget>(res));
+}
+
+/** Set or clear the cap. `capMicros` null = uncapped. */
+export function setBudget(
+  workspaceId: string,
+  capMicros: number | null
+): Promise<WorkspaceBudget> {
+  return fetch(`/api/workspaces/${workspaceId}/budget`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ capMicros }),
+  }).then((res) => jsonOrThrow<WorkspaceBudget>(res));
 }

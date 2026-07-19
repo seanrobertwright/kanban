@@ -948,9 +948,9 @@ export async function releaseTask(
  * An invariant enforced on the way in and abandoned on the way out is not one.
  *
  * Only claimed_by_type = 'human': a departing user's holds, not an agent's. An
- * agent belongs to one workspace and is only deleted by that workspace's
- * deletion, which CASCADEs the tasks away — so there is never a stale agent claim
- * to sweep, and typing the filter says so rather than leaving it to chance.
+ * agent's stale holds are swept by releaseAgentClaims on the one path that can
+ * strand one — deleting the agent itself (admin.ts). Splitting the two by
+ * claimed_by_type keeps each sweep to the principal whose departure caused it.
  *
  * Takes the caller's transaction client, like unassignFromWorkspace and for its
  * reason: these releases must commit with the membership deletion that caused
@@ -1039,6 +1039,98 @@ export async function unassignFromWorkspace(
 
   await client.query(
     `UPDATE task SET assignee_id = NULL WHERE id = ANY($1::int[])`,
+    [rows.map((t) => t.id)]
+  );
+
+  for (const task of rows) {
+    await logActivity(client, {
+      workspaceId,
+      boardId: task.boardId,
+      taskId: task.id,
+      actor,
+      action: "task.assigned",
+      before: snapshot(task),
+      after: { ...snapshot(task), assignee: null },
+    });
+  }
+  return rows.length;
+}
+
+/**
+ * releaseClaimsOf and unassignFromWorkspace, aimed at a departing *agent* rather
+ * than a departing human — the cleanup deleteAgent (admin.ts) must run before it
+ * drops the row.
+ *
+ * They are two functions, not one filtered by actor kind, because the two peers
+ * (011) live in different columns and dangle in different ways when the agent is
+ * deleted. task.agent_id carries an FK with ON DELETE SET NULL, so a raw DELETE
+ * would null the assignment on its own — but *silently*, with no activity_log row
+ * to say the agent left the card. task.claimed_by carries no FK at all (010, it
+ * is polymorphic TEXT), so a raw DELETE leaves a hold pointing at an agent that
+ * no longer exists, blocking the task for everyone until an admin breaks it. One
+ * is an audit gap, the other is a stuck task; both are closed here, on the way
+ * out, for the reason stated one function up — an invariant abandoned on the way
+ * out is not an invariant.
+ */
+export async function releaseAgentClaims(
+  client: PoolClient,
+  workspaceId: string,
+  agentId: string,
+  actor: Actor
+): Promise<number> {
+  const { rows } = await client.query<Task & { boardId: number }>(
+    `SELECT ${taskColumns("t")}, bc.board_id AS "boardId"
+       FROM task t
+       JOIN board_column bc ON bc.id = t.column_id
+       JOIN board b ON b.id = bc.board_id
+      WHERE b.workspace_id = $1
+        AND t.claimed_by = $2 AND t.claimed_by_type = 'agent'`,
+    [workspaceId, agentId]
+  );
+  if (rows.length === 0) return 0;
+
+  await client.query(
+    `UPDATE task
+        SET claimed_by = NULL, claimed_by_type = NULL, claimed_at = NULL
+      WHERE id = ANY($1::int[])`,
+    [rows.map((t) => t.id)]
+  );
+
+  for (const task of rows) {
+    await logActivity(client, {
+      workspaceId,
+      boardId: task.boardId,
+      taskId: task.id,
+      actor,
+      action: "task.released",
+      before: snapshot(task),
+      after: { ...snapshot(task), claimedBy: null },
+    });
+  }
+  return rows.length;
+}
+
+/** Clears an agent's assignments across a workspace, logging each — the agent
+ *  twin of unassignFromWorkspace, filtered on agent_id. See releaseAgentClaims
+ *  for why the assignment is unassigned here rather than left to the SET NULL. */
+export async function unassignAgent(
+  client: PoolClient,
+  workspaceId: string,
+  agentId: string,
+  actor: Actor
+): Promise<number> {
+  const { rows } = await client.query<Task & { boardId: number }>(
+    `SELECT ${taskColumns("t")}, bc.board_id AS "boardId"
+       FROM task t
+       JOIN board_column bc ON bc.id = t.column_id
+       JOIN board b ON b.id = bc.board_id
+      WHERE b.workspace_id = $1 AND t.agent_id = $2`,
+    [workspaceId, agentId]
+  );
+  if (rows.length === 0) return 0;
+
+  await client.query(
+    `UPDATE task SET agent_id = NULL WHERE id = ANY($1::int[])`,
     [rows.map((t) => t.id)]
   );
 

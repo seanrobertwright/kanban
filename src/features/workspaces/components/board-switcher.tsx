@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronDown, Plus, Users } from "lucide-react";
+import { Bot, Check, ChevronDown, Plus, Users } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import * as api from "../client/api";
+import { AgentsDialog } from "@/features/agents/components/agents-dialog";
 import { CreateDialog } from "./create-dialog";
 import { MembersDialog } from "./members-dialog";
 import type { Board, WorkspaceMembership } from "../types";
@@ -36,6 +37,7 @@ export function BoardSwitcher({
 }: BoardSwitcherProps) {
   const router = useRouter();
   const [membersOpen, setMembersOpen] = useState(false);
+  const [agentsOpen, setAgentsOpen] = useState(false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   /** The workspace a new board is being created in, or null when idle. */
   const [newBoardIn, setNewBoardIn] = useState<WorkspaceMembership | null>(null);
@@ -135,6 +137,16 @@ export function BoardSwitcher({
             >
               <Users /> Members
             </DropdownMenuItem>
+            {/* Managing agents is admin+, so viewers and members are not offered
+                an action the server would refuse. */}
+            {(currentWorkspace.role === "owner" ||
+              currentWorkspace.role === "admin") && (
+              <DropdownMenuItem
+                onClick={() => openLater(() => setAgentsOpen(true))}
+              >
+                <Bot /> Agents
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={() => openLater(() => setNewWorkspaceOpen(true))}
             >
@@ -149,6 +161,12 @@ export function BoardSwitcher({
         onOpenChange={setMembersOpen}
         workspace={currentWorkspace}
         currentUserId={currentUserId}
+      />
+
+      <AgentsDialog
+        open={agentsOpen}
+        onOpenChange={setAgentsOpen}
+        workspace={currentWorkspace}
       />
 
       <CreateDialog
