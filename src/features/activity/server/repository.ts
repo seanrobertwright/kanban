@@ -2,7 +2,10 @@ import type { PoolClient } from "pg";
 
 import { query } from "@/shared/db/client";
 import type { Principal } from "@/features/auth/server/principal";
-import { requireTaskRole } from "@/features/workspaces/server/authz";
+import {
+  requireTaskRole,
+  requireWorkspaceRole,
+} from "@/features/workspaces/server/authz";
 import type {
   Activity,
   ActivityAction,
@@ -14,8 +17,10 @@ import type {
   CommentSnapshot,
   LabelAction,
   LabelSnapshot,
+  NotificationEntry,
   TaskAction,
   TaskSnapshot,
+  WorkspaceNotifications,
 } from "../types";
 
 interface ActivityInputBase {
@@ -135,6 +140,91 @@ export async function listActivityForTask(
       ORDER BY al.id DESC`,
     [taskId]
   );
+}
+
+const NOTIFICATION_LIMIT = 30;
+
+/**
+ * The workspace's recent activity as a member's notification feed, plus how much
+ * of it is unread.
+ *
+ * "By someone other than me": your own actions are not news to you, so a human
+ * actor whose id is the reader is excluded — but only humans, since an agent
+ * sharing no id space with a user could never collide, and an agent's actions
+ * ARE news (the wedge: you want to know what the agent did on your board).
+ *
+ * taskTitle is COALESCEd out of the row first, then the snapshot: a live task
+ * resolves through the join, and a deleted one — whose row is gone but whose
+ * task.deleted entry is exactly what a reader wants to see — resolves from the
+ * `before`/`after` snapshot that still names it. Null only for column and label
+ * entries, which are not about a task at all.
+ *
+ * Unread is counted unbounded (idx_activity_log_workspace covers it) while the
+ * list is capped, so a badge reads "50" even though the dropdown shows 30.
+ */
+export async function listWorkspaceNotifications(
+  userId: string,
+  workspaceId: string
+): Promise<WorkspaceNotifications> {
+  await requireWorkspaceRole(userId, workspaceId, "viewer");
+
+  const seen = await query<{ lastSeenAt: string }>(
+    `SELECT last_seen_at AS "lastSeenAt" FROM notification_seen
+      WHERE user_id = $1 AND workspace_id = $2`,
+    [userId, workspaceId]
+  );
+  const lastSeenAt = seen[0]?.lastSeenAt ?? null;
+
+  const notMine = `NOT (al.actor_type = 'human' AND al.actor_id = $2)`;
+
+  const items = await query<NotificationEntry>(
+    `SELECT ${ACTIVITY_COLUMNS},
+            COALESCE(u.name, ag.name) AS "actorName",
+            COALESCE(u.image, ag.image) AS "actorImage",
+            COALESCE(t.title, al.after->>'title', al.before->>'title')
+              AS "taskTitle"
+       FROM activity_log al
+       LEFT JOIN "user" u
+         ON u.id = al.actor_id AND al.actor_type = 'human'
+       LEFT JOIN agent ag
+         ON ag.id = al.actor_id AND al.actor_type = 'agent'
+       LEFT JOIN task t ON t.id = al.task_id
+      WHERE al.workspace_id = $1 AND ${notMine}
+      ORDER BY al.id DESC
+      LIMIT ${NOTIFICATION_LIMIT}`,
+    [workspaceId, userId]
+  );
+
+  // COALESCE the marker to epoch so a member who has never looked sees every
+  // entry counted rather than none.
+  const counted = await query<{ n: string }>(
+    `SELECT count(*) AS n FROM activity_log al
+      WHERE al.workspace_id = $1 AND ${notMine}
+        AND al.created_at > COALESCE($3::timestamptz, 'epoch'::timestamptz)`,
+    [workspaceId, userId, lastSeenAt]
+  );
+
+  return { items, unreadCount: Number(counted[0]?.n ?? 0), lastSeenAt };
+}
+
+/**
+ * Moves the reader's last-seen marker to now — "mark all read". One UPSERT, so
+ * clearing a hundred unread entries is a single write, not a hundred.
+ */
+export async function markNotificationsSeen(
+  userId: string,
+  workspaceId: string
+): Promise<string> {
+  await requireWorkspaceRole(userId, workspaceId, "viewer");
+  const rows = await query<{ lastSeenAt: string }>(
+    `INSERT INTO notification_seen (user_id, workspace_id, last_seen_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (user_id, workspace_id)
+     DO UPDATE SET last_seen_at = now()
+     RETURNING last_seen_at AS "lastSeenAt"`,
+    [userId, workspaceId]
+  );
+  return rows[0].lastSeenAt;
 }
 
 /** Test/diagnostic reader: the raw rows for a task, without the actor join. */

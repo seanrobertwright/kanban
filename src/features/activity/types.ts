@@ -404,3 +404,20 @@ export type ActivityEntry = Activity & {
   actorName: string | null;
   actorImage: string | null;
 };
+
+/**
+ * An activity entry as the notification bell shows it: the actor-joined entry
+ * plus the title of the task it concerns, so the feed can say what was touched
+ * without the reader resolving it. Null for column/label entries (no task) and
+ * resolved from the snapshot for a deleted task, whose row is gone but whose
+ * `before`/`after` still names it.
+ */
+export type NotificationEntry = ActivityEntry & { taskTitle: string | null };
+
+export interface WorkspaceNotifications {
+  items: NotificationEntry[];
+  /** Entries newer than the reader's last-seen marker, by someone other than them. */
+  unreadCount: number;
+  /** The reader's last-seen timestamp, or null if they have never looked. */
+  lastSeenAt: string | null;
+}

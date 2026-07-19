@@ -1,7 +1,14 @@
 import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
-import { unauthorized } from "@/features/auth/server/session";
+import {
+  getSessionFromRequest,
+  unauthorized,
+} from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
-import { listActivityForTask } from "./repository";
+import {
+  listActivityForTask,
+  listWorkspaceNotifications,
+  markNotificationsSeen,
+} from "./repository";
 
 // getPrincipalFromRequest, not getSessionFromRequest: a task's history is part of
 // the same access path §7.1 says an agent shares with a human, so the MCP door's
@@ -19,6 +26,41 @@ export async function handleListTaskActivity(request: Request, id: string) {
 
   try {
     return Response.json(await listActivityForTask(principal, taskId));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+// Human-only, unlike the task feed above: the notification bell is a person's
+// inbox. An agent has no bell — it reads the board it acts on, it does not get
+// pinged about it.
+export async function handleListNotifications(
+  request: Request,
+  workspaceId: string
+) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  try {
+    return Response.json(
+      await listWorkspaceNotifications(session.user.id, workspaceId)
+    );
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleMarkNotificationsSeen(
+  request: Request,
+  workspaceId: string
+) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  try {
+    const lastSeenAt = await markNotificationsSeen(
+      session.user.id,
+      workspaceId
+    );
+    return Response.json({ lastSeenAt });
   } catch (error) {
     return authzErrorResponse(error);
   }

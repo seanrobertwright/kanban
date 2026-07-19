@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { listWorkspaceAgents } from "@/features/agents/server/repository";
+import { NotificationBell } from "@/features/activity/components/notification-bell";
 import { UserMenu } from "@/features/auth/components/user-menu";
 import { getSession } from "@/features/auth/server/session";
 import { Board } from "@/features/board/components/board";
@@ -104,6 +105,7 @@ export default async function Home({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <NotificationBell workspaceId={data.board.workspaceId} />
           <ThemeToggle />
           <UserMenu user={session.user} />
         </div>
