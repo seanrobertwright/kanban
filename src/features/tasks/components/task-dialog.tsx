@@ -11,6 +11,7 @@ import { AttachmentSection } from "@/features/attachments/components/attachment-
 import { ChecklistSection } from "@/features/checklists/components/checklist-section";
 import { DependencySection } from "@/features/dependencies/components/dependency-section";
 import { CommentThread } from "@/features/comments/components/comment-thread";
+import { TimeSection } from "@/features/time/components/time-section";
 import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
 import type { Label as LabelData } from "@/features/labels/types";
@@ -607,6 +608,14 @@ export function TaskDialog({
                 key={`attachments-${task.id}`}
                 taskId={task.id}
                 onChanged={onDependenciesChanged}
+              />
+              {/* The time ledger (027). Any task can carry hours — a piece's
+                  work is still work — so like the checklist it is not gated on
+                  isSubtask. Writes log history, so it bumps the feed. */}
+              <TimeSection
+                key={`time-${task.id}`}
+                taskId={task.id}
+                onChanged={() => setActivityVersion((v) => v + 1)}
               />
               {/* An agent run's review sits above the thread: it is what a human
                   came to this task to resolve when the agent has proposed work.

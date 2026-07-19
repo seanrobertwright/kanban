@@ -200,6 +200,16 @@ function describe(
       return "resolved a comment";
     case "comment.reopened":
       return "reopened a comment";
+    case "time.logged": {
+      const logged = entry.after;
+      // The minutes are the event — "logged 45m" reads as a fact, where
+      // "logged time" reads as a shrug.
+      return logged && "minutes" in logged
+        ? `logged ${logged.minutes}m`
+        : "logged time";
+    }
+    case "time.deleted":
+      return "removed a time entry";
     case "comment.deleted": {
       const author = entry.before?.author;
       if (!author) return "deleted a comment";

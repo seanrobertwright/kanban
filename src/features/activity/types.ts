@@ -185,12 +185,19 @@ export type MilestoneAction =
   | "milestone.updated"
   | "milestone.deleted";
 
+/**
+ * The time ledger (027). Logged and deleted, never edited — a wrong entry is
+ * retracted and re-logged, which keeps each row one attributable fact.
+ */
+export type TimeAction = "time.logged" | "time.deleted";
+
 export type ActivityAction =
   | TaskAction
   | CommentAction
   | ColumnAction
   | LabelAction
-  | MilestoneAction;
+  | MilestoneAction
+  | TimeAction;
 
 /** What a task looked like at one instant. */
 export interface TaskSnapshot {
@@ -381,12 +388,26 @@ export interface MilestoneSnapshot {
   dueDate: string | null;
 }
 
+/**
+ * What a time entry said (027). Carries `by` for CommentSnapshot.author's
+ * reason: an admin deleting someone's entry makes actor and author two
+ * different people, and the row must say whose minutes vanished.
+ */
+export interface TimeSnapshot {
+  timeEntryId: number;
+  minutes: number;
+  spentOn: string;
+  note: string;
+  by: Actor;
+}
+
 export type Snapshot =
   | TaskSnapshot
   | CommentSnapshot
   | ColumnSnapshot
   | LabelSnapshot
-  | MilestoneSnapshot;
+  | MilestoneSnapshot
+  | TimeSnapshot;
 
 interface ActivityBase {
   id: string;
@@ -433,11 +454,25 @@ export interface LabelActivity extends ActivityBase {
   after: LabelSnapshot | null;
 }
 
+export interface MilestoneActivity extends ActivityBase {
+  action: MilestoneAction;
+  before: MilestoneSnapshot | null;
+  after: MilestoneSnapshot | null;
+}
+
+export interface TimeActivity extends ActivityBase {
+  action: TimeAction;
+  before: TimeSnapshot | null;
+  after: TimeSnapshot | null;
+}
+
 export type Activity =
   | TaskActivity
   | CommentActivity
   | ColumnActivity
-  | LabelActivity;
+  | LabelActivity
+  | MilestoneActivity
+  | TimeActivity;
 
 /**
  * An activity joined to the human who caused it, for rendering.

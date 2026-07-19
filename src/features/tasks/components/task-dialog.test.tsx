@@ -25,6 +25,9 @@ vi.mock("@/features/dependencies/components/dependency-section", () => ({
 vi.mock("@/features/attachments/components/attachment-section", () => ({
   AttachmentSection: () => null,
 }));
+vi.mock("@/features/time/components/time-section", () => ({
+  TimeSection: () => null,
+}));
 
 const LABELS: LabelData[] = [
   {
