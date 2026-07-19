@@ -21,6 +21,7 @@ entire "Next up" catalog the prior handoff listed.
 
 | Commit | Feature |
 |--------|---------|
+| `10d7425` | **Blocked-vs-unblocked card state** — completes 018's deferred criterion using 020's done column. Derived `Task.blockedByOpenCount` (blockers not yet in their board's done column); card reads red "blocked by N unfinished" vs muted "depends on N". Derived-only, no migration. |
 | `c9ab1cb` | **Attachments** — files on a task; metadata in PG, bytes in S3-compatible store (MinIO local). Migration 021 + `attachment` table. Proxy upload/download (authz per byte), not presigned. |
 | `3e4424c` | **Recurring tasks** — daily/weekly/monthly, spawn-on-complete. Migration 020: `board.done_column_id` + `task_recurrence`. Completion = moving a recurring task into the board's designated done column; successor born in first column, rule handed over. |
 | `2733806` | docs: caveman rule in CLAUDE.md |
@@ -71,16 +72,17 @@ commit:
   `export DATABASE_URL=… BETTER_AUTH_SECRET=… S3_ENDPOINT=http://localhost:9000
   S3_REGION=us-east-1 S3_BUCKET=attachments S3_ACCESS_KEY=minio
   S3_SECRET_KEY=minio_dev_password; npx vitest run`.
-- Full suite is **344 tests / 25 files** green as of `c9ab1cb`.
+- Full suite is **348 tests / 25 files** green as of `10d7425`.
 
 ## Gotchas (new this session, plus carried-over)
 
 - **Adding a `Task` field breaks 3 inline fixtures** in
   `src/features/tasks/components/{task-card,subtask-list,task-dialog}.test.tsx`.
-  The card now carries five derived counts/flags via correlated subqueries in
+  The card now carries six derived counts/flags via correlated subqueries in
   `taskColumns()` (`src/features/tasks/server/task-row.ts`): `subtaskCount`,
-  `blockedByCount`, `recurrence`, `attachmentCount`, `checklist`. Each is one
-  subquery per board row — fine at current scale, revisit when boards paginate.
+  `blockedByCount`, `blockedByOpenCount`, `recurrence`, `attachmentCount`,
+  `checklist`. Each is one subquery per board row — fine at current scale, revisit
+  when boards paginate.
 - **`task-dialog.test.tsx` mocks the self-fetching sections** (subtask-list,
   dependency-section, attachment-section) so the dialog test stays hermetic. Add a
   `vi.mock` for any new self-fetching section you mount in the dialog.
@@ -109,8 +111,9 @@ Suggested directions, pick with the owner if unsure:
    relations beyond blocked_by**, **CSV/JSON export**, **keyboard shortcuts**).
 3. **Attachments follow-ups**: the orphaned-object sweeper; presigned URLs for
    large files; inline image preview / card cover from an attachment.
-4. **Dependencies follow-up**: the "blocked vs unblocked" card state now that a
-   done-column completion notion exists (020) — previously deferred for want of it.
+
+(The prior "blocked vs unblocked" dependency follow-up was completed this
+session — `10d7425`.)
 
 Product forks to surface via `AskUserQuestion` before building (don't silently
 pick): anything touching agent behaviour/budgets (§7), and export formats.
