@@ -600,6 +600,9 @@ export function Board({
         // Adding or removing a piece changes the parent's count, which the card
         // renders — so the board is stale and refetches.
         onSubtasksChanged={refresh}
+        // A blocker added or removed changes the card's blocked-by count, the
+        // same staleness for the same reason.
+        onDependenciesChanged={refresh}
       />
       <LabelsDialog
         open={labelsOpen}

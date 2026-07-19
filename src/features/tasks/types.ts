@@ -80,6 +80,20 @@ export interface Task {
    */
   subtaskCount: number;
   /**
+   * How many tasks this one is blocked by — the count of its dependency edges
+   * (018). Derived like subtaskCount, and absent from TaskSnapshot for its
+   * reason: a dependency is a relationship between two tasks, not state this one
+   * holds, so undo has no use for it and the migration keeps it out of the log
+   * entirely. 0 when the task waits on nothing.
+   *
+   * The count only — never "blocked" vs "unblocked", which would need to know a
+   * blocker is finished, and "finished" needs a done-state the board does not
+   * have (columns are user-defined). The card shows the relationship exists; a
+   * done-aware badge is a deliberate follow-up. The blockers themselves are
+   * fetched only when the dialog opens, exactly as subtasks and checklist items.
+   */
+  blockedByCount: number;
+  /**
    * Checklist progress — {total, done} — for the card's "2/5" badge (017).
    *
    * Derived, not stored, and absent from TaskSnapshot for subtaskCount's reason:

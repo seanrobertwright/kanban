@@ -8,6 +8,7 @@ import type { Actor } from "@/features/activity/types";
 import type { AgentSummary } from "@/features/agents/types";
 import { RunReview } from "@/features/agents/components/run-review";
 import { ChecklistSection } from "@/features/checklists/components/checklist-section";
+import { DependencySection } from "@/features/dependencies/components/dependency-section";
 import { CommentThread } from "@/features/comments/components/comment-thread";
 import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
@@ -117,6 +118,8 @@ interface TaskDialogProps {
   onMoveSubtask?: (id: number, columnId: number) => void;
   /** After a piece is added or removed — the parent card's count is now stale. */
   onSubtasksChanged?: () => void;
+  /** After a blocker is added or removed — the card's blocked-by count is stale. */
+  onDependenciesChanged?: () => void;
 }
 
 export function TaskDialog({
@@ -134,6 +137,7 @@ export function TaskDialog({
   onBack,
   onMoveSubtask,
   onSubtasksChanged,
+  onDependenciesChanged,
 }: TaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -402,6 +406,16 @@ export function TaskDialog({
                 key={`checklist-${task.id}`}
                 taskId={task.id}
                 onChanged={onSubtasksChanged}
+              />
+              {/* What this task waits on (018). Like the checklist, any task —
+                  top-level or a piece — can carry dependencies, so it is not
+                  gated on isSubtask; the server allows an edge between any two
+                  tasks on the same board. A change moves the card's blocked-by
+                  count, so it nudges the board to refetch. */}
+              <DependencySection
+                key={`deps-${task.id}`}
+                taskId={task.id}
+                onChanged={onDependenciesChanged}
               />
               {/* An agent run's review sits above the thread: it is what a human
                   came to this task to resolve when the agent has proposed work.

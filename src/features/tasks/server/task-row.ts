@@ -49,7 +49,32 @@ export function taskColumns(alias = ""): string {
           ${p}created_at AS "createdAt",
           ${labelsSubquery(self)} AS labels,
           ${subtaskCountSubquery(self)} AS "subtaskCount",
+          ${blockedBySubquery(self)} AS "blockedByCount",
           ${checklistSubquery(self)} AS checklist`;
+}
+
+/**
+ * How many tasks this one is blocked by — the count of its dependency edges (018).
+ *
+ * subtaskCountSubquery's twin, and here for its reason: a read that forgot it
+ * would still type-check as a whole Task and render a card whose blocked-by badge
+ * is undefined, because query<Task> is a cast and not a check. One list is the
+ * only defence, so this joins it.
+ *
+ * The count only, never "N of M done": whether a blocker is finished needs a
+ * completion notion, and which columns are "done" is user-defined and unknowable
+ * here — the same wall subtaskCount and checklist's card badge already hit. The
+ * number says the task waits on others; the dialog says on which.
+ *
+ * ::int because COUNT(*) is bigint, which node-postgres returns as a *string* —
+ * "0" is truthy, so `blockedByCount > 0` on the card would render a badge for
+ * every task without the cast. `taskRef` qualified for labelsSubquery's reason:
+ * the inner scope has its own columns, and a bare correlation would compile while
+ * comparing the wrong one.
+ */
+function blockedBySubquery(taskRef: string): string {
+  return `(SELECT COUNT(*)::int FROM task_dependency td
+             WHERE td.task_id = ${taskRef})`;
 }
 
 /**

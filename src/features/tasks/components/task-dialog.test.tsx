@@ -19,6 +19,9 @@ vi.mock("@/features/comments/components/comment-thread", () => ({
 vi.mock("./subtask-list", () => ({
   SubtaskList: () => null,
 }));
+vi.mock("@/features/dependencies/components/dependency-section", () => ({
+  DependencySection: () => null,
+}));
 
 const LABELS: LabelData[] = [
   {
@@ -73,6 +76,7 @@ function task(over: Partial<Task> = {}): Task {
     labels: [],
     parentId: null,
     subtaskCount: 0,
+    blockedByCount: 0,
     checklist: { total: 0, done: 0 },
     claimedBy: null,
     claimedAt: null,

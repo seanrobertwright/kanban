@@ -36,6 +36,7 @@ function task(over: Partial<Task> = {}): Task {
     labels: [],
     parentId: null,
     subtaskCount: 0,
+    blockedByCount: 0,
     checklist: { total: 0, done: 0 },
     claimedBy: null,
     claimedAt: null,

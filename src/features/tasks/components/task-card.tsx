@@ -2,6 +2,7 @@
 
 import {
   Bot,
+  Link2,
   ListChecks,
   ListTree,
   Lock,
@@ -203,6 +204,7 @@ export function TaskCard({
         task.dueDate ||
         task.subtaskCount > 0 ||
         task.checklist.total > 0 ||
+        task.blockedByCount > 0 ||
         task.claimedBy) && (
         <CardContent className="flex items-end justify-between gap-2 px-3">
           <p className="line-clamp-3 text-xs text-muted-foreground">
@@ -235,6 +237,23 @@ export function TaskCard({
                     ? "An agent is working on this"
                     : "Being worked on"}
                 </span>
+              </span>
+            )}
+            {/* How many tasks must finish first (018). The count only, never
+                "blocked" vs "unblocked" — that needs to know a blocker is done,
+                and "done" needs a completion notion the board does not have
+                (columns are user-defined). The link icon says this card is part
+                of a chain; the dialog says what it waits on. */}
+            {task.blockedByCount > 0 && (
+              <span
+                className="flex items-center gap-0.5 text-xs tabular-nums text-muted-foreground"
+                title={`Blocked by ${task.blockedByCount} task${
+                  task.blockedByCount === 1 ? "" : "s"
+                }`}
+              >
+                <Link2 className="size-3.5" aria-hidden="true" />
+                <span className="sr-only">Blocked by: </span>
+                {task.blockedByCount}
               </span>
             )}
             {/* The count only, never a "2 of 5 done": completion would need a
