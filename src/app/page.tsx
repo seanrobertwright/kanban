@@ -21,6 +21,7 @@ import {
   listWorkspacesForUser,
 } from "@/features/workspaces/server/repository";
 import { listSavedViews } from "@/features/views/server/repository";
+import { listTemplates } from "@/features/templates/server/repository";
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
 
 export const dynamic = "force-dynamic";
@@ -70,7 +71,7 @@ export default async function Home({
   // shows them as another kind of assignee, and every card with an agent on it
   // resolves that agent's name and face from this one roster on first paint —
   // which is why Task carries only an assignee's {type, id}, not its display data.
-  const [workspaces, boards, members, agents, labels, savedViews] =
+  const [workspaces, boards, members, agents, labels, savedViews, templates] =
     await Promise.all([
       listWorkspacesForUser(session.user.id),
       listBoardsForUser(session.user.id),
@@ -80,6 +81,9 @@ export default async function Home({
       // Private to this user (015), scoped to the workspace — the same for every
       // board they switch to within it.
       listSavedViews(session.user.id, data.board.workspaceId),
+      // Shared across the workspace (019), for the New-task dialog's "start from
+      // a template" picker — workspace-scoped, so the same for every board.
+      listTemplates(session.user.id, data.board.workspaceId),
     ]);
   const workspace = workspaces.find((w) => w.id === data.board.workspaceId)!;
   const canEdit = workspace.role !== "viewer";
@@ -124,6 +128,7 @@ export default async function Home({
         initialLabels={labels}
         workspaceId={data.board.workspaceId}
         initialSavedViews={savedViews}
+        initialTemplates={templates}
         canEdit={canEdit}
         canDeleteColumns={canDeleteColumns}
       />

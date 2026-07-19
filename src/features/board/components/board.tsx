@@ -14,7 +14,14 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 
-import { CalendarDays, Columns3, List, Plus, Tags } from "lucide-react";
+import {
+  CalendarDays,
+  Columns3,
+  LayoutTemplate,
+  List,
+  Plus,
+  Tags,
+} from "lucide-react";
 
 import type { AgentSummary } from "@/features/agents/types";
 import { LabelsDialog } from "@/features/labels/components/labels-dialog";
@@ -45,6 +52,8 @@ import { CalendarView } from "./calendar-view";
 import { ListView } from "./list-view";
 import { SavedViews } from "@/features/views/components/saved-views";
 import type { BoardViewMode, SavedView } from "@/features/views/types";
+import { TemplatesDialog } from "@/features/templates/components/templates-dialog";
+import type { TaskTemplate } from "@/features/templates/types";
 
 type ItemsByColumn = Record<number, Task[]>;
 
@@ -80,6 +89,12 @@ interface BoardProps {
   workspaceId: string;
   /** This member's private saved views for the workspace (015). */
   initialSavedViews: SavedView[];
+  /**
+   * The workspace's shared task templates (019). Held in state because the
+   * templates dialog can change the set, and the New-task picker reads it — the
+   * same reason labels are state rather than a prop read straight through.
+   */
+  initialTemplates: TaskTemplate[];
   /** False for viewers. The server enforces this too — this only hides the UI. */
   canEdit: boolean;
   /**
@@ -110,6 +125,7 @@ export function Board({
   initialLabels,
   workspaceId,
   initialSavedViews,
+  initialTemplates,
   canEdit,
   canDeleteColumns,
 }: BoardProps) {
@@ -138,6 +154,8 @@ export function Board({
   );
   const [labels, setLabels] = useState<LabelData[]>(initialLabels);
   const [labelsOpen, setLabelsOpen] = useState(false);
+  const [templates, setTemplates] = useState<TaskTemplate[]>(initialTemplates);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const labelsById = useMemo(
     () => Object.fromEntries(labels.map((l) => [l.id, l])),
     [labels]
@@ -434,6 +452,14 @@ export function Board({
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
+            onClick={() => setTemplatesOpen(true)}
+          >
+            <LayoutTemplate /> Templates
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
             onClick={() => setLabelsOpen(true)}
           >
             <Tags /> Labels
@@ -568,6 +594,7 @@ export function Board({
         members={members}
         agents={agents}
         labels={labels}
+        templates={templates}
         onOpenChange={(open) => {
           if (!open) setDialog(null);
         }}
@@ -603,6 +630,19 @@ export function Board({
         // A blocker added or removed changes the card's blocked-by count, the
         // same staleness for the same reason.
         onDependenciesChanged={refresh}
+      />
+      {/* Beside the labels dialog and sharing its vocabulary: a template picks
+          labels from the same set (019). canEdit gates all of create/edit/delete
+          — a template deletion has no task-side blast radius, so it needs member,
+          not the admin canDeleteColumns demands. */}
+      <TemplatesDialog
+        open={templatesOpen}
+        workspaceId={workspaceId}
+        templates={templates}
+        labels={labels}
+        canEdit={canEdit}
+        onOpenChange={setTemplatesOpen}
+        onChanged={setTemplates}
       />
       <LabelsDialog
         open={labelsOpen}

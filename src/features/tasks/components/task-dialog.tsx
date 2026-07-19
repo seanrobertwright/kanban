@@ -13,6 +13,7 @@ import { CommentThread } from "@/features/comments/components/comment-thread";
 import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
 import type { Label as LabelData } from "@/features/labels/types";
+import type { TaskTemplate } from "@/features/templates/types";
 import type { Member } from "@/features/workspaces/types";
 import { Button } from "@/shared/ui/button";
 import {
@@ -102,6 +103,14 @@ interface TaskDialogProps {
   agents: AgentSummary[];
   /** The workspace's vocabulary — the only labels this task may wear. */
   labels: LabelData[];
+  /**
+   * The workspace's task templates (019), offered as a starting point when
+   * creating a task. Absent/empty renders no picker — so a workspace with no
+   * templates, and the edit path (which never instantiates), show the form
+   * exactly as before. Instantiation is prefill: choosing one fills these same
+   * form fields, and the ordinary create submit does the write.
+   */
+  templates?: TaskTemplate[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: TaskFormValues) => Promise<void> | void;
   /** Open one of this task's pieces in this same dialog (a piece is a task). */
@@ -131,6 +140,7 @@ export function TaskDialog({
   members,
   agents,
   labels,
+  templates = [],
   onOpenChange,
   onSubmit,
   onOpenSubtask,
@@ -147,6 +157,10 @@ export function TaskDialog({
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
   const [labelIds, setLabelIds] = useState<number[]>([]);
+  // The template picker's selection (create mode). Controlled and reset on open,
+  // so reopening the New-task dialog starts on "Blank task" rather than showing a
+  // stale pick over freshly-cleared fields.
+  const [templateChoice, setTemplateChoice] = useState<string>("");
   // A piece has a status but no board to be dragged on, so its column is edited
   // here. Only meaningful when editing a subtask; the control is hidden for
   // top-level tasks, which move by drag.
@@ -183,8 +197,26 @@ export function TaskDialog({
       // called.
       setLabelIds(task?.labels.map((l) => l.id) ?? []);
       setColumnId(task?.columnId ?? 0);
+      setTemplateChoice("");
     }
   }, [open, task]);
+
+  /**
+   * Instantiate a template into the form. Not a submit and not a server call:
+   * it fills the same fields a user types, so they can adjust before creating and
+   * the ordinary create path does the one write. Labels come back as ids because
+   * that is what the form and the API speak; the template carried names only so a
+   * deleted label stayed nameable, which is not this form's concern.
+   */
+  function applyTemplate(templateId: string) {
+    setTemplateChoice(templateId);
+    const template = templates.find((t) => String(t.id) === templateId);
+    if (!template) return;
+    setTitle(template.title);
+    setDescription(template.description);
+    setPriority(template.priority);
+    setLabelIds(template.labels.map((l) => l.id));
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -244,6 +276,29 @@ export function TaskDialog({
                 : "Add a task to this column."}
             </DialogDescription>
           </DialogHeader>
+          {/* Create mode only, and only with templates to offer: a starting
+              point, not a control that survives into editing. Choosing one fills
+              the fields below, which the user is then free to change — see
+              applyTemplate. Resetting to the placeholder does nothing, so it is
+              safe to re-pick. */}
+          {!task && templates.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="task-template">Start from a template</Label>
+              <select
+                id="task-template"
+                value={templateChoice}
+                onChange={(e) => applyTemplate(e.target.value)}
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                <option value="">Blank task</option>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid gap-2">
             <Label htmlFor="task-title">Title</Label>
             <Input
