@@ -27,8 +27,13 @@ import {
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
-import { PRIORITY_LABELS, PRIORITY_ORDER } from "../types";
-import type { Task, TaskPriority } from "../types";
+import {
+  PRIORITY_LABELS,
+  PRIORITY_ORDER,
+  RECURRENCE_FREQUENCIES,
+  RECURRENCE_LABELS,
+} from "../types";
+import type { RecurrenceFrequency, Task, TaskPriority } from "../types";
 
 export interface TaskFormValues {
   title: string;
@@ -45,6 +50,8 @@ export interface TaskFormValues {
   dueDate: string | null;
   /** Ids, not refs — the form picks from a vocabulary the server already knows. */
   labelIds: number[];
+  /** How often the task recurs, or null for a one-off (020). */
+  recurrence: RecurrenceFrequency | null;
 }
 
 /** The <option> value standing in for "nobody", since a DOM value is a string. */
@@ -157,6 +164,9 @@ export function TaskDialog({
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
   const [labelIds, setLabelIds] = useState<number[]>([]);
+  // "" is "does not recur" — the <option> value standing in for null, since a DOM
+  // value is a string. Decoded to null on submit; encoded from the task on open.
+  const [recurrence, setRecurrence] = useState<RecurrenceFrequency | "">("");
   // The template picker's selection (create mode). Controlled and reset on open,
   // so reopening the New-task dialog starts on "Blank task" rather than showing a
   // stale pick over freshly-cleared fields.
@@ -198,6 +208,7 @@ export function TaskDialog({
       setLabelIds(task?.labels.map((l) => l.id) ?? []);
       setColumnId(task?.columnId ?? 0);
       setTemplateChoice("");
+      setRecurrence(task?.recurrence ?? "");
     }
   }, [open, task]);
 
@@ -240,6 +251,8 @@ export function TaskDialog({
         // No conversion, like priority: [] is the empty set all the way down,
         // which is what keeps this field out of the null-vs-absent problem.
         labelIds,
+        // "" is the DOM stand-in for "does not recur"; the API speaks null.
+        recurrence: recurrence === "" ? null : recurrence,
       });
     } finally {
       setSaving(false);
@@ -422,6 +435,30 @@ export function TaskDialog({
               />
             </div>
           </div>
+          {/* Repeat (020). A recurring task spawns its successor when it is moved
+              into the board's done column — so this sets the cadence, and the
+              board's done column is where completion happens. Hidden for a
+              subtask: a piece completes with the parent, not on its own cycle. */}
+          {!isSubtask && (
+            <div className="grid gap-2">
+              <Label htmlFor="task-recurrence">Repeat</Label>
+              <select
+                id="task-recurrence"
+                value={recurrence}
+                onChange={(e) =>
+                  setRecurrence(e.target.value as RecurrenceFrequency | "")
+                }
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                <option value="">Does not repeat</option>
+                {RECURRENCE_FREQUENCIES.map((value) => (
+                  <option key={value} value={value}>
+                    {RECURRENCE_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid gap-2">
             <Label>Labels</Label>
             <LabelPicker

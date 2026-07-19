@@ -50,7 +50,22 @@ export function taskColumns(alias = ""): string {
           ${labelsSubquery(self)} AS labels,
           ${subtaskCountSubquery(self)} AS "subtaskCount",
           ${blockedBySubquery(self)} AS "blockedByCount",
+          ${recurrenceSubquery(self)} AS recurrence,
           ${checklistSubquery(self)} AS checklist`;
+}
+
+/**
+ * This task's recurrence cadence (020), or NULL when it does not recur.
+ *
+ * A scalar subquery, not a join, for the reason labels and subtaskCount are: a
+ * read that forgot it types as a whole Task and renders a card whose repeat mark
+ * is silently undefined, and query<Task> is a cast that cannot catch it. The
+ * enum comes back as its text label ('daily' / 'weekly' / 'monthly'), which is
+ * exactly RecurrenceFrequency. `taskRef` qualified, labelsSubquery's trap.
+ */
+function recurrenceSubquery(taskRef: string): string {
+  return `(SELECT tr.frequency FROM task_recurrence tr
+             WHERE tr.task_id = ${taskRef})`;
 }
 
 /**

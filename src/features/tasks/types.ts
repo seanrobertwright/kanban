@@ -40,6 +40,34 @@ export function isTaskPriority(value: unknown): value is TaskPriority {
   );
 }
 
+/**
+ * Mirrors the `recurrence_frequency` enum in 020. A closed set — the cadences a
+ * task can repeat on. Order carries no meaning here (nothing sorts by it), unlike
+ * TaskPriority; the array exists to enumerate the picker and validate the API.
+ */
+export type RecurrenceFrequency = "daily" | "weekly" | "monthly";
+
+export const RECURRENCE_FREQUENCIES: readonly RecurrenceFrequency[] = [
+  "daily",
+  "weekly",
+  "monthly",
+] as const;
+
+export const RECURRENCE_LABELS: Record<RecurrenceFrequency, string> = {
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+};
+
+export function isRecurrenceFrequency(
+  value: unknown
+): value is RecurrenceFrequency {
+  return (
+    typeof value === "string" &&
+    (RECURRENCE_FREQUENCIES as readonly string[]).includes(value)
+  );
+}
+
 export interface Task {
   id: number;
   columnId: number;
@@ -93,6 +121,16 @@ export interface Task {
    * fetched only when the dialog opens, exactly as subtasks and checklist items.
    */
   blockedByCount: number;
+  /**
+   * The cadence this task repeats on (020), or null if it does not recur.
+   *
+   * The live occurrence carries the rule; completing it (moving it into the
+   * board's done column) spawns the successor and hands the rule across, so at
+   * most one occurrence is recurring at a time. Derived from task_recurrence and
+   * absent from TaskSnapshot for 018's reason: it is configuration, not a field
+   * undo reconstructs — the spawn logs a plain task.created instead.
+   */
+  recurrence: RecurrenceFrequency | null;
   /**
    * Checklist progress — {total, done} — for the card's "2/5" badge (017).
    *
@@ -185,6 +223,12 @@ export interface CreateTaskInput {
   /** Ids, not refs: the caller says which labels, the database knows their names. */
   labelIds?: number[];
   /**
+   * How often this task recurs, or null/absent for a one-off. A task can be born
+   * recurring, so createTask writes the rule with it; the on-complete spawn then
+   * carries it to each successor (020).
+   */
+  recurrence?: RecurrenceFrequency | null;
+  /**
    * The task this one decomposes. Absent means top-level — the only two states
    * there are, so this is two-valued and needs no supplied-flag. 006's rule does
    * not even have to be consulted: a field that cannot be updated cannot have an
@@ -248,6 +292,13 @@ export interface UpdateTaskInput {
    * same task from replaying each other's adds.
    */
   labelIds?: number[];
+  /**
+   * Three-valued, like assignee and dueDate: `undefined` leaves the rule alone,
+   * `null` clears it (this task no longer recurs), a frequency sets it. There is
+   * no frequency that means "no recurrence", so null cannot also mean "absent" —
+   * the repository tests for the key's presence, not COALESCE. 006's rule.
+   */
+  recurrence?: RecurrenceFrequency | null;
 }
 
 export interface MoveTaskInput {

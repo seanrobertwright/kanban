@@ -1,5 +1,5 @@
 import { query, queryOne } from "@/shared/db/client";
-import { requireBoardRole } from "@/features/workspaces/server/authz";
+import { AuthzError, requireBoardRole } from "@/features/workspaces/server/authz";
 import type { Principal } from "@/features/auth/server/principal";
 import { taskColumns } from "@/features/tasks/server/task-row";
 import type { Task } from "@/features/tasks/types";
@@ -18,9 +18,9 @@ export async function getBoard(
 ): Promise<BoardData | undefined> {
   await requireBoardRole(actor, boardId, "viewer");
 
-  const board = await queryOne<Board>(
+  const board = await queryOne<Board & { doneColumnId: number | null }>(
     `SELECT id, workspace_id AS "workspaceId", name, position,
-            created_at AS "createdAt"
+            created_at AS "createdAt", done_column_id AS "doneColumnId"
        FROM board WHERE id = $1`,
     [boardId]
   );
@@ -59,5 +59,39 @@ export async function getBoard(
     [boardId]
   );
 
-  return { board, columns, tasks };
+  return { board, columns, tasks, doneColumnId: board.doneColumnId };
+}
+
+/**
+ * Designates (or clears, with null) the board's done column — the one a recurring
+ * task spawns from when moved into it (020).
+ *
+ * "admin", the rank column deletion asks: which column means done is a structural
+ * decision about the board, not per-task work, so it sits with the other
+ * board-shape changes §7.4 gates behind admin.
+ *
+ * The column is proven to belong to *this* board, not merely to exist — "no such
+ * column" and "a column of another board" collapse to one not_found, M0's rule,
+ * so the id space cannot be probed. A FK alone would let one board point its done
+ * marker at another board's column.
+ */
+export async function setBoardDoneColumn(
+  actor: string | Principal,
+  boardId: number,
+  columnId: number | null
+): Promise<void> {
+  await requireBoardRole(actor, boardId, "admin");
+  if (columnId !== null) {
+    const column = await queryOne<{ id: number }>(
+      `SELECT id FROM board_column WHERE id = $1 AND board_id = $2`,
+      [columnId, boardId]
+    );
+    if (!column) {
+      throw new AuthzError("not_found", "No such column on this board");
+    }
+  }
+  await query(`UPDATE board SET done_column_id = $2 WHERE id = $1`, [
+    boardId,
+    columnId,
+  ]);
 }

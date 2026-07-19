@@ -1,8 +1,13 @@
 import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
 import { unauthorized } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
-import { PRIORITY_ORDER, isTaskPriority } from "../types";
-import type { TaskPriority } from "../types";
+import {
+  PRIORITY_ORDER,
+  RECURRENCE_FREQUENCIES,
+  isRecurrenceFrequency,
+  isTaskPriority,
+} from "../types";
+import type { RecurrenceFrequency, TaskPriority } from "../types";
 import {
   claimTask,
   createTask,
@@ -82,6 +87,18 @@ function isLabelIds(value: unknown): value is number[] | undefined {
   );
 }
 
+/**
+ * A cadence, or null ("stop recurring"), or absent ("leave it") — the same
+ * three-valued shape as isDueDate, and rejected the same way if it is a string
+ * that names no frequency, so a typo answers 400 rather than reaching the enum
+ * cast as a 500.
+ */
+function isRecurrence(
+  value: unknown
+): value is RecurrenceFrequency | null | undefined {
+  return value === undefined || value === null || isRecurrenceFrequency(value);
+}
+
 function isDueDate(value: unknown): value is string | null | undefined {
   if (value === undefined || value === null) return true;
   if (typeof value !== "string" || !ISO_DATE.test(value)) return false;
@@ -113,6 +130,7 @@ export async function handleCreateTask(request: Request) {
     dueDate,
     labelIds,
     parentId,
+    recurrence,
   } = body as Record<string, unknown>;
   if (typeof columnId !== "number") return badRequest("columnId is required");
   if (typeof title !== "string" || title.trim() === "")
@@ -137,6 +155,10 @@ export async function handleCreateTask(request: Request) {
     return badRequest("dueDate must be a YYYY-MM-DD date or null");
   if (!isLabelIds(labelIds))
     return badRequest("labelIds must be an array of label ids");
+  if (!isRecurrence(recurrence))
+    return badRequest(
+      `recurrence must be one of: ${RECURRENCE_FREQUENCIES.join(", ")}, or null`
+    );
 
   try {
     const task = await createTask(principal, {
@@ -148,6 +170,7 @@ export async function handleCreateTask(request: Request) {
       dueDate,
       labelIds,
       parentId: parentId as number | undefined,
+      recurrence: recurrence as RecurrenceFrequency | null | undefined,
     });
     return Response.json(task, { status: 201 });
   } catch (error) {
@@ -203,6 +226,7 @@ export async function handleUpdateTask(request: Request, id: number) {
     priority,
     dueDate,
     labelIds,
+    recurrence,
   } = body as Record<string, unknown>;
 
   // Presence, not value. `{"assignee": null}` is a request to unassign and must
@@ -215,6 +239,7 @@ export async function handleUpdateTask(request: Request, id: number) {
   // rejection below rather than being honoured as a clear.
   const setsAssignee = "assignee" in body;
   const setsDueDate = "dueDate" in body;
+  const setsRecurrence = "recurrence" in body;
 
   // Refused rather than ignored, and the difference matters because the failure
   // is otherwise invisible. UpdateTaskInput has no parentId, so a PATCH carrying
@@ -243,7 +268,8 @@ export async function handleUpdateTask(request: Request, id: number) {
       setsAssignee ||
       priority !== undefined ||
       setsDueDate ||
-      labelIds !== undefined
+      labelIds !== undefined ||
+      setsRecurrence
     ) {
       if (title !== undefined && (typeof title !== "string" || !title.trim()))
         return badRequest("title must be a non-empty string");
@@ -257,6 +283,10 @@ export async function handleUpdateTask(request: Request, id: number) {
         return badRequest("dueDate must be a YYYY-MM-DD date or null");
       if (!isLabelIds(labelIds))
         return badRequest("labelIds must be an array of label ids");
+      if (!isRecurrence(recurrence))
+        return badRequest(
+          `recurrence must be one of: ${RECURRENCE_FREQUENCIES.join(", ")}, or null`
+        );
 
       const updated = await updateTask(principal, id, {
         title: title as string | undefined,
@@ -278,6 +308,12 @@ export async function handleUpdateTask(request: Request, id: number) {
         // reads its value rather than its presence and an explicit undefined
         // means exactly what an absent key would.
         labelIds: labelIds as number[] | undefined,
+        // Spread, like assignee/dueDate: recurrence is three-valued, so the key
+        // must exist only when the caller sent it — a stray undefined would read
+        // as "clear the rule" on every title-only edit.
+        ...(setsRecurrence
+          ? { recurrence: recurrence as RecurrenceFrequency | null }
+          : {}),
       });
       if (!updated) return notFound();
       return Response.json(updated);

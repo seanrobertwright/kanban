@@ -8,6 +8,7 @@ import {
   Lock,
   MoreHorizontal,
   Pencil,
+  Repeat,
   Trash2,
 } from "lucide-react";
 
@@ -31,7 +32,7 @@ import {
 import { LabelChip } from "@/features/labels/components/label-chip";
 import type { Label as LabelData } from "@/features/labels/types";
 import { formatDueDate, useToday } from "@/shared/lib/due-date";
-import { PRIORITY_LABELS } from "../types";
+import { PRIORITY_LABELS, RECURRENCE_LABELS } from "../types";
 import type { Task, TaskPriority } from "../types";
 
 interface TaskCardProps {
@@ -205,6 +206,7 @@ export function TaskCard({
         task.subtaskCount > 0 ||
         task.checklist.total > 0 ||
         task.blockedByCount > 0 ||
+        task.recurrence ||
         task.claimedBy) && (
         <CardContent className="flex items-end justify-between gap-2 px-3">
           <p className="line-clamp-3 text-xs text-muted-foreground">
@@ -236,6 +238,19 @@ export function TaskCard({
                   {task.claimedBy.type === "agent"
                     ? "An agent is working on this"
                     : "Being worked on"}
+                </span>
+              </span>
+            )}
+            {/* Recurs (020). The loop icon says the task will spawn a successor
+                when completed; the cadence is in the tooltip and the dialog. */}
+            {task.recurrence && (
+              <span title={`Repeats: ${RECURRENCE_LABELS[task.recurrence]}`}>
+                <Repeat
+                  className="size-3.5 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span className="sr-only">
+                  Repeats {RECURRENCE_LABELS[task.recurrence]}
                 </span>
               </span>
             )}

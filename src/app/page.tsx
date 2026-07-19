@@ -128,6 +128,7 @@ export default async function Home({
         initialLabels={labels}
         workspaceId={data.board.workspaceId}
         initialSavedViews={savedViews}
+        initialDoneColumnId={data.doneColumnId}
         initialTemplates={templates}
         canEdit={canEdit}
         canDeleteColumns={canDeleteColumns}

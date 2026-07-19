@@ -90,6 +90,12 @@ interface BoardProps {
   /** This member's private saved views for the workspace (015). */
   initialSavedViews: SavedView[];
   /**
+   * The column that completes a task on this board (020), or null. Held in state
+   * because an admin can change it from a column's menu, and moving a recurring
+   * task into it is what spawns the successor.
+   */
+  initialDoneColumnId: number | null;
+  /**
    * The workspace's shared task templates (019). Held in state because the
    * templates dialog can change the set, and the New-task picker reads it — the
    * same reason labels are state rather than a prop read straight through.
@@ -125,6 +131,7 @@ export function Board({
   initialLabels,
   workspaceId,
   initialSavedViews,
+  initialDoneColumnId,
   initialTemplates,
   canEdit,
   canDeleteColumns,
@@ -156,6 +163,9 @@ export function Board({
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [templates, setTemplates] = useState<TaskTemplate[]>(initialTemplates);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [doneColumnId, setDoneColumnId] = useState<number | null>(
+    initialDoneColumnId
+  );
   const labelsById = useMemo(
     () => Object.fromEntries(labels.map((l) => [l.id, l])),
     [labels]
@@ -201,6 +211,7 @@ export function Board({
       const data = await fetchBoard(boardId);
       setCols(data.columns);
       setItems(groupTasks(data.columns, data.tasks));
+      setDoneColumnId(data.doneColumnId);
     } catch {
       // Keep optimistic state if the server is unreachable.
     }
@@ -291,7 +302,23 @@ export function Board({
     const task = columnTasks[fromIndex];
     tasksApi
       .moveTask(task.id, { columnId, position: toIndex })
+      .then(() => {
+        // A recurring task landing in the done column spawns its successor
+        // server-side (020) — which the optimistic board knows nothing about, so
+        // it refetches to reveal the new occurrence and the now-non-recurring one.
+        if (task.recurrence && columnId === doneColumnId) void refresh();
+      })
       .catch(refresh);
+  }
+
+  function handleSetDoneColumn(columnId: number) {
+    // A toggle: naming the current done column again clears the designation.
+    const next = doneColumnId === columnId ? null : columnId;
+    setDoneColumnId(next);
+    boardApi.setDoneColumn(boardId, next).catch((e) => {
+      setError(e instanceof Error ? e.message : "Could not set the done column");
+      void refresh();
+    });
   }
 
   async function handleDialogSubmit(values: TaskFormValues) {
@@ -509,6 +536,8 @@ export function Board({
               labelsById={labelsById}
               canEdit={canEdit}
               canDelete={canDeleteColumns}
+              isDone={column.id === doneColumnId}
+              onToggleDone={() => handleSetDoneColumn(column.id)}
               isFirst={index === 0}
               isLast={index === cols.length - 1}
               onAddTask={() => setDialog({ columnId: column.id })}

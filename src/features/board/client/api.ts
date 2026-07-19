@@ -16,6 +16,27 @@ export async function fetchBoard(boardId: number): Promise<BoardData> {
   return res.json();
 }
 
+/**
+ * Set or clear the board's done column (020) — null unsets it. Surfaces the
+ * server's sentence on refusal (a non-admin, or a column not on this board).
+ */
+export async function setDoneColumn(
+  boardId: number,
+  doneColumnId: number | null
+): Promise<void> {
+  const res = await fetch(`/api/board/${boardId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ doneColumnId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(
+      (body as { error?: string } | null)?.error ?? `Request failed (${res.status})`
+    );
+  }
+}
+
 export function createColumn(boardId: number, title: string): Promise<Column> {
   return fetch(`/api/board/${boardId}/columns`, {
     method: "POST",

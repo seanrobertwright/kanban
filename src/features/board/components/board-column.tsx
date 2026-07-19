@@ -9,6 +9,7 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
+  CircleCheck,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -45,6 +46,8 @@ interface BoardColumnProps {
   canEdit: boolean;
   /** Admin and up. Deleting can destroy work, so it is gated harder (§7.4). */
   canDelete: boolean;
+  /** This is the board's done column (020) — a recurring task moved here recurs. */
+  isDone: boolean;
   isFirst: boolean;
   isLast: boolean;
   onAddTask: () => void;
@@ -53,6 +56,8 @@ interface BoardColumnProps {
   onRename: (title: string) => void;
   onMove: (by: -1 | 1) => void;
   onDelete: () => void;
+  /** Toggle whether this is the done column. Admin-only, like delete (§7.4). */
+  onToggleDone: () => void;
 }
 
 export function BoardColumn({
@@ -63,6 +68,7 @@ export function BoardColumn({
   labelsById,
   canEdit,
   canDelete,
+  isDone,
   isFirst,
   isLast,
   onAddTask,
@@ -71,6 +77,7 @@ export function BoardColumn({
   onRename,
   onMove,
   onDelete,
+  onToggleDone,
 }: BoardColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: `col-${column.id}` });
   const [renaming, setRenaming] = useState(false);
@@ -111,8 +118,19 @@ export function BoardColumn({
           />
         ) : (
           <>
-            <h2 className="flex-1 truncate text-sm font-semibold" title={column.title}>
-              {column.title}
+            <h2 className="flex items-center gap-1 truncate text-sm font-semibold" title={column.title}>
+              {/* The completion column (020). The check marks it at a glance; the
+                  label carries the meaning for anyone who cannot see the icon, and
+                  the title says what dropping a recurring card here does. */}
+              {isDone && (
+                <span title="Done column — a recurring task moved here spawns the next one">
+                  <CircleCheck
+                    className="size-3.5 shrink-0 text-primary"
+                    aria-label="Done column"
+                  />
+                </span>
+              )}
+              <span className="truncate">{column.title}</span>
             </h2>
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
               {tasks.length}
@@ -158,6 +176,13 @@ export function BoardColumn({
                     {canDelete && (
                       <>
                         <DropdownMenuSeparator />
+                        {/* Which column means done is a board-shape decision, so
+                            it sits with the admin-gated actions (§7.4). Toggling:
+                            marking the current done column again clears it. */}
+                        <DropdownMenuItem onClick={onToggleDone}>
+                          <CircleCheck />
+                          {isDone ? "Unset done column" : "Set as done column"}
+                        </DropdownMenuItem>
                         <DropdownMenuItem variant="destructive" onClick={onDelete}>
                           <Trash2 /> Delete column
                         </DropdownMenuItem>

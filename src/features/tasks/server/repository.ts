@@ -23,6 +23,7 @@ import { taskColumns, taskSnapshot } from "./task-row";
 import type {
   CreateTaskInput,
   MoveTaskInput,
+  RecurrenceFrequency,
   Task,
   UpdateTaskInput,
 } from "../types";
@@ -165,6 +166,113 @@ function assigneeColumns(assignee: Actor | null): {
   return assignee.type === "human"
     ? { assigneeId: assignee.id, agentId: null }
     : { assigneeId: null, agentId: assignee.id };
+}
+
+/**
+ * How far a due date jumps for each cadence (020). Postgres interval arithmetic
+ * does the hard part — `date + interval '1 month'` clamps Jan 31 to Feb 28
+ * rather than rolling into March, which is the behaviour a monthly recurrence
+ * wants and which no hand-rolled day count gets right.
+ */
+const RECURRENCE_INTERVAL: Record<RecurrenceFrequency, string> = {
+  daily: "1 day",
+  weekly: "7 days",
+  monthly: "1 month",
+};
+
+/**
+ * Sets or clears a task's recurrence rule. null removes it (this task no longer
+ * recurs); a frequency upserts it, so setting a rule twice lands on one row —
+ * the 1:1 (task_id PK) the migration relies on.
+ */
+async function setRecurrence(
+  client: PoolClient,
+  taskId: number,
+  frequency: RecurrenceFrequency | null
+): Promise<void> {
+  if (frequency === null) {
+    await client.query(`DELETE FROM task_recurrence WHERE task_id = $1`, [taskId]);
+    return;
+  }
+  await client.query(
+    `INSERT INTO task_recurrence (task_id, frequency) VALUES ($1, $2)
+     ON CONFLICT (task_id) DO UPDATE SET frequency = EXCLUDED.frequency`,
+    [taskId, frequency]
+  );
+}
+
+/**
+ * Births the next occurrence of a recurring task, called when its predecessor
+ * crosses into the board's done column (020, moveTask).
+ *
+ * The successor is a copy of the completed task's shape — title, description,
+ * priority, assignee, labels — in the board's first column, with its due date
+ * advanced by the rule (or no due date, if the original had none: recurrence
+ * without a date just means "make another"). The rule *moves* here from the
+ * predecessor, which is the invariant that stops a double-spawn: the completed
+ * task in Done no longer recurs, so dragging it around does nothing, and this new
+ * row is the only one that will recur next.
+ *
+ * Inline on the caller's transaction rather than a call to createTask, which owns
+ * its own transaction — the copy and the hand-over of the rule must commit with
+ * the move that triggered them. It logs task.created for the successor, the one
+ * event a reader or an undo wants; the completion itself is the move, already
+ * logged. No agent run is enqueued even for an agent-assigned copy: a spawn is a
+ * copy, not an assignment, and firing runs off recurrence is future work.
+ */
+async function spawnNextOccurrence(
+  client: PoolClient,
+  before: Task,
+  frequency: RecurrenceFrequency,
+  boardId: number,
+  workspaceId: string,
+  by: Actor
+): Promise<void> {
+  const { rows: cols } = await client.query<{ id: number }>(
+    `SELECT id FROM board_column WHERE board_id = $1 ORDER BY position, id LIMIT 1`,
+    [boardId]
+  );
+  const firstColumnId = cols[0]?.id;
+  if (!firstColumnId) return; // A board with no columns cannot hold a successor.
+
+  const { assigneeId, agentId } = assigneeColumns(before.assignee);
+  const { rows } = await client.query<{ id: number }>(
+    `INSERT INTO task (column_id, title, description, position, assignee_id,
+                       agent_id, priority, due_date)
+     VALUES ($1, $2, $3,
+             (SELECT COALESCE(MAX(position) + 1, 0) FROM task
+               WHERE column_id = $1 AND parent_id IS NULL),
+             $4, $5, $6,
+             CASE WHEN $7::date IS NULL THEN NULL
+                  ELSE ($7::date + $8::interval)::date END)
+     RETURNING id`,
+    [
+      firstColumnId,
+      before.title,
+      before.description,
+      assigneeId,
+      agentId,
+      before.priority,
+      before.dueDate,
+      RECURRENCE_INTERVAL[frequency],
+    ]
+  );
+  const newId = rows[0].id;
+
+  await setTaskLabels(client, newId, before.labels.map((l) => l.id));
+  // Hand the rule across: off the completed task, onto the successor.
+  await setRecurrence(client, before.id, null);
+  await setRecurrence(client, newId, frequency);
+
+  const created = (await selectTask(client, newId))!;
+  await logActivity(client, {
+    workspaceId,
+    boardId,
+    taskId: newId,
+    actor: by,
+    action: "task.created",
+    after: snapshot(created),
+  });
 }
 
 /**
@@ -331,6 +439,12 @@ export async function createTask(
     // report a task with no labels no matter what was asked for, and both the
     // caller and the log row below would believe it.
     await setTaskLabels(client, rows[0].id, input.labelIds ?? []);
+    // Before the read-back, so the returned task's `recurrence` reflects it —
+    // task_recurrence is resolved by a subquery, so RETURNING would report none.
+    // Only a frequency writes a row; null/absent means the task does not recur.
+    if (input.recurrence) {
+      await setRecurrence(client, rows[0].id, input.recurrence);
+    }
     const task = (await selectTask(client, rows[0].id))!;
 
     await logActivity(client, {
@@ -375,6 +489,10 @@ export async function updateTask(
   // setting 'none', so null keeps its ordinary meaning of "absent" there.
   const setsAssignee = "assignee" in input;
   const setsDueDate = "dueDate" in input;
+  // Three-valued like the two above: the key's presence, not the value, decides
+  // whether the rule is touched — null clears it, a frequency sets it, absent
+  // leaves it. There is no frequency meaning "off", so COALESCE cannot serve.
+  const setsRecurrence = "recurrence" in input;
 
   let queuedRunId: string | null = null;
   const updated = await withTransaction(async (client) => {
@@ -392,6 +510,12 @@ export async function updateTask(
     // for a third field without needing to be re-derived.
     if (input.labelIds !== undefined) {
       await setTaskLabels(client, id, input.labelIds);
+    }
+    // Before the UPDATE, so its RETURNING (which resolves recurrence by subquery)
+    // reads the new rule back. No log row and no snapshot field — the rule is
+    // task config, not state undo reconstructs (020).
+    if (setsRecurrence) {
+      await setRecurrence(client, id, input.recurrence ?? null);
     }
 
     // Both idioms appear below, and which one a field gets is not a style
@@ -567,6 +691,15 @@ export async function moveTask(
     const before = await selectTask(client, id);
     if (!before) return undefined;
 
+    // The board's completion column (020), or null if none is designated —
+    // recurrence is inert until an admin names one. Read here so the spawn below
+    // can tell whether this move crosses into Done.
+    const { rows: boardRows } = await client.query<{ doneColumnId: number | null }>(
+      `SELECT done_column_id AS "doneColumnId" FROM board WHERE id = $1`,
+      [boardId]
+    );
+    const doneColumnId = boardRows[0]?.doneColumnId ?? null;
+
     // Every position query below is scoped to the moving task's siblings — the
     // rows sharing its column AND its parent (008). The parent is not read from
     // the input because it cannot be changed: a task is born a piece of something
@@ -625,6 +758,27 @@ export async function moveTask(
         before: snapshot(before),
         after: snapshot(after),
       });
+    }
+
+    // On-complete recurrence (020). A move *crosses into* Done when the task was
+    // somewhere else and now sits in the done column — not a reorder within it,
+    // which is why both sides are tested. A recurring task that crosses spawns its
+    // successor and hands over the rule; a one-off, or a board with no done column
+    // (doneColumnId null, so this is never true), does nothing.
+    if (
+      before.recurrence &&
+      doneColumnId !== null &&
+      before.columnId !== doneColumnId &&
+      input.columnId === doneColumnId
+    ) {
+      await spawnNextOccurrence(
+        client,
+        before,
+        before.recurrence,
+        boardId,
+        workspaceId,
+        by
+      );
     }
     return after;
   });

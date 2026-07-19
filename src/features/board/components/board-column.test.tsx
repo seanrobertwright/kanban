@@ -19,6 +19,7 @@ function renderColumn(
     labelsById: {},
     canEdit: true,
     canDelete: true,
+    isDone: false,
     isFirst: false,
     isLast: false,
     onAddTask: vi.fn(),
@@ -27,6 +28,7 @@ function renderColumn(
     onRename: vi.fn(),
     onMove: vi.fn(),
     onDelete: vi.fn(),
+    onToggleDone: vi.fn(),
     ...over,
   };
   // useDroppable and SortableContext both need a DndContext above them.
