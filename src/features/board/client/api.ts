@@ -1,4 +1,4 @@
-import type { BoardData, Column } from "../types";
+import type { BoardAnalytics, BoardData, Column } from "../types";
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -51,6 +51,16 @@ export function renameColumn(id: number, title: string): Promise<Column> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
   }).then((res) => jsonOrThrow<Column>(res));
+}
+
+/** The board's flow analytics — see server/analytics.ts for the shape's why. */
+export async function fetchBoardAnalytics(
+  boardId: number
+): Promise<BoardAnalytics> {
+  const res = await fetch(`/api/board/${boardId}/analytics`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow<BoardAnalytics>(res);
 }
 
 /** Set or clear (null) a column's WIP limit (023). */

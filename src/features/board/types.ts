@@ -16,6 +16,36 @@ export interface Column {
   wipLimit: number | null;
 }
 
+/** Days-based summary of a set of completed tasks (analytics). */
+export interface FlowStats {
+  count: number;
+  avgDays: number;
+  medianDays: number;
+}
+
+/**
+ * Flow analytics for one board — the shape server/analytics.ts computes by
+ * replaying the activity log. Here rather than beside the computation so the
+ * client can name it without a server import.
+ */
+export interface BoardAnalytics {
+  /** Created → done, per completed task. Null when no done column is set. */
+  leadTime: FlowStats | null;
+  /** First move → done — time in motion, not time in the backlog. */
+  cycleTime: FlowStats | null;
+  /** Completions per week, oldest first, last 8 weeks. */
+  throughput: { weekStart: string; count: number }[] | null;
+  /** Tasks per column at each day's end, last 30 days, oldest first. */
+  cfd: { date: string; counts: Record<number, number> }[];
+  /** Current top-level tasks per assignee, with their points. */
+  workload: {
+    assigneeType: "human" | "agent" | null;
+    assigneeId: string | null;
+    count: number;
+    points: number;
+  }[];
+}
+
 export interface BoardData {
   board: Board;
   columns: Column[];

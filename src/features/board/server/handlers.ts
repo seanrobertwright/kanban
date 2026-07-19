@@ -1,8 +1,10 @@
+import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
 import {
   getSessionFromRequest,
   unauthorized,
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
+import { getBoardAnalytics } from "./analytics";
 import {
   createColumn,
   deleteColumn,
@@ -94,6 +96,25 @@ export async function handleUpdateColumn(request: Request, id: string) {
 
     if (position === undefined) return badRequest("Nothing to update");
     return new Response(null, { status: 204 });
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/**
+ * Flow analytics (analytics.ts). getPrincipalFromRequest rather than a
+ * session: an agent that can read a board can read its numbers — "an author
+ * that writes but cannot read is blind", one lens over.
+ */
+export async function handleBoardAnalytics(request: Request, id: string) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+
+  try {
+    return Response.json(await getBoardAnalytics(principal, boardId));
   } catch (error) {
     return authzErrorResponse(error);
   }

@@ -16,6 +16,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 
 import {
   CalendarDays,
+  ChartNoAxesColumn,
   Columns3,
   Download,
   LayoutTemplate,
@@ -48,6 +49,7 @@ import * as boardApi from "../client/api";
 import { fetchBoard } from "../client/api";
 import type { Column } from "../types";
 import { BoardColumn } from "./board-column";
+import { InsightsDialog } from "./insights-dialog";
 import {
   BoardFilterBar,
   EMPTY_FILTER,
@@ -170,6 +172,7 @@ export function Board({
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [templates, setTemplates] = useState<TaskTemplate[]>(initialTemplates);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
   const [doneColumnId, setDoneColumnId] = useState<number | null>(
     initialDoneColumnId
   );
@@ -508,6 +511,14 @@ export function Board({
           >
             <Tags /> Labels
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setInsightsOpen(true)}
+          >
+            <ChartNoAxesColumn /> Insights
+          </Button>
           {/* Export is a GET the browser can follow — plain anchors, so the
               download rides the session cookie with no fetch-and-blob dance.
               Viewer+: an export is a read of what the board already shows. */}
@@ -712,6 +723,14 @@ export function Board({
           labels from the same set (019). canEdit gates all of create/edit/delete
           — a template deletion has no task-side blast radius, so it needs member,
           not the admin canDeleteColumns demands. */}
+      <InsightsDialog
+        boardId={boardId}
+        open={insightsOpen}
+        columns={cols}
+        membersById={membersById}
+        agentsById={agentsById}
+        onOpenChange={setInsightsOpen}
+      />
       <TemplatesDialog
         open={templatesOpen}
         workspaceId={workspaceId}
