@@ -1,3 +1,5 @@
+import type { PoolClient } from "pg";
+
 import { query, queryOne, withTransaction } from "@/shared/db/client";
 import { logActivity } from "@/features/activity/server/repository";
 import type { Actor, CommentSnapshot } from "@/features/activity/types";
@@ -27,7 +29,8 @@ import type {
 const commentColumns = (p: "" | "c." = "") =>
   `${p}id, ${p}task_id AS "taskId", ${p}author_type AS "authorType",
    ${p}author_id AS "authorId", ${p}body,
-   ${p}created_at AS "createdAt", ${p}updated_at AS "updatedAt"`;
+   ${p}created_at AS "createdAt", ${p}updated_at AS "updatedAt",
+   ${p}resolved_at AS "resolvedAt", ${p}resolved_by AS "resolvedBy"`;
 
 /** Every caller here is a signed-in person; agents become authors at M2. */
 function human(userId: string): Actor {
@@ -73,6 +76,38 @@ function deletableBy(
   role: WorkspaceRole
 ): boolean {
   return isAuthor(comment, userId) || ROLE_RANK[role] >= ROLE_RANK.admin;
+}
+
+/**
+ * Rewrites who a comment mentions (024), from the body against the workspace's
+ * member names — "@" followed by the member's exact name, case-insensitively,
+ * so "@Sean Wright" mentions Sean and "@seanw" mentions nobody. Server-side
+ * and recomputed on every write: a mention is a derived fact, never trusted
+ * from a client, and an edit that removes the "@" removes the row.
+ *
+ * Exact names rather than a token grammar, deliberately: names carry spaces,
+ * and any prefix-guessing scheme either under-matches ("@Sean" misses "Sean
+ * Wright") or invents matches no one made. The cost is that a mention is typed
+ * whole, which is what a picker-less input honestly supports.
+ */
+async function syncMentions(
+  client: PoolClient,
+  workspaceId: string,
+  commentId: number,
+  body: string
+): Promise<void> {
+  await client.query(`DELETE FROM comment_mention WHERE comment_id = $1`, [
+    commentId,
+  ]);
+  await client.query(
+    `INSERT INTO comment_mention (comment_id, user_id)
+     SELECT $1, u.id
+       FROM workspace_member wm
+       JOIN "user" u ON u.id = wm.user_id
+      WHERE wm.workspace_id = $2
+        AND position(lower('@' || u.name) IN lower($3)) > 0`,
+    [commentId, workspaceId, body]
+  );
 }
 
 interface CommentAccess {
@@ -160,6 +195,13 @@ export async function listCommentsForTask(
     ...row,
     canEdit: editableBy(row, userId),
     canDelete: deletableBy(row, userId, role),
+    // Members resolve; a viewer participates in the thread but does not tend
+    // it, the same line the board draws for every other state change. Agents
+    // read false — resolving is human housekeeping (024).
+    canResolve:
+      typeof actor !== "string" && actor.kind === "agent"
+        ? false
+        : ROLE_RANK[role] >= ROLE_RANK.member,
   }));
 }
 
@@ -205,6 +247,10 @@ export async function createComment(
     );
     const comment = rows[0];
 
+    // Mentions are derived from the body inside the same transaction, so a
+    // comment and who it names commit together (024).
+    await syncMentions(client, workspaceId, comment.id, comment.body);
+
     await logActivity(client, {
       workspaceId,
       boardId,
@@ -246,12 +292,65 @@ export async function updateComment(
     );
     const after = rows[0];
 
+    // Recomputed, not patched: an edit that removes the "@" removes the
+    // mention, and one that adds a name adds it (024).
+    await syncMentions(client, workspaceId, id, after.body);
+
     await logActivity(client, {
       workspaceId,
       boardId,
       taskId: comment.taskId,
       actor: human(userId),
       action: "comment.updated",
+      before: snapshot(comment),
+      after: snapshot(after),
+    });
+    return after;
+  });
+}
+
+/**
+ * Marks a comment handled, or reopens it (024). Member and up — resolving is
+ * thread housekeeping, the tending of shared state, so it takes the rank every
+ * other board-state change does; contrast commenting itself, which is
+ * participation and viewer-open. Not the author's alone, deliberately: the
+ * question a resolution answers ("is this dealt with?") belongs to the team,
+ * not to whoever raised it.
+ *
+ * A no-op (resolving the resolved, reopening the open) returns the comment
+ * and writes nothing — the rule every repository here follows.
+ */
+export async function resolveComment(
+  userId: string,
+  id: number,
+  resolved: boolean
+): Promise<Comment> {
+  const { comment, role, boardId, workspaceId } = await requireCommentAccess(
+    userId,
+    id
+  );
+  if (ROLE_RANK[role] < ROLE_RANK.member) {
+    throw new AuthzError("forbidden", "Only a member can resolve a comment");
+  }
+  if ((comment.resolvedAt !== null) === resolved) return comment;
+
+  return withTransaction(async (client) => {
+    const { rows } = await client.query<Comment>(
+      `UPDATE comment
+          SET resolved_at = CASE WHEN $2 THEN now() ELSE NULL END,
+              resolved_by = CASE WHEN $2 THEN $3 ELSE NULL END
+        WHERE id = $1
+        RETURNING ${commentColumns()}`,
+      [id, resolved, userId]
+    );
+    const after = rows[0];
+
+    await logActivity(client, {
+      workspaceId,
+      boardId,
+      taskId: comment.taskId,
+      actor: human(userId),
+      action: resolved ? "comment.resolved" : "comment.reopened",
       before: snapshot(comment),
       after: snapshot(after),
     });

@@ -8,6 +8,7 @@ import {
   createComment,
   deleteComment,
   listCommentsForTask,
+  resolveComment,
   updateComment,
 } from "./repository";
 
@@ -84,6 +85,24 @@ export async function handleUpdateComment(request: Request, id: string) {
   const payload = await request.json().catch(() => null);
   if (!payload || typeof payload !== "object")
     return badRequest("Invalid JSON body");
+
+  // Two mutations behind one PATCH, exclusive by intent: an edit changes the
+  // words (author-only), a resolve changes the thread's standing (member+).
+  // A request carrying both would blur whose rule applies, so it is refused.
+  const { resolved } = payload as Record<string, unknown>;
+  if (resolved !== undefined) {
+    if (typeof resolved !== "boolean")
+      return badRequest("resolved must be a boolean");
+    if ("body" in payload)
+      return badRequest("resolved cannot be combined with an edit");
+    try {
+      return Response.json(
+        await resolveComment(session.user.id, commentId, resolved)
+      );
+    } catch (error) {
+      return authzErrorResponse(error);
+    }
+  }
 
   const body = parseBody((payload as Record<string, unknown>).body);
   if (body === null) return badRequest("body must be a non-empty string");

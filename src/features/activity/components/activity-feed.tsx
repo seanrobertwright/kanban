@@ -196,6 +196,10 @@ function describe(
       return "commented";
     case "comment.updated":
       return "edited a comment";
+    case "comment.resolved":
+      return "resolved a comment";
+    case "comment.reopened":
+      return "reopened a comment";
     case "comment.deleted": {
       const author = entry.before?.author;
       if (!author) return "deleted a comment";

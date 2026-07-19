@@ -30,6 +30,8 @@ const ACTION_VERB: Record<string, string> = {
   "comment.created": "commented on",
   "comment.updated": "edited a comment on",
   "comment.deleted": "deleted a comment on",
+  "comment.resolved": "resolved a comment on",
+  "comment.reopened": "reopened a comment on",
   "column.created": "added a column",
   "column.updated": "renamed a column",
   "column.moved": "reordered a column",
@@ -55,7 +57,11 @@ function NotificationRow({
   unread: boolean;
   now: number;
 }) {
-  const verb = ACTION_VERB[entry.action] ?? "updated";
+  // A comment that names the reader outranks its generic verb: "mentioned you
+  // on" is the sentence worth interrupting someone for (024).
+  const verb = entry.mentionedMe
+    ? "mentioned you on"
+    : (ACTION_VERB[entry.action] ?? "updated");
   return (
     <div
       className={`flex gap-2 rounded-md px-2 py-1.5 text-sm ${unread ? "bg-primary/5" : ""}`}

@@ -14,6 +14,10 @@ export interface Comment {
   createdAt: string;
   /** Null until edited. The flag the UI renders "(edited)" from. */
   updatedAt: string | null;
+  /** When the thread was marked handled (024), or null while open. */
+  resolvedAt: string | null;
+  /** Who resolved it — a user id, humans only. Null while open. */
+  resolvedBy: string | null;
 }
 
 /**
@@ -33,6 +37,8 @@ export interface CommentEntry extends Comment {
   authorImage: string | null;
   canEdit: boolean;
   canDelete: boolean;
+  /** Member and up (024): resolving is thread housekeeping, not authorship. */
+  canResolve: boolean;
 }
 
 export interface CreateCommentInput {

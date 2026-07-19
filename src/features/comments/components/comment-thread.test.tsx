@@ -10,6 +10,7 @@ vi.mock("../client/api", () => ({
   createComment: vi.fn(),
   updateComment: vi.fn(),
   deleteComment: vi.fn(),
+  resolveComment: vi.fn(),
 }));
 const api = await import("../client/api");
 
@@ -24,8 +25,11 @@ function comment(over: Partial<CommentEntry> = {}): CommentEntry {
     body: "Looks good to me",
     createdAt: new Date().toISOString(),
     updatedAt: null,
+    resolvedAt: null,
+    resolvedBy: null,
     canEdit: false,
     canDelete: false,
+    canResolve: false,
     ...over,
   };
 }

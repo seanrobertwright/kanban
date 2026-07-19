@@ -132,7 +132,14 @@ export type TaskAction =
 export type CommentAction =
   | "comment.created"
   | "comment.updated"
-  | "comment.deleted";
+  | "comment.deleted"
+  /**
+   * Thread housekeeping (024). Two actions rather than one with a flag,
+   * because each is its own event a reader scans for, and each inverts to the
+   * other — 006's test, passed the same way claimed/released pass it.
+   */
+  | "comment.resolved"
+  | "comment.reopened";
 
 /**
  * Columns are the states an agent moves tasks between (PRD §9), so who changed
@@ -429,7 +436,15 @@ export type ActivityEntry = Activity & {
  * resolved from the snapshot for a deleted task, whose row is gone but whose
  * `before`/`after` still names it.
  */
-export type NotificationEntry = ActivityEntry & { taskTitle: string | null };
+export type NotificationEntry = ActivityEntry & {
+  taskTitle: string | null;
+  /**
+   * True when this entry is a comment that @mentions the reader (024) — the
+   * bell's "mentioned you on" over the generic verb. Computed per reader at
+   * read time; false for every non-comment row.
+   */
+  mentionedMe: boolean;
+};
 
 export interface WorkspaceNotifications {
   items: NotificationEntry[];

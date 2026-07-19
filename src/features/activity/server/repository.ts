@@ -182,7 +182,13 @@ export async function listWorkspaceNotifications(
             COALESCE(u.name, ag.name) AS "actorName",
             COALESCE(u.image, ag.image) AS "actorImage",
             COALESCE(t.title, al.after->>'title', al.before->>'title')
-              AS "taskTitle"
+              AS "taskTitle",
+            EXISTS (SELECT 1 FROM comment_mention cm
+                     WHERE cm.user_id = $2
+                       AND cm.comment_id =
+                           COALESCE((al.after->>'commentId')::int,
+                                    (al.before->>'commentId')::int))
+              AS "mentionedMe"
        FROM activity_log al
        LEFT JOIN "user" u
          ON u.id = al.actor_id AND al.actor_type = 'human'

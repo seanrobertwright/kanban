@@ -10,6 +10,7 @@ import {
   createComment,
   deleteComment,
   fetchTaskComments,
+  resolveComment,
   updateComment,
 } from "../client/api";
 import type { CommentEntry } from "../types";
@@ -160,6 +161,18 @@ export function CommentThread({ taskId, onChanged }: CommentThreadProps) {
                   {comment.updatedAt && (
                     <span title={`Edited ${comment.updatedAt}`}> · edited</span>
                   )}
+                  {/* Handled (024). The word, not just the fade below — the
+                      fade alone would read as "less important" rather than
+                      "dealt with". */}
+                  {comment.resolvedAt && (
+                    <span
+                      className="text-primary"
+                      title={`Resolved ${comment.resolvedAt}`}
+                    >
+                      {" "}
+                      · resolved
+                    </span>
+                  )}
                 </p>
 
                 {editingId === comment.id ? (
@@ -196,10 +209,28 @@ export function CommentThread({ taskId, onChanged }: CommentThreadProps) {
                         newlines they get. The body is rendered as text and never
                         as markup — an agent writes here from M2, and its output
                         is not to be trusted with HTML. */}
-                    <p className="text-sm leading-6 whitespace-pre-wrap">
+                    <p
+                      className={`text-sm leading-6 whitespace-pre-wrap ${
+                        comment.resolvedAt ? "text-muted-foreground" : ""
+                      }`}
+                    >
                       {comment.body}
                     </p>
                     <div className="flex gap-2">
+                      {comment.canResolve && (
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                          disabled={busy}
+                          onClick={() =>
+                            mutate(() =>
+                              resolveComment(comment.id, !comment.resolvedAt)
+                            )
+                          }
+                        >
+                          {comment.resolvedAt ? "Reopen" : "Resolve"}
+                        </button>
+                      )}
                       {comment.canEdit && (
                         <button
                           type="button"
