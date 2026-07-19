@@ -371,6 +371,100 @@ export async function handleUpdateTask(request: Request, id: number) {
 }
 
 /**
+ * One request, many tasks — the list view's bulk bar. The body carries the ids
+ * and what to do: `delete: true`, or any of columnId / assignee / priority /
+ * dueDate to set on every task.
+ *
+ * A loop over the per-task repository functions rather than one multi-row
+ * UPDATE, deliberately: each task keeps its own authz check, its own no-op
+ * guard, and its own activity_log rows — "the M1 criterion is that every
+ * mutation is attributable and revertible", and a single "updated 12 tasks"
+ * write would be neither. At bulk scale (dozens, not thousands) the loop's
+ * cost is invisible; the cap keeps it that way.
+ *
+ * Partial success is reported, not rolled back. The tasks are independent —
+ * one the caller cannot touch should not undo eleven they can — so the answer
+ * lists what failed and why, and the caller refetches either way.
+ */
+export async function handleBulkTasks(request: Request) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") return badRequest("Invalid JSON body");
+
+  const { ids, columnId, assignee, priority, dueDate } = body as Record<
+    string,
+    unknown
+  >;
+  const wantsDelete = (body as Record<string, unknown>).delete === true;
+  const setsAssignee = "assignee" in body;
+  const setsDueDate = "dueDate" in body;
+
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    !ids.every((id) => Number.isInteger(id))
+  )
+    return badRequest("ids must be a non-empty array of task ids");
+  if (ids.length > 100) return badRequest("At most 100 tasks per request");
+  if (columnId !== undefined && typeof columnId !== "number")
+    return badRequest("columnId must be a column id");
+  if (!isAssignee(assignee))
+    return badRequest("assignee must be {type, id} or null");
+  if (priority !== undefined && !isTaskPriority(priority))
+    return badRequest(`priority must be one of: ${PRIORITY_ORDER.join(", ")}`);
+  if (!isDueDate(dueDate))
+    return badRequest("dueDate must be a YYYY-MM-DD date or null");
+  if (
+    !wantsDelete &&
+    columnId === undefined &&
+    !setsAssignee &&
+    priority === undefined &&
+    !setsDueDate
+  )
+    return badRequest("Nothing to do");
+  if (wantsDelete && (columnId !== undefined || setsAssignee || priority !== undefined || setsDueDate))
+    return badRequest("delete cannot be combined with edits");
+
+  const failed: { id: number; error: string }[] = [];
+  let updated = 0;
+  for (const id of ids as number[]) {
+    try {
+      if (wantsDelete) {
+        if (!(await deleteTask(principal, id))) throw new Error("Task not found");
+      } else {
+        if (columnId !== undefined) {
+          // The end of the column: moveTask clamps to the sibling count, so a
+          // huge index is "append", which is the only order a bulk move can
+          // honestly promise.
+          const moved = await moveTask(principal, id, {
+            columnId,
+            position: Number.MAX_SAFE_INTEGER,
+          });
+          if (!moved) throw new Error("Task not found");
+        }
+        if (setsAssignee || priority !== undefined || setsDueDate) {
+          const edited = await updateTask(principal, id, {
+            ...(setsAssignee ? { assignee: assignee ?? null } : {}),
+            priority: priority as TaskPriority | undefined,
+            ...(setsDueDate ? { dueDate: dueDate as string | null } : {}),
+          });
+          if (!edited) throw new Error("Task not found");
+        }
+      }
+      updated += 1;
+    } catch (error) {
+      failed.push({
+        id,
+        error: error instanceof Error ? error.message : "Failed",
+      });
+    }
+  }
+  return Response.json({ updated, failed });
+}
+
+/**
  * Take the exclusive working claim on a task — PRD §4.3's hold, exposed to the
  * MCP door's claim_task tool. No body: the claimer is the request's principal,
  * the task is the id, and that is the whole input. A claim already held by

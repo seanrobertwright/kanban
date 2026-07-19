@@ -510,7 +510,11 @@ export function Board({
           membersById={membersById}
           agentsById={agentsById}
           labelsById={labelsById}
+          members={members}
+          agents={agents}
+          canEdit={canEdit}
           onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
+          onChanged={refresh}
         />
       ) : view === "calendar" ? (
         <CalendarView

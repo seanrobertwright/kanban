@@ -1,7 +1,9 @@
+import type { Actor } from "@/features/activity/types";
 import type {
   CreateTaskInput,
   MoveTaskInput,
   Task,
+  TaskPriority,
   UpdateTaskInput,
 } from "../types";
 
@@ -37,6 +39,35 @@ export function moveTask(id: number, input: MoveTaskInput): Promise<Task> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   }).then((res) => jsonOrThrow<Task>(res));
+}
+
+export interface BulkResult {
+  updated: number;
+  failed: { id: number; error: string }[];
+}
+
+/**
+ * Edit or delete many tasks in one request — the list view's bulk bar. The
+ * server loops the per-task mutations so each keeps its own authz and log
+ * rows; partial failure comes back in the result rather than as a thrown
+ * error, because eleven successes should not be reported as a failure.
+ */
+export function bulkTasks(
+  ids: number[],
+  action:
+    | { delete: true }
+    | {
+        columnId?: number;
+        assignee?: Actor | null;
+        priority?: TaskPriority;
+        dueDate?: string | null;
+      }
+): Promise<BulkResult> {
+  return fetch("/api/tasks/bulk", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids, ...action }),
+  }).then((res) => jsonOrThrow<BulkResult>(res));
 }
 
 export async function deleteTask(id: number): Promise<void> {
