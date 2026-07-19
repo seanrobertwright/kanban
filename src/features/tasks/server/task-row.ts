@@ -48,7 +48,29 @@ export function taskColumns(alias = ""): string {
           ${p}claimed_at AS "claimedAt",
           ${p}created_at AS "createdAt",
           ${labelsSubquery(self)} AS labels,
-          ${subtaskCountSubquery(self)} AS "subtaskCount"`;
+          ${subtaskCountSubquery(self)} AS "subtaskCount",
+          ${checklistSubquery(self)} AS checklist`;
+}
+
+/**
+ * A task's checklist progress as a json {total, done} — the card renders "2/5"
+ * from it, so both numbers arrive together rather than as two columns a caller
+ * reassembles (labelsSubquery's shape).
+ *
+ * One scan, not two subqueries: COUNT(*) and a FILTER'd COUNT over the same
+ * checklist_item rows. Both ::int for subtaskCount's reason — a bigint arrives
+ * from node-postgres as a string, and "0" is truthy. No COALESCE: an aggregate
+ * subquery over no rows still returns one row (0, 0), so an unchecked task reads
+ * {total:0, done:0} rather than null.
+ *
+ * `taskRef` qualified for labelsSubquery's reason — the inner scope has its own
+ * `id`, so a bare correlation would silently compare the wrong column.
+ */
+function checklistSubquery(taskRef: string): string {
+  return `(SELECT json_build_object(
+             'total', COUNT(*)::int,
+             'done', (COUNT(*) FILTER (WHERE ci.done))::int)
+             FROM checklist_item ci WHERE ci.task_id = ${taskRef})`;
 }
 
 /**

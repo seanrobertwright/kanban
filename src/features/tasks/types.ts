@@ -80,6 +80,17 @@ export interface Task {
    */
   subtaskCount: number;
   /**
+   * Checklist progress — {total, done} — for the card's "2/5" badge (017).
+   *
+   * Derived, not stored, and absent from TaskSnapshot for subtaskCount's reason:
+   * it is a fact about other rows, not state this task holds, so undo has no use
+   * for it. Always {total:0, done:0} when the task has no checklist. The items
+   * themselves are fetched only when a dialog opens, exactly as the subtasks and
+   * comments are — a count is two integers per card; the items are a list nobody
+   * is looking at until they open the task.
+   */
+  checklist: { total: number; done: number };
+  /**
    * Who this task is assigned to — a person or an agent (011) — or null. An
    * Actor (type + id), unified above the two peer columns assignee_id / agent_id,
    * the wedge in one field: §8's "assignee_id and agent_id are peers, exactly one

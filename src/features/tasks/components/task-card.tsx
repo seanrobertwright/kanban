@@ -2,6 +2,7 @@
 
 import {
   Bot,
+  ListChecks,
   ListTree,
   Lock,
   MoreHorizontal,
@@ -201,6 +202,7 @@ export function TaskCard({
         assignee ||
         task.dueDate ||
         task.subtaskCount > 0 ||
+        task.checklist.total > 0 ||
         task.claimedBy) && (
         <CardContent className="flex items-end justify-between gap-2 px-3">
           <p className="line-clamp-3 text-xs text-muted-foreground">
@@ -249,6 +251,23 @@ export function TaskCard({
                 <ListTree className="size-3.5" aria-hidden="true" />
                 <span className="sr-only">Subtasks: </span>
                 {task.subtaskCount}
+              </span>
+            )}
+            {/* Checklist progress (017): all-done reads in the accent so a
+                finished list is legible at a glance, the same signal the
+                strike-through gives inside the task. */}
+            {task.checklist.total > 0 && (
+              <span
+                className={`flex items-center gap-0.5 text-xs tabular-nums ${
+                  task.checklist.done === task.checklist.total
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                }`}
+                title={`Checklist: ${task.checklist.done} of ${task.checklist.total} done`}
+              >
+                <ListChecks className="size-3.5" aria-hidden="true" />
+                <span className="sr-only">Checklist: </span>
+                {task.checklist.done}/{task.checklist.total}
               </span>
             )}
             {task.dueDate && <DueDate date={task.dueDate} />}

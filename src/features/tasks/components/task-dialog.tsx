@@ -7,6 +7,7 @@ import { ActivityFeed } from "@/features/activity/components/activity-feed";
 import type { Actor } from "@/features/activity/types";
 import type { AgentSummary } from "@/features/agents/types";
 import { RunReview } from "@/features/agents/components/run-review";
+import { ChecklistSection } from "@/features/checklists/components/checklist-section";
 import { CommentThread } from "@/features/comments/components/comment-thread";
 import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
@@ -393,6 +394,15 @@ export function TaskDialog({
                   onChanged={onSubtasksChanged}
                 />
               )}
+              {/* Any task — top-level or a piece — can carry a checklist (017),
+                  so unlike the subtask list this is not gated on isSubtask. The
+                  same refresh the subtasks use: a checklist change moves the
+                  card's "2/5" badge, which the board must refetch to show. */}
+              <ChecklistSection
+                key={`checklist-${task.id}`}
+                taskId={task.id}
+                onChanged={onSubtasksChanged}
+              />
               {/* An agent run's review sits above the thread: it is what a human
                   came to this task to resolve when the agent has proposed work.
                   Renders nothing when the task has never had a run. Accepting or

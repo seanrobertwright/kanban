@@ -28,6 +28,7 @@ function subtask(over: Partial<Task> = {}): Task {
     labels: [],
     parentId: 1,
     subtaskCount: 0,
+    checklist: { total: 0, done: 0 },
     claimedBy: null,
     claimedAt: null,
     createdAt: "2026-07-15T00:00:00.000Z",
