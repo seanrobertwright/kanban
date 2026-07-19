@@ -39,6 +39,9 @@ const ACTION_VERB: Record<string, string> = {
   "label.created": "added a label",
   "label.updated": "edited a label",
   "label.deleted": "deleted a label",
+  "milestone.created": "added a milestone",
+  "milestone.updated": "edited a milestone",
+  "milestone.deleted": "deleted a milestone",
 };
 
 const POLL_MS = 60_000;

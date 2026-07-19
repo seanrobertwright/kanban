@@ -19,6 +19,7 @@ import {
   ChartNoAxesColumn,
   Columns3,
   Download,
+  Flag,
   LayoutTemplate,
   List,
   Plus,
@@ -50,6 +51,8 @@ import { fetchBoard } from "../client/api";
 import type { Column } from "../types";
 import { BoardColumn } from "./board-column";
 import { InsightsDialog } from "./insights-dialog";
+import { MilestonesDialog } from "@/features/milestones/components/milestones-dialog";
+import type { Milestone } from "@/features/milestones/types";
 import {
   BoardFilterBar,
   EMPTY_FILTER,
@@ -110,6 +113,9 @@ interface BoardProps {
    * same reason labels are state rather than a prop read straight through.
    */
   initialTemplates: TaskTemplate[];
+  /** The board's milestones (026), progress included — state because the
+   * milestones dialog edits the set and the task dialog's picker reads it. */
+  initialMilestones: Milestone[];
   /** False for viewers. The server enforces this too — this only hides the UI. */
   canEdit: boolean;
   /**
@@ -142,6 +148,7 @@ export function Board({
   initialSavedViews,
   initialDoneColumnId,
   initialTemplates,
+  initialMilestones,
   canEdit,
   canDeleteColumns,
 }: BoardProps) {
@@ -173,6 +180,8 @@ export function Board({
   const [templates, setTemplates] = useState<TaskTemplate[]>(initialTemplates);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
+  const [milestonesOpen, setMilestonesOpen] = useState(false);
   const [doneColumnId, setDoneColumnId] = useState<number | null>(
     initialDoneColumnId
   );
@@ -222,6 +231,7 @@ export function Board({
       setCols(data.columns);
       setItems(groupTasks(data.columns, data.tasks));
       setDoneColumnId(data.doneColumnId);
+      setMilestones(data.milestones);
     } catch {
       // Keep optimistic state if the server is unreachable.
     }
@@ -515,6 +525,14 @@ export function Board({
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
+            onClick={() => setMilestonesOpen(true)}
+          >
+            <Flag /> Milestones
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
             onClick={() => setInsightsOpen(true)}
           >
             <ChartNoAxesColumn /> Insights
@@ -683,6 +701,7 @@ export function Board({
         agents={agents}
         labels={labels}
         templates={templates}
+        milestones={milestones}
         onOpenChange={(open) => {
           if (!open) setDialog(null);
         }}
@@ -723,6 +742,14 @@ export function Board({
           labels from the same set (019). canEdit gates all of create/edit/delete
           — a template deletion has no task-side blast radius, so it needs member,
           not the admin canDeleteColumns demands. */}
+      <MilestonesDialog
+        boardId={boardId}
+        open={milestonesOpen}
+        milestones={milestones}
+        canEdit={canEdit}
+        onOpenChange={setMilestonesOpen}
+        onChanged={refresh}
+      />
       <InsightsDialog
         boardId={boardId}
         open={insightsOpen}

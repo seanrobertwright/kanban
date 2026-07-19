@@ -38,6 +38,7 @@ interface ExportRow {
   priority: string;
   estimate: number | null;
   assignee: string | null;
+  milestone: string | null;
   dueDate: string | null;
   labels: string[];
   parentTask: string | null;
@@ -53,6 +54,7 @@ const CSV_COLUMNS: [header: string, read: (r: ExportRow) => string | number | nu
   ["priority", (r) => r.priority],
   ["estimate", (r) => r.estimate],
   ["assignee", (r) => r.assignee],
+  ["milestone", (r) => r.milestone],
   ["due_date", (r) => r.dueDate],
   // One cell, "; "-joined: a CSV has no list type, and a second file of
   // task-label pairs would be normalization nobody asked a spreadsheet for.
@@ -109,6 +111,7 @@ export async function handleExportBoard(request: Request, id: string) {
     const agentName = new Map(agents.map((a) => [a.id, a.name]));
     const columnTitle = new Map(data.columns.map((c) => [c.id, c.title]));
     const titleById = new Map(allTasks.map((t) => [t.id, t.title]));
+    const milestoneName = new Map(data.milestones.map((m) => [m.id, m.name]));
 
     const rows: ExportRow[] = allTasks.map((t) => ({
       id: t.id,
@@ -123,6 +126,10 @@ export async function handleExportBoard(request: Request, id: string) {
           ? (memberName.get(t.assignee.id) ?? t.assignee.id)
           : (agentName.get(t.assignee.id) ?? t.assignee.id)
         : null,
+      milestone:
+        t.milestoneId === null
+          ? null
+          : (milestoneName.get(t.milestoneId) ?? null),
       dueDate: t.dueDate,
       labels: t.labels.map((l) => l.name),
       parentTask: t.parentId ? (titleById.get(t.parentId) ?? null) : null,

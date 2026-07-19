@@ -1,6 +1,7 @@
 import { query, queryOne } from "@/shared/db/client";
 import { AuthzError, requireBoardRole } from "@/features/workspaces/server/authz";
 import type { Principal } from "@/features/auth/server/principal";
+import type { Milestone } from "@/features/milestones/types";
 import { taskColumns } from "@/features/tasks/server/task-row";
 import type { Task } from "@/features/tasks/types";
 import type { Board } from "@/features/workspaces/types";
@@ -60,7 +61,25 @@ export async function getBoard(
     [boardId]
   );
 
-  return { board, columns, tasks, doneColumnId: board.doneColumnId };
+  // The authz is done (requireBoardRole above), so listMilestones' own check
+  // would be a second identical query — read the table directly.
+  const milestones = await query<Milestone>(
+    `SELECT m.id, m.board_id AS "boardId", m.name,
+            m.due_date AS "dueDate", m.created_at AS "createdAt",
+            (SELECT COUNT(*)::int FROM task t
+              WHERE t.milestone_id = m.id AND t.parent_id IS NULL) AS total,
+            (SELECT COUNT(*)::int FROM task t
+              WHERE t.milestone_id = m.id AND t.parent_id IS NULL
+                AND b2.done_column_id IS NOT NULL
+                AND t.column_id = b2.done_column_id) AS done
+       FROM milestone m
+       JOIN board b2 ON b2.id = m.board_id
+      WHERE m.board_id = $1
+      ORDER BY m.due_date NULLS LAST, m.id`,
+    [boardId]
+  );
+
+  return { board, columns, tasks, doneColumnId: board.doneColumnId, milestones };
 }
 
 /**

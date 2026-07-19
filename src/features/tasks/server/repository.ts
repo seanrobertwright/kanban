@@ -57,17 +57,39 @@ const snapshot = taskSnapshot;
  * undo without undoing the others.
  */
 function sameDetails(a: TaskSnapshot, b: TaskSnapshot): boolean {
-  // type and estimate (022) ride under task.updated rather than earning actions
-  // of their own: neither is a changeset unit any milestone reviews separately,
-  // and 006's test — an action exists when its inverse is something someone
-  // would want to apply on its own — has no taker for "un-retype" apart from
-  // "revert the edit".
+  // type, estimate (022) and milestone (026) ride under task.updated rather
+  // than earning actions of their own: none is a changeset unit any milestone
+  // reviews separately, and 006's test — an action exists when its inverse is
+  // something someone would want to apply on its own — has no taker for
+  // "un-retype" apart from "revert the edit".
   return (
     a.title === b.title &&
     a.description === b.description &&
     (a.type ?? "task") === (b.type ?? "task") &&
-    (a.estimate ?? null) === (b.estimate ?? null)
+    (a.estimate ?? null) === (b.estimate ?? null) &&
+    (a.milestoneId ?? null) === (b.milestoneId ?? null)
   );
+}
+
+/**
+ * Enforces the invariant 026 states but cannot express: a task aims only at a
+ * milestone of its own board. The foreign key proves the milestone exists
+ * somewhere; without this, any milestone id in the database could be written
+ * onto any task — assertAssignable's cross-tenant reference, one table over.
+ * "not_found" for the same anti-enumeration reason.
+ */
+async function assertMilestoneOnBoard(
+  client: PoolClient,
+  boardId: number,
+  milestoneId: number
+): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT 1 FROM milestone WHERE id = $1 AND board_id = $2`,
+    [milestoneId, boardId]
+  );
+  if (rows.length === 0) {
+    throw new AuthzError("not_found", "That milestone is not on this board");
+  }
 }
 
 function samePlacement(a: TaskSnapshot, b: TaskSnapshot): boolean {
@@ -407,6 +429,9 @@ export async function createTask(
     if (input.labelIds?.length) {
       await assertLabelsInWorkspace(client, workspaceId, input.labelIds);
     }
+    if (input.milestoneId != null) {
+      await assertMilestoneOnBoard(client, boardId, input.milestoneId);
+    }
 
     // priority falls back to 'none' rather than being left to the column
     // default, so the INSERT states the value it means. due_date has no such
@@ -428,11 +453,12 @@ export async function createTask(
     const { assigneeId, agentId } = assigneeColumns(input.assignee ?? null);
     const { rows } = await client.query<{ id: number }>(
       `INSERT INTO task (column_id, title, description, position, assignee_id,
-                         agent_id, priority, type, estimate, due_date, parent_id)
+                         agent_id, priority, type, estimate, milestone_id,
+                         due_date, parent_id)
        VALUES ($1, $2, $3,
                (SELECT COALESCE(MAX(position) + 1, 0) FROM task
-                 WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $10),
-               $4, $5, $6, $7, $8, $9, $10)
+                 WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $11),
+               $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING id`,
       [
         input.columnId,
@@ -442,10 +468,11 @@ export async function createTask(
         agentId,
         input.priority ?? "none",
         // 'task' stated rather than left to the column default, priority's
-        // reason: the INSERT says the value it means. estimate has no such
-        // fallback to state: null is the value.
+        // reason: the INSERT says the value it means. estimate and milestone
+        // have no such fallback to state: null is the value.
         input.type ?? "task",
         input.estimate ?? null,
+        input.milestoneId ?? null,
         input.dueDate ?? null,
         parentId,
       ]
@@ -509,6 +536,8 @@ export async function updateTask(
   // Three-valued like dueDate (022): null clears the estimate, a number sets
   // it, absent leaves it — 0 is an estimate, so no COALESCE sentinel exists.
   const setsEstimate = "estimate" in input;
+  // Three-valued (026), the same shape: null un-aims the task.
+  const setsMilestone = "milestoneId" in input;
   // Three-valued like the two above: the key's presence, not the value, decides
   // whether the rule is touched — null clears it, a frequency sets it, absent
   // leaves it. There is no frequency meaning "off", so COALESCE cannot serve.
@@ -524,6 +553,9 @@ export async function updateTask(
     }
     if (input.labelIds?.length) {
       await assertLabelsInWorkspace(client, workspaceId, input.labelIds);
+    }
+    if (setsMilestone && input.milestoneId != null) {
+      await assertMilestoneOnBoard(client, boardId, input.milestoneId);
     }
     // Before the UPDATE, so `after` reads them back. No supplied-flag: `[]` is
     // "no labels" and undefined is "not supplied", which is 006's rule holding
@@ -573,8 +605,11 @@ export async function updateTask(
               estimate = CASE WHEN $9::boolean
                               THEN $10::integer
                               ELSE estimate END,
-              due_date = CASE WHEN $11::boolean
-                              THEN $12::date
+              milestone_id = CASE WHEN $11::boolean
+                                  THEN $12::integer
+                                  ELSE milestone_id END,
+              due_date = CASE WHEN $13::boolean
+                              THEN $14::date
                               ELSE due_date END
         WHERE id = $1
         RETURNING ${TASK_COLUMNS}`,
@@ -589,6 +624,8 @@ export async function updateTask(
         input.type ?? null,
         setsEstimate,
         input.estimate ?? null,
+        setsMilestone,
+        input.milestoneId ?? null,
         setsDueDate,
         input.dueDate ?? null,
       ]

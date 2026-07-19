@@ -14,6 +14,7 @@ import { CommentThread } from "@/features/comments/components/comment-thread";
 import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
 import type { Label as LabelData } from "@/features/labels/types";
+import type { Milestone } from "@/features/milestones/types";
 import type { TaskTemplate } from "@/features/templates/types";
 import type { Member } from "@/features/workspaces/types";
 import { Button } from "@/shared/ui/button";
@@ -58,6 +59,8 @@ export interface TaskFormValues {
   type: TaskType;
   /** Points, or null for unestimated (022). null clears, like dueDate. */
   estimate: number | null;
+  /** The milestone to aim at (026), or null. null clears, like dueDate. */
+  milestoneId: number | null;
   /** null clears the date. The input always has a value, so never absent. */
   dueDate: string | null;
   /** Ids, not refs — the form picks from a vocabulary the server already knows. */
@@ -130,6 +133,12 @@ interface TaskDialogProps {
    * form fields, and the ordinary create submit does the write.
    */
   templates?: TaskTemplate[];
+  /**
+   * The board's milestones (026), the picker's options. Absent/empty renders
+   * no picker — a board that has never named a checkpoint shows the form
+   * exactly as before, the templates rule.
+   */
+  milestones?: Milestone[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: TaskFormValues) => Promise<void> | void;
   /** Open one of this task's pieces in this same dialog (a piece is a task). */
@@ -160,6 +169,7 @@ export function TaskDialog({
   agents,
   labels,
   templates = [],
+  milestones = [],
   onOpenChange,
   onSubmit,
   onOpenSubtask,
@@ -177,6 +187,8 @@ export function TaskDialog({
   const [type, setType] = useState<TaskType>("task");
   // "" is "unestimated" — the empty <input type="number">, dueDate's shape.
   const [estimate, setEstimate] = useState<string>("");
+  // "" is "no milestone" — the <option> stand-in for null (026).
+  const [milestoneId, setMilestoneId] = useState<string>("");
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
   const [labelIds, setLabelIds] = useState<number[]>([]);
   // "" is "does not recur" — the <option> value standing in for null, since a DOM
@@ -218,6 +230,7 @@ export function TaskDialog({
       setPriority(task?.priority ?? "none");
       setType(task?.type ?? "task");
       setEstimate(task?.estimate == null ? "" : String(task.estimate));
+      setMilestoneId(task?.milestoneId == null ? "" : String(task.milestoneId));
       setDueDate(task?.dueDate ?? NO_DUE_DATE);
       // Back to ids: the task carries {id, name} because the log needs the name
       // (LabelRef), but the form's business is which labels, not what they are
@@ -266,6 +279,8 @@ export function TaskDialog({
         // "" is the emptied number input; the API speaks null. parseInt rather
         // than Number so a stray "3.7" degrades to 3 instead of a 400.
         estimate: estimate === "" ? null : Math.max(0, parseInt(estimate, 10) || 0),
+        // "" is the DOM stand-in for "no milestone"; the API speaks null.
+        milestoneId: milestoneId === "" ? null : Number(milestoneId),
         // Converted for assigneeId's reason: "" is what an emptied date input
         // reports, and the API would read it as a malformed date rather than as
         // the clear it is.
@@ -491,6 +506,26 @@ export function TaskDialog({
               />
             </div>
           </div>
+          {/* Milestone (026). Only when the board has any — the templates
+              rule — and hidden for a subtask, which aims through its parent. */}
+          {!isSubtask && milestones.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="task-milestone">Milestone</Label>
+              <select
+                id="task-milestone"
+                value={milestoneId}
+                onChange={(e) => setMilestoneId(e.target.value)}
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                <option value="">No milestone</option>
+                {milestones.map((milestone) => (
+                  <option key={milestone.id} value={milestone.id}>
+                    {milestone.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {/* Repeat (020). A recurring task spawns its successor when it is moved
               into the board's done column — so this sets the cadence, and the
               board's done column is where completion happens. Hidden for a

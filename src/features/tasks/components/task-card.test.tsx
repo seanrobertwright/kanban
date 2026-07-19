@@ -40,6 +40,7 @@ function task(over: Partial<Task> = {}): Task {
     blockedByOpenCount: 0,
     type: "task",
     estimate: null,
+    milestoneId: null,
     recurrence: null,
     attachmentCount: 0,
     checklist: { total: 0, done: 0 },

@@ -1,3 +1,4 @@
+import type { Milestone } from "@/features/milestones/types";
 import type { Task } from "@/features/tasks/types";
 import type { Board } from "@/features/workspaces/types";
 
@@ -57,4 +58,10 @@ export interface BoardData {
    * untouched; it is a board fact this one read needs, not one every Board carries.
    */
   doneColumnId: number | null;
+  /**
+   * The board's milestones (026), progress included — on BoardData for
+   * doneColumnId's reason: the task dialog's picker and the milestones dialog
+   * both read them, and a board fact one read needs should ride that read.
+   */
+  milestones: Milestone[];
 }

@@ -145,6 +145,7 @@ export async function handleCreateTask(request: Request) {
     priority,
     type,
     estimate,
+    milestoneId,
     dueDate,
     labelIds,
     parentId,
@@ -175,6 +176,8 @@ export async function handleCreateTask(request: Request) {
     return badRequest(`type must be one of: ${TASK_TYPES.join(", ")}`);
   if (!isEstimate(estimate))
     return badRequest("estimate must be a non-negative integer or null");
+  if (milestoneId !== undefined && milestoneId !== null && !Number.isInteger(milestoneId))
+    return badRequest("milestoneId must be a milestone id or null");
   if (!isDueDate(dueDate))
     return badRequest("dueDate must be a YYYY-MM-DD date or null");
   if (!isLabelIds(labelIds))
@@ -193,6 +196,7 @@ export async function handleCreateTask(request: Request) {
       priority,
       type: type as TaskType | undefined,
       estimate: estimate as number | null | undefined,
+      milestoneId: milestoneId as number | null | undefined,
       dueDate,
       labelIds,
       parentId: parentId as number | undefined,
@@ -252,6 +256,7 @@ export async function handleUpdateTask(request: Request, id: number) {
     priority,
     type,
     estimate,
+    milestoneId,
     dueDate,
     labelIds,
     recurrence,
@@ -271,6 +276,8 @@ export async function handleUpdateTask(request: Request, id: number) {
   // it, so presence must be told apart from a PATCH that never mentions it.
   // type is two-valued like priority — `{"type": null}` is not a request.
   const setsEstimate = "estimate" in body;
+  // milestoneId is three-valued too (026): `{"milestoneId": null}` un-aims.
+  const setsMilestone = "milestoneId" in body;
   const setsRecurrence = "recurrence" in body;
 
   // Refused rather than ignored, and the difference matters because the failure
@@ -301,6 +308,7 @@ export async function handleUpdateTask(request: Request, id: number) {
       priority !== undefined ||
       type !== undefined ||
       setsEstimate ||
+      setsMilestone ||
       setsDueDate ||
       labelIds !== undefined ||
       setsRecurrence
@@ -317,6 +325,8 @@ export async function handleUpdateTask(request: Request, id: number) {
         return badRequest(`type must be one of: ${TASK_TYPES.join(", ")}`);
       if (!isEstimate(estimate))
         return badRequest("estimate must be a non-negative integer or null");
+      if (milestoneId !== undefined && milestoneId !== null && !Number.isInteger(milestoneId))
+        return badRequest("milestoneId must be a milestone id or null");
       if (!isDueDate(dueDate))
         return badRequest("dueDate must be a YYYY-MM-DD date or null");
       if (!isLabelIds(labelIds))
@@ -344,6 +354,8 @@ export async function handleUpdateTask(request: Request, id: number) {
         // exist only when the caller sent it — a stray undefined would clear
         // the estimate on every title-only edit.
         ...(setsEstimate ? { estimate: estimate as number | null } : {}),
+        // Spread, the same shape (026).
+        ...(setsMilestone ? { milestoneId: milestoneId as number | null } : {}),
         // Spread, for assigneeId's reason exactly: `"dueDate" in input` decides
         // whether the date is written, so a stray undefined key would clear the
         // due date on every title-only edit.

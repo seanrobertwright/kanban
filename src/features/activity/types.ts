@@ -176,11 +176,21 @@ export type ColumnAction =
  */
 export type LabelAction = "label.created" | "label.updated" | "label.deleted";
 
+/**
+ * Milestone lifecycle (026) — column-shaped entries (taskId null, boardId
+ * locates), and the same three verbs for the same reasons.
+ */
+export type MilestoneAction =
+  | "milestone.created"
+  | "milestone.updated"
+  | "milestone.deleted";
+
 export type ActivityAction =
   | TaskAction
   | CommentAction
   | ColumnAction
-  | LabelAction;
+  | LabelAction
+  | MilestoneAction;
 
 /** What a task looked like at one instant. */
 export interface TaskSnapshot {
@@ -233,6 +243,11 @@ export interface TaskSnapshot {
    * "written before 022", `null` means "was unestimated".
    */
   estimate?: number | null;
+  /**
+   * Optional for 003's reason, one migration on (026): `undefined` means
+   * "written before milestones", `null` means "aimed at none".
+   */
+  milestoneId?: number | null;
   /**
    * Optional for the same reason, and three-valued for the same reason as
    * assigneeId: `undefined` means "written before 006", `null` means "had no due
@@ -359,11 +374,19 @@ export interface ColumnSnapshot {
   wipLimit?: number | null;
 }
 
+/** What a milestone looked like at one instant (026). */
+export interface MilestoneSnapshot {
+  milestoneId: number;
+  name: string;
+  dueDate: string | null;
+}
+
 export type Snapshot =
   | TaskSnapshot
   | CommentSnapshot
   | ColumnSnapshot
-  | LabelSnapshot;
+  | LabelSnapshot
+  | MilestoneSnapshot;
 
 interface ActivityBase {
   id: string;

@@ -212,6 +212,13 @@ export interface Task {
    */
   estimate: number | null;
   /**
+   * The milestone this task aims at (026), or null. An id, not a ref — the
+   * board holds the milestone list (names, dates, progress) the way the
+   * picker holds the label vocabulary; joining the name onto every task would
+   * copy one string onto every card aiming at it.
+   */
+  milestoneId: number | null;
+  /**
    * A calendar date as 'YYYY-MM-DD', or null for no due date.
    *
    * A string rather than a Date, deliberately and all the way down: 006 stores
@@ -271,6 +278,8 @@ export interface CreateTaskInput {
   type?: TaskType;
   /** Points, or null/absent for unestimated (022). */
   estimate?: number | null;
+  /** The milestone to aim at (026), or null/absent for none. */
+  milestoneId?: number | null;
   dueDate?: string | null;
   /** Ids, not refs: the caller says which labels, the database knows their names. */
   labelIds?: number[];
@@ -337,6 +346,12 @@ export interface UpdateTaskInput {
    * one. `undefined` leaves the estimate alone; `null` clears it.
    */
   estimate?: number | null;
+  /**
+   * Three-valued for the same reason: there is no milestone id meaning
+   * "none", so `null` is the cleared state. Whether the id names a milestone
+   * of *this task's board* is a tenancy question, answered in the repository.
+   */
+  milestoneId?: number | null;
   /**
    * Three-valued, like assigneeId and for the identical reason: there is no date
    * that means "no due date", so `null` is the cleared state and cannot also be

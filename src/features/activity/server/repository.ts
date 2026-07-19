@@ -18,6 +18,8 @@ import type {
   CommentSnapshot,
   LabelAction,
   LabelSnapshot,
+  MilestoneAction,
+  MilestoneSnapshot,
   NotificationEntry,
   TaskAction,
   TaskSnapshot,
@@ -57,6 +59,11 @@ export type ActivityInput =
       action: LabelAction;
       before?: LabelSnapshot | null;
       after?: LabelSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: MilestoneAction;
+      before?: MilestoneSnapshot | null;
+      after?: MilestoneSnapshot | null;
     });
 
 /**
