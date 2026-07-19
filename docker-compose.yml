@@ -18,6 +18,32 @@ services:
       timeout: 5s
       retries: 10
 
+  # S3-compatible object store for attachments (021). One small container; the
+  # app talks the S3 protocol to it via @aws-sdk/client-s3, so pointing at real
+  # S3 / R2 / Supabase Storage in prod is only a change of env, no code. The app
+  # ensures its bucket exists on first use, so no init container is needed.
+  minio:
+    image: minio/minio
+    container_name: kanban-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio_dev_password
+    # 9000 is the S3 API, 9001 the web console. The app reaches the API by
+    # service name (minio:9000); the host ports are for the console and for
+    # host-side tooling/tests.
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - kanban_minio:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # One-shot: apply the better-auth schema + our SQL migrations, then exit.
   # Split out of the app's boot so (a) the slim runner image needs none of the
   # dev-time migration tooling, and (b) scaling app to >1 replica cannot race
@@ -51,6 +77,8 @@ services:
       # Do not serve until migrations have applied and exited 0.
       migrate:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
     # Secrets (BETTER_AUTH_SECRET, GITHUB_*, ANTHROPIC_API_KEY) come from the same
     # .env.local the dev server reads. Optional, so the stack still comes up on a
     # machine that has none — the affected features simply stay off.
@@ -64,6 +92,15 @@ services:
       DATABASE_URL: postgres://kanban:kanban_dev_password@postgres:5432/kanban
       # Where the app is served and what better-auth signs callbacks against.
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      # Attachments storage (021). Inside the compose network the app reaches
+      # MinIO by service name; these override any .env.local values (which point
+      # at the host port 9000 for local `npm run dev`). Path-style is required —
+      # MinIO does not do virtual-host bucket subdomains.
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: attachments
+      S3_ACCESS_KEY: minio
+      S3_SECRET_KEY: minio_dev_password
     ports:
       - "3000:3000"
     # No curl/wget in the slim image; Node 22 has global fetch. Any response
@@ -81,3 +118,4 @@ services:
 
 volumes:
   kanban_pgdata:
+  kanban_minio:

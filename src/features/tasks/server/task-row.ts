@@ -51,7 +51,21 @@ export function taskColumns(alias = ""): string {
           ${subtaskCountSubquery(self)} AS "subtaskCount",
           ${blockedBySubquery(self)} AS "blockedByCount",
           ${recurrenceSubquery(self)} AS recurrence,
+          ${attachmentCountSubquery(self)} AS "attachmentCount",
           ${checklistSubquery(self)} AS checklist`;
+}
+
+/**
+ * How many files are attached to this task (021). subtaskCountSubquery's twin,
+ * and here for its reason: a read that forgot it types as a whole Task and
+ * renders a card whose paperclip count is undefined, which query<Task> cannot
+ * catch. ::int because COUNT(*) is bigint — "0" is truthy, so the card would draw
+ * a badge for every task without the cast. `taskRef` qualified, labelsSubquery's
+ * trap.
+ */
+function attachmentCountSubquery(taskRef: string): string {
+  return `(SELECT COUNT(*)::int FROM attachment a
+             WHERE a.task_id = ${taskRef})`;
 }
 
 /**

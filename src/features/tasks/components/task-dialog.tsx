@@ -7,6 +7,7 @@ import { ActivityFeed } from "@/features/activity/components/activity-feed";
 import type { Actor } from "@/features/activity/types";
 import type { AgentSummary } from "@/features/agents/types";
 import { RunReview } from "@/features/agents/components/run-review";
+import { AttachmentSection } from "@/features/attachments/components/attachment-section";
 import { ChecklistSection } from "@/features/checklists/components/checklist-section";
 import { DependencySection } from "@/features/dependencies/components/dependency-section";
 import { CommentThread } from "@/features/comments/components/comment-thread";
@@ -506,6 +507,14 @@ export function TaskDialog({
                   count, so it nudges the board to refetch. */}
               <DependencySection
                 key={`deps-${task.id}`}
+                taskId={task.id}
+                onChanged={onDependenciesChanged}
+              />
+              {/* Files on the task (021). Like the checklist, any task can carry
+                  them, so it is not gated on isSubtask. A change moves the card's
+                  paperclip count, so it nudges the same board refresh. */}
+              <AttachmentSection
+                key={`attachments-${task.id}`}
                 taskId={task.id}
                 onChanged={onDependenciesChanged}
               />

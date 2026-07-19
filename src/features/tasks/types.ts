@@ -132,6 +132,13 @@ export interface Task {
    */
   recurrence: RecurrenceFrequency | null;
   /**
+   * How many files are attached (021). Derived like subtaskCount and absent from
+   * TaskSnapshot for its reason — a count of other rows is not state this task
+   * holds. 0 when nothing is attached; the files themselves are fetched only when
+   * the dialog opens, exactly as subtasks and checklist items are.
+   */
+  attachmentCount: number;
+  /**
    * Checklist progress — {total, done} — for the card's "2/5" badge (017).
    *
    * Derived, not stored, and absent from TaskSnapshot for subtaskCount's reason:

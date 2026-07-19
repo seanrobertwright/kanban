@@ -7,6 +7,7 @@ import {
   ListTree,
   Lock,
   MoreHorizontal,
+  Paperclip,
   Pencil,
   Repeat,
   Trash2,
@@ -206,6 +207,7 @@ export function TaskCard({
         task.subtaskCount > 0 ||
         task.checklist.total > 0 ||
         task.blockedByCount > 0 ||
+        task.attachmentCount > 0 ||
         task.recurrence ||
         task.claimedBy) && (
         <CardContent className="flex items-end justify-between gap-2 px-3">
@@ -285,6 +287,20 @@ export function TaskCard({
                 <ListTree className="size-3.5" aria-hidden="true" />
                 <span className="sr-only">Subtasks: </span>
                 {task.subtaskCount}
+              </span>
+            )}
+            {/* Attached files (021). The count only — the names and sizes are in
+                the dialog. A paperclip is the near-universal sign for it. */}
+            {task.attachmentCount > 0 && (
+              <span
+                className="flex items-center gap-0.5 text-xs tabular-nums text-muted-foreground"
+                title={`${task.attachmentCount} attachment${
+                  task.attachmentCount === 1 ? "" : "s"
+                }`}
+              >
+                <Paperclip className="size-3.5" aria-hidden="true" />
+                <span className="sr-only">Attachments: </span>
+                {task.attachmentCount}
               </span>
             )}
             {/* Checklist progress (017): all-done reads in the accent so a
