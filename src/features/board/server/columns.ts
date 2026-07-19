@@ -22,7 +22,8 @@ import type { Column } from "../types";
  * destroy work, so it takes `admin`.
  */
 
-const COLUMN_COLUMNS = `id, board_id AS "boardId", title, position`;
+const COLUMN_COLUMNS = `id, board_id AS "boardId", title, position,
+                        wip_limit AS "wipLimit"`;
 
 /** Every caller here is a signed-in person; agents become actors at M2. */
 function human(userId: string): Actor {
@@ -34,6 +35,7 @@ function snapshot(column: Column): ColumnSnapshot {
     columnId: column.id,
     title: column.title,
     position: column.position,
+    wipLimit: column.wipLimit,
   };
 }
 
@@ -105,6 +107,42 @@ export async function updateColumn(
       `UPDATE board_column SET title = $2 WHERE id = $1
         RETURNING ${COLUMN_COLUMNS}`,
       [id, title]
+    );
+    const after = rows[0];
+
+    await logActivity(client, {
+      ...columnEntry(workspaceId, boardId, userId),
+      action: "column.updated",
+      before: snapshot(before),
+      after: snapshot(after),
+    });
+    return after;
+  });
+}
+
+/**
+ * Sets or clears (null) a column's WIP limit (023). `member`, the same rank a
+ * rename takes and for the same blast-radius reason: a limit is cheap,
+ * reversible process tuning, not a destructive act. Logged as column.updated —
+ * the limit is a fact about the column, and "changed the limit" is not an
+ * event anyone reverts separately from "changed the column".
+ */
+export async function setColumnWipLimit(
+  userId: string,
+  id: number,
+  wipLimit: number | null
+): Promise<Column | undefined> {
+  const { boardId, workspaceId } = await requireColumnRole(userId, id, "member");
+
+  return withTransaction(async (client) => {
+    const before = await selectColumn(client, id);
+    if (!before) return undefined;
+    if (before.wipLimit === wipLimit) return before;
+
+    const { rows } = await client.query<Column>(
+      `UPDATE board_column SET wip_limit = $2 WHERE id = $1
+        RETURNING ${COLUMN_COLUMNS}`,
+      [id, wipLimit]
     );
     const after = rows[0];
 

@@ -344,6 +344,12 @@ export interface ColumnSnapshot {
   columnId: number;
   title: string;
   position: number;
+  /**
+   * The column's WIP limit (023), or null for none. Optional for 003's reason:
+   * rows written before 023 have no such key. `undefined` means "written before
+   * limits existed"; `null` means "had no limit".
+   */
+  wipLimit?: number | null;
 }
 
 export type Snapshot =

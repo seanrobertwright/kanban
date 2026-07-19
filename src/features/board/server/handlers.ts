@@ -7,6 +7,7 @@ import {
   createColumn,
   deleteColumn,
   moveColumn,
+  setColumnWipLimit,
   updateColumn,
 } from "./columns";
 
@@ -52,7 +53,10 @@ export async function handleUpdateColumn(request: Request, id: string) {
   if (!payload || typeof payload !== "object")
     return badRequest("Invalid JSON body");
 
-  const { title, position } = payload as Record<string, unknown>;
+  const { title, position, wipLimit } = payload as Record<string, unknown>;
+  // Three-valued, dueDate's shape (023): `{"wipLimit": null}` clears the limit
+  // and must be told apart from a PATCH that never mentions it.
+  const setsWipLimit = "wipLimit" in payload;
 
   try {
     // A rename and a reorder are two actions and log two rows, so one PATCH
@@ -63,6 +67,21 @@ export async function handleUpdateColumn(request: Request, id: string) {
         return badRequest("position must be an integer");
       if (!(await moveColumn(session.user.id, columnId, position)))
         return notFound();
+    }
+
+    if (setsWipLimit) {
+      if (
+        wipLimit !== null &&
+        (!Number.isInteger(wipLimit) || (wipLimit as number) < 1)
+      )
+        return badRequest("wipLimit must be a positive integer or null");
+      const limited = await setColumnWipLimit(
+        session.user.id,
+        columnId,
+        wipLimit as number | null
+      );
+      if (!limited) return notFound();
+      if (title === undefined) return Response.json(limited);
     }
 
     if (title !== undefined) {

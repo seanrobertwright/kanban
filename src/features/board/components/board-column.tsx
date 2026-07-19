@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   ArrowRight,
   CircleCheck,
+  Gauge,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -54,6 +55,8 @@ interface BoardColumnProps {
   onEditTask: (task: Task) => void;
   onDeleteTask: (task: Task) => void;
   onRename: (title: string) => void;
+  /** Set or clear (null) this column's WIP limit (023). Member, like rename. */
+  onSetWipLimit: (limit: number | null) => void;
   onMove: (by: -1 | 1) => void;
   onDelete: () => void;
   /** Toggle whether this is the done column. Admin-only, like delete (§7.4). */
@@ -75,6 +78,7 @@ export function BoardColumn({
   onEditTask,
   onDeleteTask,
   onRename,
+  onSetWipLimit,
   onMove,
   onDelete,
   onToggleDone,
@@ -82,6 +86,10 @@ export function BoardColumn({
   const { setNodeRef, isOver } = useDroppable({ id: `col-${column.id}` });
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(column.title);
+  // The WIP-limit editor, renaming's twin: the header swaps to a number input,
+  // Enter commits, Escape abandons, and emptying the field clears the limit.
+  const [limiting, setLimiting] = useState(false);
+  const [limitDraft, setLimitDraft] = useState("");
 
   function commitRename() {
     const title = draft.trim();
@@ -94,6 +102,22 @@ export function BoardColumn({
     }
     onRename(title);
   }
+
+  function commitLimit() {
+    setLimiting(false);
+    // "" clears — no limit is a real state, unlike an empty title. Anything
+    // unparseable or < 1 is a slip and changes nothing.
+    if (limitDraft.trim() === "") {
+      if (column.wipLimit !== null) onSetWipLimit(null);
+      return;
+    }
+    const limit = parseInt(limitDraft, 10);
+    if (!Number.isInteger(limit) || limit < 1 || limit === column.wipLimit)
+      return;
+    onSetWipLimit(limit);
+  }
+
+  const overLimit = column.wipLimit !== null && tasks.length > column.wipLimit;
 
   return (
     <section className="flex w-72 shrink-0 flex-col rounded-xl border bg-muted/50">
@@ -132,9 +156,46 @@ export function BoardColumn({
               )}
               <span className="truncate">{column.title}</span>
             </h2>
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
-              {tasks.length}
-            </span>
+            {limiting ? (
+              <Input
+                value={limitDraft}
+                autoFocus
+                type="number"
+                min={1}
+                aria-label={`WIP limit for ${column.title}`}
+                placeholder="No limit"
+                className="h-7 w-20 text-sm"
+                onChange={(e) => setLimitDraft(e.target.value)}
+                onBlur={commitLimit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitLimit();
+                  if (e.key === "Escape") setLimiting(false);
+                }}
+              />
+            ) : (
+              /* Count against limit (023) — "4/3" in the destructive red when
+                 over, which is the whole enforcement: loud, not blocking. The
+                 sr-only text says it for anyone who cannot see the colour. */
+              <span
+                className={cn(
+                  "rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums",
+                  overLimit
+                    ? "font-medium text-destructive"
+                    : "text-muted-foreground"
+                )}
+                title={
+                  column.wipLimit === null
+                    ? `${tasks.length} task${tasks.length === 1 ? "" : "s"}`
+                    : overLimit
+                      ? `Over the WIP limit: ${tasks.length} of ${column.wipLimit}`
+                      : `${tasks.length} of a ${column.wipLimit}-task WIP limit`
+                }
+              >
+                {overLimit && <span className="sr-only">Over WIP limit: </span>}
+                {tasks.length}
+                {column.wipLimit !== null && `/${column.wipLimit}`}
+              </span>
+            )}
             {canEdit && (
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -164,6 +225,22 @@ export function BoardColumn({
                         second, horizontal sortable through it would put M0's
                         working drag-and-drop at risk for a rarer action. These
                         are also keyboard-reachable, which a drag is not. */}
+                    {/* Member-gated like rename: a limit is process tuning,
+                        not destruction. The editor swaps into the header the
+                        way renaming does. */}
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setLimitDraft(
+                          column.wipLimit === null ? "" : String(column.wipLimit)
+                        );
+                        setLimiting(true);
+                      }}
+                    >
+                      <Gauge />
+                      {column.wipLimit === null
+                        ? "Set WIP limit"
+                        : "Change WIP limit"}
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       disabled={isFirst}
                       onClick={() => onMove(-1)}

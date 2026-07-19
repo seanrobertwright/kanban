@@ -27,7 +27,8 @@ export async function getBoard(
   if (!board) return undefined;
 
   const columns = await query<Column>(
-    `SELECT id, board_id AS "boardId", title, position
+    `SELECT id, board_id AS "boardId", title, position,
+            wip_limit AS "wipLimit"
        FROM board_column
       WHERE board_id = $1
       ORDER BY position, id`,

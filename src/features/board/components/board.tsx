@@ -384,6 +384,16 @@ export function Board({
     });
   }
 
+  function handleSetWipLimit(column: Column, wipLimit: number | null) {
+    setCols((prev) =>
+      prev.map((c) => (c.id === column.id ? { ...c, wipLimit } : c))
+    );
+    boardApi.setColumnWipLimit(column.id, wipLimit).catch((e) => {
+      setError(e instanceof Error ? e.message : "Could not set the WIP limit");
+      refresh();
+    });
+  }
+
   function handleMoveColumn(column: Column, by: -1 | 1) {
     const from = cols.findIndex((c) => c.id === column.id);
     const to = from + by;
@@ -546,6 +556,7 @@ export function Board({
               }
               onDeleteTask={handleDelete}
               onRename={(title) => handleRenameColumn(column, title)}
+              onSetWipLimit={(limit) => handleSetWipLimit(column, limit)}
               onMove={(by) => handleMoveColumn(column, by)}
               onDelete={() => handleDeleteColumn(column)}
             />

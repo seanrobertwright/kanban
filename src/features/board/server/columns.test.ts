@@ -133,6 +133,7 @@ describe("columns", () => {
         columnId: column.id,
         title: "Logged create",
         position: column.position,
+        wipLimit: null,
       });
       // The subject is the column; no task locates it.
       expect(logged.taskId).toBeNull();

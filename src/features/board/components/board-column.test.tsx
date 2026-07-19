@@ -6,7 +6,13 @@ import { describe, expect, it, vi } from "vitest";
 import { BoardColumn } from "./board-column";
 import type { Column } from "../types";
 
-const column: Column = { id: 1, boardId: 1, title: "To Do", position: 0 };
+const column: Column = {
+  id: 1,
+  boardId: 1,
+  title: "To Do",
+  position: 0,
+  wipLimit: null,
+};
 
 function renderColumn(
   over: Partial<React.ComponentProps<typeof BoardColumn>> = {}
@@ -26,6 +32,7 @@ function renderColumn(
     onEditTask: vi.fn(),
     onDeleteTask: vi.fn(),
     onRename: vi.fn(),
+    onSetWipLimit: vi.fn(),
     onMove: vi.fn(),
     onDelete: vi.fn(),
     onToggleDone: vi.fn(),

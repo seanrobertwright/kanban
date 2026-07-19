@@ -53,6 +53,18 @@ export function renameColumn(id: number, title: string): Promise<Column> {
   }).then((res) => jsonOrThrow<Column>(res));
 }
 
+/** Set or clear (null) a column's WIP limit (023). */
+export function setColumnWipLimit(
+  id: number,
+  wipLimit: number | null
+): Promise<Column> {
+  return fetch(`/api/columns/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ wipLimit }),
+  }).then((res) => jsonOrThrow<Column>(res));
+}
+
 export async function moveColumn(id: number, position: number): Promise<void> {
   const res = await fetch(`/api/columns/${id}`, {
     method: "PATCH",
