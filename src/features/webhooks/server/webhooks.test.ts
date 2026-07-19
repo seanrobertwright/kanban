@@ -32,6 +32,10 @@ async function createUser(label: string): Promise<string> {
   return id;
 }
 
+// The tests deliver to a listener on 127.0.0.1, which the SSRF gate rightly
+// refuses by default — this is the deployment flag doing its documented job.
+process.env.WEBHOOK_ALLOW_PRIVATE_NETWORK = "1";
+
 describe("webhooks", () => {
   let alice: string;
   let ws: string;
@@ -148,5 +152,32 @@ describe("webhooks", () => {
     const listed = await listWebhooks(alice, ws);
     expect(listed.length).toBeGreaterThan(0);
     expect(listed.every((w) => !("secret" in w))).toBe(true);
+  });
+
+  it("the SSRF gate refuses private and metadata targets when enforced", async () => {
+    const flag = process.env.WEBHOOK_ALLOW_PRIVATE_NETWORK;
+    delete process.env.WEBHOOK_ALLOW_PRIVATE_NETWORK;
+    try {
+      for (const url of [
+        "http://127.0.0.1/x",
+        "http://localhost/x",
+        "http://10.1.2.3/x",
+        "http://192.168.1.1/x",
+        "http://172.16.0.9/x",
+        "http://169.254.169.254/latest/meta-data",
+        "http://[::1]/x",
+      ]) {
+        await expect(createWebhook(alice, ws, { url })).rejects.toThrow(
+          /private or internal/
+        );
+      }
+      // A public literal is still welcome.
+      const { webhook } = await createWebhook(alice, ws, {
+        url: "https://example.com/hook",
+      });
+      await deleteWebhook(alice, webhook.id);
+    } finally {
+      process.env.WEBHOOK_ALLOW_PRIVATE_NETWORK = flag;
+    }
   });
 });
