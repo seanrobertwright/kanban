@@ -17,6 +17,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import {
   CalendarDays,
   Columns3,
+  Download,
   LayoutTemplate,
   List,
   Plus,
@@ -35,6 +36,12 @@ import {
 import type { Task } from "@/features/tasks/types";
 import type { Member } from "@/features/workspaces/types";
 import { Button } from "@/shared/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/ui/dropdown-menu";
 import { Input } from "@/shared/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/shared/ui/toggle-group";
 import * as boardApi from "../client/api";
@@ -501,6 +508,32 @@ export function Board({
           >
             <Tags /> Labels
           </Button>
+          {/* Export is a GET the browser can follow — plain anchors, so the
+              download rides the session cookie with no fetch-and-blob dance.
+              Viewer+: an export is a read of what the board already shows. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                >
+                  <Download /> Export
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                render={<a href={`/api/board/${boardId}/export?format=csv`}>CSV</a>}
+              />
+              <DropdownMenuItem
+                render={
+                  <a href={`/api/board/${boardId}/export?format=json`}>JSON</a>
+                }
+              />
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       {view === "list" ? (
