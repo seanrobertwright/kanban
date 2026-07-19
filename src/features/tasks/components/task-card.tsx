@@ -2,6 +2,8 @@
 
 import {
   Bot,
+  Bug,
+  BookOpen,
   Link2,
   ListChecks,
   ListTree,
@@ -33,8 +35,8 @@ import {
 import { LabelChip } from "@/features/labels/components/label-chip";
 import type { Label as LabelData } from "@/features/labels/types";
 import { formatDueDate, useToday } from "@/shared/lib/due-date";
-import { PRIORITY_LABELS, RECURRENCE_LABELS } from "../types";
-import type { Task, TaskPriority } from "../types";
+import { PRIORITY_LABELS, RECURRENCE_LABELS, TASK_TYPE_LABELS } from "../types";
+import type { Task, TaskPriority, TaskType } from "../types";
 
 interface TaskCardProps {
   task: Task;
@@ -84,6 +86,32 @@ export function PriorityDot({ priority }: { priority: TaskPriority }) {
       aria-label={`Priority: ${PRIORITY_LABELS[priority]}`}
       title={PRIORITY_LABELS[priority]}
     />
+  );
+}
+
+/**
+ * A mark for the non-default kinds only (022): 'task' renders nothing, for
+ * PRIORITY_DOTS's reason — it is the state of most cards, and a board of
+ * identical marks says nothing while costing every card the space. Exported for
+ * the subtask list, PriorityDot's precedent: a piece is a whole task and its
+ * kind reads the same way there.
+ */
+export function TypeMark({ type }: { type: TaskType }) {
+  if (type === "task") return null;
+  const Icon = type === "bug" ? Bug : BookOpen;
+  return (
+    // The icon is the entire signal, so the label is the content — the same
+    // accessibility argument PriorityDot makes for its dot. The span carries
+    // the tooltip and the sr-only text; the icon itself is decoration.
+    <span className="shrink-0" title={TASK_TYPE_LABELS[type]}>
+      <Icon
+        className={`size-3.5 ${
+          type === "bug" ? "text-destructive" : "text-sky-500"
+        }`}
+        aria-hidden="true"
+      />
+      <span className="sr-only">Type: {TASK_TYPE_LABELS[type]}</span>
+    </span>
   );
 }
 
@@ -150,6 +178,7 @@ export function TaskCard({
       <CardHeader className="px-3">
         <CardTitle className="flex items-center gap-1.5 text-sm leading-snug">
           <PriorityDot priority={task.priority} />
+          <TypeMark type={task.type} />
           {task.title}
         </CardTitle>
         {(onEdit || onDelete) && (
@@ -204,6 +233,7 @@ export function TaskCard({
       {(task.description ||
         assignee ||
         task.dueDate ||
+        task.estimate != null ||
         task.subtaskCount > 0 ||
         task.checklist.total > 0 ||
         task.blockedByCount > 0 ||
@@ -331,6 +361,20 @@ export function TaskCard({
                 <ListChecks className="size-3.5" aria-hidden="true" />
                 <span className="sr-only">Checklist: </span>
                 {task.checklist.done}/{task.checklist.total}
+              </span>
+            )}
+            {/* The estimate (022): a small bordered chip, so a column's points
+                line up and can be eyeballed into a sum. null renders nothing —
+                unestimated is the default state of most cards. */}
+            {task.estimate != null && (
+              <span
+                className="rounded-full border px-1.5 text-xs tabular-nums text-muted-foreground"
+                title={`Estimate: ${task.estimate} point${
+                  task.estimate === 1 ? "" : "s"
+                }`}
+              >
+                <span className="sr-only">Estimate: </span>
+                {task.estimate}
               </span>
             )}
             {task.dueDate && <DueDate date={task.dueDate} />}

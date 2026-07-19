@@ -81,6 +81,8 @@ function task(over: Partial<Task> = {}): Task {
     subtaskCount: 0,
     blockedByCount: 0,
     blockedByOpenCount: 0,
+    type: "task",
+    estimate: null,
     recurrence: null,
     attachmentCount: 0,
     checklist: { total: 0, done: 0 },

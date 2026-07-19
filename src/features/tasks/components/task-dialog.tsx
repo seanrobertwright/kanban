@@ -33,8 +33,15 @@ import {
   PRIORITY_ORDER,
   RECURRENCE_FREQUENCIES,
   RECURRENCE_LABELS,
+  TASK_TYPES,
+  TASK_TYPE_LABELS,
 } from "../types";
-import type { RecurrenceFrequency, Task, TaskPriority } from "../types";
+import type {
+  RecurrenceFrequency,
+  Task,
+  TaskPriority,
+  TaskType,
+} from "../types";
 
 export interface TaskFormValues {
   title: string;
@@ -47,6 +54,10 @@ export interface TaskFormValues {
   assignee: Actor | null;
   /** Never null: 'none' is how the form says "no priority". */
   priority: TaskPriority;
+  /** Never null: 'task' is the default kind (022), priority's shape. */
+  type: TaskType;
+  /** Points, or null for unestimated (022). null clears, like dueDate. */
+  estimate: number | null;
   /** null clears the date. The input always has a value, so never absent. */
   dueDate: string | null;
   /** Ids, not refs — the form picks from a vocabulary the server already knows. */
@@ -163,6 +174,9 @@ export function TaskDialog({
   // on submit; encoded from the task's Actor on open.
   const [assignee, setAssignee] = useState<string>(UNASSIGNED);
   const [priority, setPriority] = useState<TaskPriority>("none");
+  const [type, setType] = useState<TaskType>("task");
+  // "" is "unestimated" — the empty <input type="number">, dueDate's shape.
+  const [estimate, setEstimate] = useState<string>("");
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
   const [labelIds, setLabelIds] = useState<number[]>([]);
   // "" is "does not recur" — the <option> value standing in for null, since a DOM
@@ -202,6 +216,8 @@ export function TaskDialog({
       setDescription(task?.description ?? "");
       setAssignee(encodeAssignee(task?.assignee ?? null));
       setPriority(task?.priority ?? "none");
+      setType(task?.type ?? "task");
+      setEstimate(task?.estimate == null ? "" : String(task.estimate));
       setDueDate(task?.dueDate ?? NO_DUE_DATE);
       // Back to ids: the task carries {id, name} because the log needs the name
       // (LabelRef), but the form's business is which labels, not what they are
@@ -245,6 +261,11 @@ export function TaskDialog({
         // the whole reason this field avoids the null-vs-absent problem the two
         // fields either side of it have.
         priority,
+        // No conversion, priority's twin (022): 'task' is a real kind.
+        type,
+        // "" is the emptied number input; the API speaks null. parseInt rather
+        // than Number so a stray "3.7" degrades to 3 instead of a 400.
+        estimate: estimate === "" ? null : Math.max(0, parseInt(estimate, 10) || 0),
         // Converted for assigneeId's reason: "" is what an emptied date input
         // reports, and the API would read it as a malformed date rather than as
         // the clear it is.
@@ -433,6 +454,40 @@ export function TaskDialog({
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
+              />
+            </div>
+          </div>
+          {/* Type and estimate (022), side by side like priority and due date:
+              what kind of work, and how big — the two facts sprint planning
+              reads together. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="task-type">Type</Label>
+              <select
+                id="task-type"
+                value={type}
+                onChange={(e) => setType(e.target.value as TaskType)}
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                {TASK_TYPES.map((value) => (
+                  <option key={value} value={value}>
+                    {TASK_TYPE_LABELS[value]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="task-estimate">Estimate</Label>
+              {/* type="number" min=0: the API refuses negatives, so the control
+                  should not offer them. Clears to "", the unestimated state. */}
+              <Input
+                id="task-estimate"
+                type="number"
+                min={0}
+                step={1}
+                value={estimate}
+                onChange={(e) => setEstimate(e.target.value)}
+                placeholder="Points"
               />
             </div>
           </div>

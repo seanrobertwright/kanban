@@ -77,7 +77,9 @@ describe("agent management", () => {
 
     // The token resolves to this agent — the auth path is wired to what we stored.
     const principal = await getAgentByToken(token!);
-    expect(principal?.agentId).toBe(agent.id);
+    // Principal is a union and only the agent arm has agentId, so the kind is
+    // asserted with it — which is also the stronger claim.
+    expect(principal).toMatchObject({ kind: "agent", agentId: agent.id });
 
     // Only the hash is in the row; the raw token is nowhere in the database.
     const row = await queryOne<{ token_hash: string }>(

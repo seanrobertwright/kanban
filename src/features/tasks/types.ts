@@ -41,6 +41,28 @@ export function isTaskPriority(value: unknown): value is TaskPriority {
 }
 
 /**
+ * Mirrors the `task_type` enum in 022 — what kind of work a task records.
+ * A closed set like TaskPriority and for its reason: growing the taxonomy is a
+ * product decision, not a milestone's side effect. Order carries no meaning;
+ * the array exists to enumerate the picker and validate the API.
+ */
+export type TaskType = "task" | "bug" | "story";
+
+export const TASK_TYPES: readonly TaskType[] = ["task", "bug", "story"] as const;
+
+export const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  task: "Task",
+  bug: "Bug",
+  story: "Story",
+};
+
+export function isTaskType(value: unknown): value is TaskType {
+  return (
+    typeof value === "string" && (TASK_TYPES as readonly string[]).includes(value)
+  );
+}
+
+/**
  * Mirrors the `recurrence_frequency` enum in 020. A closed set — the cadences a
  * task can repeat on. Order carries no meaning here (nothing sorts by it), unlike
  * TaskPriority; the array exists to enumerate the picker and validate the API.
@@ -179,6 +201,17 @@ export interface Task {
    */
   priority: TaskPriority;
   /**
+   * What kind of work this is (022). Never null — 'task' is the default kind,
+   * priority's shape exactly, and what keeps updates two-valued.
+   */
+  type: TaskType;
+  /**
+   * Relative effort in points (022), or null for unestimated. Nullable because
+   * no number means "unestimated" — 0 is an estimate ("free") — so this is
+   * dueDate's three-valued shape on update, not priority's.
+   */
+  estimate: number | null;
+  /**
    * A calendar date as 'YYYY-MM-DD', or null for no due date.
    *
    * A string rather than a Date, deliberately and all the way down: 006 stores
@@ -234,6 +267,10 @@ export interface CreateTaskInput {
    */
   assignee?: Actor | null;
   priority?: TaskPriority;
+  /** What kind of work this is; absent means 'task', the default kind (022). */
+  type?: TaskType;
+  /** Points, or null/absent for unestimated (022). */
+  estimate?: number | null;
   dueDate?: string | null;
   /** Ids, not refs: the caller says which labels, the database knows their names. */
   labelIds?: number[];
@@ -289,6 +326,17 @@ export interface UpdateTaskInput {
    * Priority has one, so it does not.
    */
   priority?: TaskPriority;
+  /**
+   * Two-valued, priority's rule: 'task' is a value, so clearing never needs
+   * null, which stays free to mean "not supplied" and lets COALESCE serve.
+   */
+  type?: TaskType;
+  /**
+   * Three-valued, dueDate's rule: no number means "unestimated" — 0 is an
+   * estimate — so `null` is the cleared state and cannot also be the absent
+   * one. `undefined` leaves the estimate alone; `null` clears it.
+   */
+  estimate?: number | null;
   /**
    * Three-valued, like assigneeId and for the identical reason: there is no date
    * that means "no due date", so `null` is the cleared state and cannot also be

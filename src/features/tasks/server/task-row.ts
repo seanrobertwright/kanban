@@ -43,6 +43,7 @@ export function taskColumns(alias = ""): string {
   const self = alias ? `${alias}.id` : "task.id";
   return `${p}id, ${p}column_id AS "columnId", ${p}title, ${p}description,
           ${p}position, ${assigneeObject(p)} AS assignee, ${p}priority,
+          ${p}type, ${p}estimate,
           ${p}due_date AS "dueDate", ${p}parent_id AS "parentId",
           ${claimedByObject(p)} AS "claimedBy",
           ${p}claimed_at AS "claimedAt",
@@ -285,6 +286,11 @@ export function taskSnapshot(task: Task): TaskSnapshot {
     // that field only so old rows still read. See taskColumns/assigneeObject.
     assignee: task.assignee,
     priority: task.priority,
+    // Both 022 fields ride every snapshot for 006's reason: undo restores what
+    // the task *was*, and a snapshot missing them is a field undo silently
+    // fails to restore.
+    type: task.type,
+    estimate: task.estimate,
     dueDate: task.dueDate,
     labels: task.labels,
     // Never changes, so it is dead weight to every diff and load-bearing to the

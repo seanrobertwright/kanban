@@ -4,10 +4,12 @@ import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import {
   PRIORITY_ORDER,
   RECURRENCE_FREQUENCIES,
+  TASK_TYPES,
   isRecurrenceFrequency,
   isTaskPriority,
+  isTaskType,
 } from "../types";
-import type { RecurrenceFrequency, TaskPriority } from "../types";
+import type { RecurrenceFrequency, TaskPriority, TaskType } from "../types";
 import {
   claimTask,
   createTask,
@@ -99,6 +101,20 @@ function isRecurrence(
   return value === undefined || value === null || isRecurrenceFrequency(value);
 }
 
+/**
+ * Points, or null ("unestimated"), or absent ("leave it") — dueDate's
+ * three-valued shape (022). A non-negative integer only: the CHECK in 022 would
+ * refuse a negative anyway, but as a 500 wearing a constraint name, where the
+ * truth is that the request was malformed.
+ */
+function isEstimate(value: unknown): value is number | null | undefined {
+  return (
+    value === undefined ||
+    value === null ||
+    (Number.isInteger(value) && (value as number) >= 0)
+  );
+}
+
 function isDueDate(value: unknown): value is string | null | undefined {
   if (value === undefined || value === null) return true;
   if (typeof value !== "string" || !ISO_DATE.test(value)) return false;
@@ -127,6 +143,8 @@ export async function handleCreateTask(request: Request) {
     description,
     assignee,
     priority,
+    type,
+    estimate,
     dueDate,
     labelIds,
     parentId,
@@ -151,6 +169,12 @@ export async function handleCreateTask(request: Request) {
   // string is not — it would reach Postgres and fail the enum cast as a 500.
   if (priority !== undefined && !isTaskPriority(priority))
     return badRequest(`priority must be one of: ${PRIORITY_ORDER.join(", ")}`);
+  // Not `!isTaskType(type)`: undefined is legal and means "use the default",
+  // priority's shape exactly (022).
+  if (type !== undefined && !isTaskType(type))
+    return badRequest(`type must be one of: ${TASK_TYPES.join(", ")}`);
+  if (!isEstimate(estimate))
+    return badRequest("estimate must be a non-negative integer or null");
   if (!isDueDate(dueDate))
     return badRequest("dueDate must be a YYYY-MM-DD date or null");
   if (!isLabelIds(labelIds))
@@ -167,6 +191,8 @@ export async function handleCreateTask(request: Request) {
       description,
       assignee,
       priority,
+      type: type as TaskType | undefined,
+      estimate: estimate as number | null | undefined,
       dueDate,
       labelIds,
       parentId: parentId as number | undefined,
@@ -224,6 +250,8 @@ export async function handleUpdateTask(request: Request, id: number) {
     position,
     assignee,
     priority,
+    type,
+    estimate,
     dueDate,
     labelIds,
     recurrence,
@@ -239,6 +267,10 @@ export async function handleUpdateTask(request: Request, id: number) {
   // rejection below rather than being honoured as a clear.
   const setsAssignee = "assignee" in body;
   const setsDueDate = "dueDate" in body;
+  // estimate is three-valued like dueDate (022): `{"estimate": null}` clears
+  // it, so presence must be told apart from a PATCH that never mentions it.
+  // type is two-valued like priority — `{"type": null}` is not a request.
+  const setsEstimate = "estimate" in body;
   const setsRecurrence = "recurrence" in body;
 
   // Refused rather than ignored, and the difference matters because the failure
@@ -267,6 +299,8 @@ export async function handleUpdateTask(request: Request, id: number) {
       description !== undefined ||
       setsAssignee ||
       priority !== undefined ||
+      type !== undefined ||
+      setsEstimate ||
       setsDueDate ||
       labelIds !== undefined ||
       setsRecurrence
@@ -279,6 +313,10 @@ export async function handleUpdateTask(request: Request, id: number) {
         return badRequest("assignee must be {type, id} or null");
       if (priority !== undefined && !isTaskPriority(priority))
         return badRequest(`priority must be one of: ${PRIORITY_ORDER.join(", ")}`);
+      if (type !== undefined && !isTaskType(type))
+        return badRequest(`type must be one of: ${TASK_TYPES.join(", ")}`);
+      if (!isEstimate(estimate))
+        return badRequest("estimate must be a non-negative integer or null");
       if (!isDueDate(dueDate))
         return badRequest("dueDate must be a YYYY-MM-DD date or null");
       if (!isLabelIds(labelIds))
@@ -300,6 +338,12 @@ export async function handleUpdateTask(request: Request, id: number) {
         // the object means exactly what an absent key would — nothing was said.
         // The repository reads its value, not its presence.
         priority: priority as TaskPriority | undefined,
+        // No spread, like priority: type is two-valued (022).
+        type: type as TaskType | undefined,
+        // Spread, like dueDate: estimate is three-valued (022), so the key must
+        // exist only when the caller sent it — a stray undefined would clear
+        // the estimate on every title-only edit.
+        ...(setsEstimate ? { estimate: estimate as number | null } : {}),
         // Spread, for assigneeId's reason exactly: `"dueDate" in input` decides
         // whether the date is written, so a stray undefined key would clear the
         // due date on every title-only edit.

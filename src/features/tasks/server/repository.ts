@@ -57,7 +57,17 @@ const snapshot = taskSnapshot;
  * undo without undoing the others.
  */
 function sameDetails(a: TaskSnapshot, b: TaskSnapshot): boolean {
-  return a.title === b.title && a.description === b.description;
+  // type and estimate (022) ride under task.updated rather than earning actions
+  // of their own: neither is a changeset unit any milestone reviews separately,
+  // and 006's test — an action exists when its inverse is something someone
+  // would want to apply on its own — has no taker for "un-retype" apart from
+  // "revert the edit".
+  return (
+    a.title === b.title &&
+    a.description === b.description &&
+    (a.type ?? "task") === (b.type ?? "task") &&
+    (a.estimate ?? null) === (b.estimate ?? null)
+  );
 }
 
 function samePlacement(a: TaskSnapshot, b: TaskSnapshot): boolean {
@@ -238,13 +248,13 @@ async function spawnNextOccurrence(
   const { assigneeId, agentId } = assigneeColumns(before.assignee);
   const { rows } = await client.query<{ id: number }>(
     `INSERT INTO task (column_id, title, description, position, assignee_id,
-                       agent_id, priority, due_date)
+                       agent_id, priority, type, estimate, due_date)
      VALUES ($1, $2, $3,
              (SELECT COALESCE(MAX(position) + 1, 0) FROM task
                WHERE column_id = $1 AND parent_id IS NULL),
-             $4, $5, $6,
-             CASE WHEN $7::date IS NULL THEN NULL
-                  ELSE ($7::date + $8::interval)::date END)
+             $4, $5, $6, $7, $8,
+             CASE WHEN $9::date IS NULL THEN NULL
+                  ELSE ($9::date + $10::interval)::date END)
      RETURNING id`,
     [
       firstColumnId,
@@ -253,6 +263,8 @@ async function spawnNextOccurrence(
       assigneeId,
       agentId,
       before.priority,
+      before.type,
+      before.estimate,
       before.dueDate,
       RECURRENCE_INTERVAL[frequency],
     ]
@@ -416,11 +428,11 @@ export async function createTask(
     const { assigneeId, agentId } = assigneeColumns(input.assignee ?? null);
     const { rows } = await client.query<{ id: number }>(
       `INSERT INTO task (column_id, title, description, position, assignee_id,
-                         agent_id, priority, due_date, parent_id)
+                         agent_id, priority, type, estimate, due_date, parent_id)
        VALUES ($1, $2, $3,
                (SELECT COALESCE(MAX(position) + 1, 0) FROM task
-                 WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $8),
-               $4, $5, $6, $7, $8)
+                 WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $10),
+               $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         input.columnId,
@@ -429,6 +441,11 @@ export async function createTask(
         assigneeId,
         agentId,
         input.priority ?? "none",
+        // 'task' stated rather than left to the column default, priority's
+        // reason: the INSERT says the value it means. estimate has no such
+        // fallback to state: null is the value.
+        input.type ?? "task",
+        input.estimate ?? null,
         input.dueDate ?? null,
         parentId,
       ]
@@ -489,6 +506,9 @@ export async function updateTask(
   // setting 'none', so null keeps its ordinary meaning of "absent" there.
   const setsAssignee = "assignee" in input;
   const setsDueDate = "dueDate" in input;
+  // Three-valued like dueDate (022): null clears the estimate, a number sets
+  // it, absent leaves it — 0 is an estimate, so no COALESCE sentinel exists.
+  const setsEstimate = "estimate" in input;
   // Three-valued like the two above: the key's presence, not the value, decides
   // whether the rule is touched — null clears it, a frequency sets it, absent
   // leaves it. There is no frequency meaning "off", so COALESCE cannot serve.
@@ -549,8 +569,12 @@ export async function updateTask(
                               THEN $6::text
                               ELSE agent_id END,
               priority = COALESCE($7::task_priority, priority),
-              due_date = CASE WHEN $8::boolean
-                              THEN $9::date
+              type = COALESCE($8::task_type, type),
+              estimate = CASE WHEN $9::boolean
+                              THEN $10::integer
+                              ELSE estimate END,
+              due_date = CASE WHEN $11::boolean
+                              THEN $12::date
                               ELSE due_date END
         WHERE id = $1
         RETURNING ${TASK_COLUMNS}`,
@@ -562,6 +586,9 @@ export async function updateTask(
         assigneeId,
         agentId,
         input.priority ?? null,
+        input.type ?? null,
+        setsEstimate,
+        input.estimate ?? null,
         setsDueDate,
         input.dueDate ?? null,
       ]

@@ -1,5 +1,5 @@
 import type { LabelRef } from "@/features/labels/types";
-import type { TaskPriority } from "@/features/tasks/types";
+import type { TaskPriority, TaskType } from "@/features/tasks/types";
 
 export type { LabelRef };
 
@@ -215,6 +215,17 @@ export interface TaskSnapshot {
    * instant, and at that instant it had no priority to look like.
    */
   priority?: TaskPriority;
+  /**
+   * Optional for priority's exact reason, one migration on: rows written before
+   * 022 have no such key, and never null — the column is NOT NULL DEFAULT
+   * 'task', so `undefined` means only "written before types existed".
+   */
+  type?: TaskType;
+  /**
+   * Optional for 003's reason and three-valued like dueDate: `undefined` means
+   * "written before 022", `null` means "was unestimated".
+   */
+  estimate?: number | null;
   /**
    * Optional for the same reason, and three-valued for the same reason as
    * assigneeId: `undefined` means "written before 006", `null` means "had no due
