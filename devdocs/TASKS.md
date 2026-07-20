@@ -39,19 +39,33 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–027.
       own-or-admin delete; Time section in the task dialog. → `feb486c`
 - [x] **Feature-summary scoreboard** — all 140 rows marked ✅/❌; handoff
       regenerated; delete-snapshot sentinel updated (8 fields). → `f65918d`
+- [x] **Durable task list** — this file. → `8212b65`
+
+## Done — 2026-07-19 agile phase (M4 opened)
+
+- [x] **Sprints** (028) — stateful lifecycle (planning → active → completed,
+      one active per board via a partial unique index, Start/Complete with
+      rollover of unfinished work to a planning sprint or the backlog).
+      `task.sprint_id` SET NULL; progress in points; a planning surface whose
+      capacity view counts agents beside humans (the PRD §4.3 payoff); picker
+      in the task dialog; export sprint column; `sprint.*` activity actions.
+      → `d1619fd`
 
 ---
 
 ## Next up — candidates, roughly by value
 
-### Agile & Product (largest remaining coherent cluster)
-- [ ] **Sprints / iterations** — a `sprint` table (board-scoped, start/end),
-      `task.sprint_id`; the estimate + done-column machinery is already in place.
-- [ ] **Velocity** — points completed per sprint; reads the same done-column
-      signal `analytics.ts` already folds.
-- [ ] **Burndown chart** — remaining points over a sprint's days; another SVG in
-      the Insights dialog's shape.
-- [ ] **Backlog** — an unscheduled queue distinct from board columns.
+### Agile & Product (M4 — sprints landed; velocity/burndown next)
+- [ ] **Velocity** — points completed per *completed* sprint; reads
+      `sprint.donePoints` (frozen at completion) — a chart over the board's
+      sprint history. The immediate follow-up.
+- [ ] **Burndown chart** — remaining points over the *active* sprint's days;
+      needs the active sprint's start/end dates (028 stores them) and a daily
+      remaining-points series replayed from `activity_log` (analytics.ts's fold
+      is the template). Another SVG in the Insights dialog's shape.
+- [ ] **Backlog view** — the `sprint_id IS NULL` queue as its own surface,
+      distinct from board columns; drag-to-sprint planning.
+- [ ] **Epics** — a larger-than-task grouping above the milestone.
 
 ### M2 hardening (leftovers from the pre-sweep handoff — stay on the wedge)
 - [ ] **`flag_blocker` tool** — record a `task_dependency` blocked-by edge from an
