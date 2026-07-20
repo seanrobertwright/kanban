@@ -44,6 +44,11 @@ const ACTION_VERB: Record<string, string> = {
   "milestone.deleted": "deleted a milestone",
   "time.logged": "logged time on",
   "time.deleted": "removed a time entry on",
+  "sprint.created": "added a sprint",
+  "sprint.updated": "edited a sprint",
+  "sprint.started": "started a sprint",
+  "sprint.completed": "completed a sprint",
+  "sprint.deleted": "deleted a sprint",
 };
 
 const POLL_MS = 60_000;

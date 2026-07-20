@@ -2,6 +2,7 @@ import { query, queryOne } from "@/shared/db/client";
 import { AuthzError, requireBoardRole } from "@/features/workspaces/server/authz";
 import type { Principal } from "@/features/auth/server/principal";
 import type { Milestone } from "@/features/milestones/types";
+import type { Sprint } from "@/features/sprints/types";
 import { taskColumns } from "@/features/tasks/server/task-row";
 import type { Task } from "@/features/tasks/types";
 import type { Board } from "@/features/workspaces/types";
@@ -79,7 +80,41 @@ export async function getBoard(
     [boardId]
   );
 
-  return { board, columns, tasks, doneColumnId: board.doneColumnId, milestones };
+  // Sprints ride along for the task dialog's picker and the SprintsDialog's
+  // first paint, progress included — the milestone read's twin, one migration
+  // on. Authz already done above.
+  const sprints = await query<Sprint>(
+    `SELECT s.id, s.board_id AS "boardId", s.name, s.goal,
+            s.start_date AS "startDate", s.end_date AS "endDate",
+            s.status, s.created_at AS "createdAt",
+            (SELECT COUNT(*)::int FROM task t
+              WHERE t.sprint_id = s.id AND t.parent_id IS NULL) AS total,
+            (SELECT COUNT(*)::int FROM task t
+              WHERE t.sprint_id = s.id AND t.parent_id IS NULL
+                AND b2.done_column_id IS NOT NULL
+                AND t.column_id = b2.done_column_id) AS done,
+            (SELECT COALESCE(SUM(t.estimate),0)::int FROM task t
+              WHERE t.sprint_id = s.id AND t.parent_id IS NULL) AS points,
+            (SELECT COALESCE(SUM(t.estimate),0)::int FROM task t
+              WHERE t.sprint_id = s.id AND t.parent_id IS NULL
+                AND b2.done_column_id IS NOT NULL
+                AND t.column_id = b2.done_column_id) AS "donePoints"
+       FROM sprint s
+       JOIN board b2 ON b2.id = s.board_id
+      WHERE s.board_id = $1
+      ORDER BY array_position(ARRAY['active','planning','completed']::sprint_status[], s.status),
+               s.start_date NULLS LAST, s.id DESC`,
+    [boardId]
+  );
+
+  return {
+    board,
+    columns,
+    tasks,
+    doneColumnId: board.doneColumnId,
+    milestones,
+    sprints,
+  };
 }
 
 /**

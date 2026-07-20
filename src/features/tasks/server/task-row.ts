@@ -44,6 +44,7 @@ export function taskColumns(alias = ""): string {
   return `${p}id, ${p}column_id AS "columnId", ${p}title, ${p}description,
           ${p}position, ${assigneeObject(p)} AS assignee, ${p}priority,
           ${p}type, ${p}estimate, ${p}milestone_id AS "milestoneId",
+          ${p}sprint_id AS "sprintId",
           ${p}due_date AS "dueDate", ${p}parent_id AS "parentId",
           ${claimedByObject(p)} AS "claimedBy",
           ${p}claimed_at AS "claimedAt",
@@ -292,6 +293,7 @@ export function taskSnapshot(task: Task): TaskSnapshot {
     type: task.type,
     estimate: task.estimate,
     milestoneId: task.milestoneId,
+    sprintId: task.sprintId,
     dueDate: task.dueDate,
     labels: task.labels,
     // Never changes, so it is dead weight to every diff and load-bearing to the

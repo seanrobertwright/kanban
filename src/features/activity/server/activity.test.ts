@@ -147,9 +147,9 @@ describe("activity log", () => {
       // snapshot gains a field, which is the point. Every field a task has must
       // be in here or undo silently restores an incomplete task — assigneeId
       // arrived at 004 exactly this way, priority and dueDate at 006, labels at
-      // 007, parentId at 008, claimedBy at 010, and type/estimate (022) plus
-      // milestoneId (026) each tripped it again. Eight for eight; the comment
-      // has earned its keep.
+      // 007, parentId at 008, claimedBy at 010, type/estimate (022),
+      // milestoneId (026), and sprintId (028) each tripped it again. Nine for
+      // nine; the comment has earned its keep.
       const label = await createLabel(alice, workspaceId, { name: "recoverable" });
       const task = await createTask(alice, {
         columnId: todoId,
@@ -180,6 +180,8 @@ describe("activity log", () => {
         // Null, because this task aims at nothing — but present, because undo
         // of a delete must restore the aim. See TaskSnapshot.milestoneId (026).
         milestoneId: null,
+        // Null (backlog), present for the same reason (028).
+        sprintId: null,
         dueDate: "2026-08-01",
         // Name included: the label is what undo needs to restore, and 007's
         // whole point is that this stays readable after the label is deleted.

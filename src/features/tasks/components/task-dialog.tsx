@@ -16,6 +16,7 @@ import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
 import type { Label as LabelData } from "@/features/labels/types";
 import type { Milestone } from "@/features/milestones/types";
+import type { Sprint } from "@/features/sprints/types";
 import type { TaskTemplate } from "@/features/templates/types";
 import type { Member } from "@/features/workspaces/types";
 import { Button } from "@/shared/ui/button";
@@ -62,6 +63,8 @@ export interface TaskFormValues {
   estimate: number | null;
   /** The milestone to aim at (026), or null. null clears, like dueDate. */
   milestoneId: number | null;
+  /** The sprint to schedule into (028), or null (backlog). */
+  sprintId: number | null;
   /** null clears the date. The input always has a value, so never absent. */
   dueDate: string | null;
   /** Ids, not refs — the form picks from a vocabulary the server already knows. */
@@ -140,6 +143,13 @@ interface TaskDialogProps {
    * exactly as before, the templates rule.
    */
   milestones?: Milestone[];
+  /**
+   * The board's sprints (028). The picker offers only planning + active ones
+   * to schedule into (a completed sprint's scope is frozen); a task already in
+   * a completed sprint still shows it, disabled, so its home is legible.
+   * Absent/empty renders no picker — the templates rule.
+   */
+  sprints?: Sprint[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: TaskFormValues) => Promise<void> | void;
   /** Open one of this task's pieces in this same dialog (a piece is a task). */
@@ -171,6 +181,7 @@ export function TaskDialog({
   labels,
   templates = [],
   milestones = [],
+  sprints = [],
   onOpenChange,
   onSubmit,
   onOpenSubtask,
@@ -190,6 +201,8 @@ export function TaskDialog({
   const [estimate, setEstimate] = useState<string>("");
   // "" is "no milestone" — the <option> stand-in for null (026).
   const [milestoneId, setMilestoneId] = useState<string>("");
+  // "" is "backlog" — the <option> stand-in for null (028).
+  const [sprintId, setSprintId] = useState<string>("");
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
   const [labelIds, setLabelIds] = useState<number[]>([]);
   // "" is "does not recur" — the <option> value standing in for null, since a DOM
@@ -232,6 +245,7 @@ export function TaskDialog({
       setType(task?.type ?? "task");
       setEstimate(task?.estimate == null ? "" : String(task.estimate));
       setMilestoneId(task?.milestoneId == null ? "" : String(task.milestoneId));
+      setSprintId(task?.sprintId == null ? "" : String(task.sprintId));
       setDueDate(task?.dueDate ?? NO_DUE_DATE);
       // Back to ids: the task carries {id, name} because the log needs the name
       // (LabelRef), but the form's business is which labels, not what they are
@@ -282,6 +296,8 @@ export function TaskDialog({
         estimate: estimate === "" ? null : Math.max(0, parseInt(estimate, 10) || 0),
         // "" is the DOM stand-in for "no milestone"; the API speaks null.
         milestoneId: milestoneId === "" ? null : Number(milestoneId),
+        // "" is the DOM stand-in for "backlog"; the API speaks null.
+        sprintId: sprintId === "" ? null : Number(sprintId),
         // Converted for assigneeId's reason: "" is what an emptied date input
         // reports, and the API would read it as a malformed date rather than as
         // the clear it is.
@@ -524,6 +540,40 @@ export function TaskDialog({
                     {milestone.name}
                   </option>
                 ))}
+              </select>
+            </div>
+          )}
+          {/* Sprint (028). Only when the board has any, and hidden for a subtask
+              (a piece is scheduled through its parent). The picker offers
+              planning + active sprints; a completed one shows disabled only if
+              the task is already in it, so its home stays legible. */}
+          {!isSubtask && sprints.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="task-sprint">Sprint</Label>
+              <select
+                id="task-sprint"
+                value={sprintId}
+                onChange={(e) => setSprintId(e.target.value)}
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                <option value="">Backlog</option>
+                {sprints
+                  .filter(
+                    (s) =>
+                      s.status !== "completed" ||
+                      String(s.id) === sprintId
+                  )
+                  .map((sprint) => (
+                    <option
+                      key={sprint.id}
+                      value={sprint.id}
+                      disabled={sprint.status === "completed"}
+                    >
+                      {sprint.name}
+                      {sprint.status === "active" ? " (active)" : ""}
+                      {sprint.status === "completed" ? " (completed)" : ""}
+                    </option>
+                  ))}
               </select>
             </div>
           )}

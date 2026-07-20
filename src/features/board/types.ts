@@ -1,4 +1,5 @@
 import type { Milestone } from "@/features/milestones/types";
+import type { Sprint } from "@/features/sprints/types";
 import type { Task } from "@/features/tasks/types";
 import type { Board } from "@/features/workspaces/types";
 
@@ -64,4 +65,11 @@ export interface BoardData {
    * both read them, and a board fact one read needs should ride that read.
    */
   milestones: Milestone[];
+  /**
+   * The board's sprints (028), progress included — on BoardData for the
+   * milestone reason: the task dialog's sprint picker reads them, and the
+   * SprintsDialog (which also fetches its own fresh copy with capacity) opens
+   * against them. Ordered active → planning → completed.
+   */
+  sprints: Sprint[];
 }

@@ -67,7 +67,8 @@ function sameDetails(a: TaskSnapshot, b: TaskSnapshot): boolean {
     a.description === b.description &&
     (a.type ?? "task") === (b.type ?? "task") &&
     (a.estimate ?? null) === (b.estimate ?? null) &&
-    (a.milestoneId ?? null) === (b.milestoneId ?? null)
+    (a.milestoneId ?? null) === (b.milestoneId ?? null) &&
+    (a.sprintId ?? null) === (b.sprintId ?? null)
   );
 }
 
@@ -89,6 +90,34 @@ async function assertMilestoneOnBoard(
   );
   if (rows.length === 0) {
     throw new AuthzError("not_found", "That milestone is not on this board");
+  }
+}
+
+/**
+ * Enforces the two rules 028 states about scheduling: a task joins only a
+ * sprint of its own board, and never a *completed* one. The board check is
+ * assertMilestoneOnBoard's (not_found, anti-oracle). The status check is a
+ * conflict, not not_found: the caller may see the sprint, the state refuses
+ * the write — a completed sprint's scope is frozen so velocity stays stable,
+ * and adding to it after the fact would rewrite history.
+ */
+async function assertSprintSchedulable(
+  client: PoolClient,
+  boardId: number,
+  sprintId: number
+): Promise<void> {
+  const { rows } = await client.query<{ status: string }>(
+    `SELECT status FROM sprint WHERE id = $1 AND board_id = $2`,
+    [sprintId, boardId]
+  );
+  if (rows.length === 0) {
+    throw new AuthzError("not_found", "That sprint is not on this board");
+  }
+  if (rows[0].status === "completed") {
+    throw new AuthzError(
+      "conflict",
+      "That sprint is completed — its scope is closed"
+    );
   }
 }
 
@@ -432,6 +461,9 @@ export async function createTask(
     if (input.milestoneId != null) {
       await assertMilestoneOnBoard(client, boardId, input.milestoneId);
     }
+    if (input.sprintId != null) {
+      await assertSprintSchedulable(client, boardId, input.sprintId);
+    }
 
     // priority falls back to 'none' rather than being left to the column
     // default, so the INSERT states the value it means. due_date has no such
@@ -454,11 +486,11 @@ export async function createTask(
     const { rows } = await client.query<{ id: number }>(
       `INSERT INTO task (column_id, title, description, position, assignee_id,
                          agent_id, priority, type, estimate, milestone_id,
-                         due_date, parent_id)
+                         sprint_id, due_date, parent_id)
        VALUES ($1, $2, $3,
                (SELECT COALESCE(MAX(position) + 1, 0) FROM task
-                 WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $11),
-               $4, $5, $6, $7, $8, $9, $10, $11)
+                 WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $12),
+               $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id`,
       [
         input.columnId,
@@ -468,11 +500,12 @@ export async function createTask(
         agentId,
         input.priority ?? "none",
         // 'task' stated rather than left to the column default, priority's
-        // reason: the INSERT says the value it means. estimate and milestone
-        // have no such fallback to state: null is the value.
+        // reason: the INSERT says the value it means. estimate, milestone and
+        // sprint have no such fallback to state: null is the value.
         input.type ?? "task",
         input.estimate ?? null,
         input.milestoneId ?? null,
+        input.sprintId ?? null,
         input.dueDate ?? null,
         parentId,
       ]
@@ -538,6 +571,8 @@ export async function updateTask(
   const setsEstimate = "estimate" in input;
   // Three-valued (026), the same shape: null un-aims the task.
   const setsMilestone = "milestoneId" in input;
+  // Three-valued (028): null un-schedules to the backlog.
+  const setsSprint = "sprintId" in input;
   // Three-valued like the two above: the key's presence, not the value, decides
   // whether the rule is touched — null clears it, a frequency sets it, absent
   // leaves it. There is no frequency meaning "off", so COALESCE cannot serve.
@@ -556,6 +591,9 @@ export async function updateTask(
     }
     if (setsMilestone && input.milestoneId != null) {
       await assertMilestoneOnBoard(client, boardId, input.milestoneId);
+    }
+    if (setsSprint && input.sprintId != null) {
+      await assertSprintSchedulable(client, boardId, input.sprintId);
     }
     // Before the UPDATE, so `after` reads them back. No supplied-flag: `[]` is
     // "no labels" and undefined is "not supplied", which is 006's rule holding
@@ -608,8 +646,11 @@ export async function updateTask(
               milestone_id = CASE WHEN $11::boolean
                                   THEN $12::integer
                                   ELSE milestone_id END,
-              due_date = CASE WHEN $13::boolean
-                              THEN $14::date
+              sprint_id = CASE WHEN $13::boolean
+                               THEN $14::integer
+                               ELSE sprint_id END,
+              due_date = CASE WHEN $15::boolean
+                              THEN $16::date
                               ELSE due_date END
         WHERE id = $1
         RETURNING ${TASK_COLUMNS}`,
@@ -626,6 +667,8 @@ export async function updateTask(
         input.estimate ?? null,
         setsMilestone,
         input.milestoneId ?? null,
+        setsSprint,
+        input.sprintId ?? null,
         setsDueDate,
         input.dueDate ?? null,
       ]

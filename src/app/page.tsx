@@ -131,6 +131,7 @@ export default async function Home({
         initialDoneColumnId={data.doneColumnId}
         initialTemplates={templates}
         initialMilestones={data.milestones}
+        initialSprints={data.sprints}
         canEdit={canEdit}
         canDeleteColumns={canDeleteColumns}
       />

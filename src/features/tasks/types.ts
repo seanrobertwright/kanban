@@ -219,6 +219,11 @@ export interface Task {
    */
   milestoneId: number | null;
   /**
+   * The sprint this task is scheduled into (028), or null (the backlog). An id
+   * like milestoneId, and for its reason — the board holds the sprint list.
+   */
+  sprintId: number | null;
+  /**
    * A calendar date as 'YYYY-MM-DD', or null for no due date.
    *
    * A string rather than a Date, deliberately and all the way down: 006 stores
@@ -280,6 +285,8 @@ export interface CreateTaskInput {
   estimate?: number | null;
   /** The milestone to aim at (026), or null/absent for none. */
   milestoneId?: number | null;
+  /** The sprint to schedule into (028), or null/absent for the backlog. */
+  sprintId?: number | null;
   dueDate?: string | null;
   /** Ids, not refs: the caller says which labels, the database knows their names. */
   labelIds?: number[];
@@ -352,6 +359,12 @@ export interface UpdateTaskInput {
    * of *this task's board* is a tenancy question, answered in the repository.
    */
   milestoneId?: number | null;
+  /**
+   * Three-valued, milestoneId's twin (028): `null` un-schedules to the
+   * backlog. The repository refuses a completed sprint (its scope is frozen)
+   * and a cross-board one, the milestone tenancy check's shape.
+   */
+  sprintId?: number | null;
   /**
    * Three-valued, like assigneeId and for the identical reason: there is no date
    * that means "no due date", so `null` is the cleared state and cannot also be

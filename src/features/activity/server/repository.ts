@@ -21,6 +21,8 @@ import type {
   MilestoneAction,
   MilestoneSnapshot,
   NotificationEntry,
+  SprintAction,
+  SprintSnapshot,
   TimeAction,
   TimeSnapshot,
   TaskAction,
@@ -71,6 +73,11 @@ export type ActivityInput =
       action: TimeAction;
       before?: TimeSnapshot | null;
       after?: TimeSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: SprintAction;
+      before?: SprintSnapshot | null;
+      after?: SprintSnapshot | null;
     });
 
 /**

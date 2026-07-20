@@ -210,6 +210,16 @@ function describe(
     }
     case "time.deleted":
       return "removed a time entry";
+    case "sprint.created":
+      return "added a sprint";
+    case "sprint.updated":
+      return "edited a sprint";
+    case "sprint.started":
+      return "started a sprint";
+    case "sprint.completed":
+      return "completed a sprint";
+    case "sprint.deleted":
+      return "deleted a sprint";
     case "comment.deleted": {
       const author = entry.before?.author;
       if (!author) return "deleted a comment";

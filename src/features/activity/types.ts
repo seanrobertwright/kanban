@@ -191,13 +191,27 @@ export type MilestoneAction =
  */
 export type TimeAction = "time.logged" | "time.deleted";
 
+/**
+ * Sprint lifecycle (028) — board-scoped entries (taskId null, boardId locates),
+ * milestone's shape. started/completed earn their own actions beside
+ * created/updated/deleted because they are the lifecycle events a reader scans
+ * for — the same call comment.resolved/reopened made.
+ */
+export type SprintAction =
+  | "sprint.created"
+  | "sprint.updated"
+  | "sprint.started"
+  | "sprint.completed"
+  | "sprint.deleted";
+
 export type ActivityAction =
   | TaskAction
   | CommentAction
   | ColumnAction
   | LabelAction
   | MilestoneAction
-  | TimeAction;
+  | TimeAction
+  | SprintAction;
 
 /** What a task looked like at one instant. */
 export interface TaskSnapshot {
@@ -255,6 +269,11 @@ export interface TaskSnapshot {
    * "written before milestones", `null` means "aimed at none".
    */
   milestoneId?: number | null;
+  /**
+   * Optional for 003's reason (028): `undefined` means "written before
+   * sprints", `null` means "was in the backlog".
+   */
+  sprintId?: number | null;
   /**
    * Optional for the same reason, and three-valued for the same reason as
    * assigneeId: `undefined` means "written before 006", `null` means "had no due
@@ -401,13 +420,22 @@ export interface TimeSnapshot {
   by: Actor;
 }
 
+/** What a sprint looked like at one instant (028). status carries the
+ *  lifecycle, so started/completed need no field beyond the snapshot. */
+export interface SprintSnapshot {
+  sprintId: number;
+  name: string;
+  status: "planning" | "active" | "completed";
+}
+
 export type Snapshot =
   | TaskSnapshot
   | CommentSnapshot
   | ColumnSnapshot
   | LabelSnapshot
   | MilestoneSnapshot
-  | TimeSnapshot;
+  | TimeSnapshot
+  | SprintSnapshot;
 
 interface ActivityBase {
   id: string;
@@ -466,13 +494,20 @@ export interface TimeActivity extends ActivityBase {
   after: TimeSnapshot | null;
 }
 
+export interface SprintActivity extends ActivityBase {
+  action: SprintAction;
+  before: SprintSnapshot | null;
+  after: SprintSnapshot | null;
+}
+
 export type Activity =
   | TaskActivity
   | CommentActivity
   | ColumnActivity
   | LabelActivity
   | MilestoneActivity
-  | TimeActivity;
+  | TimeActivity
+  | SprintActivity;
 
 /**
  * An activity joined to the human who caused it, for rendering.
