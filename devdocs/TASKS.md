@@ -55,14 +55,16 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–027.
 
 ## Next up — candidates, roughly by value
 
-### Agile & Product (M4 — sprints landed; velocity/burndown next)
-- [ ] **Velocity** — points completed per *completed* sprint; reads
-      `sprint.donePoints` (frozen at completion) — a chart over the board's
-      sprint history. The immediate follow-up.
-- [ ] **Burndown chart** — remaining points over the *active* sprint's days;
-      needs the active sprint's start/end dates (028 stores them) and a daily
-      remaining-points series replayed from `activity_log` (analytics.ts's fold
-      is the template). Another SVG in the Insights dialog's shape.
+### Agile & Product (M4 — sprints + velocity + burndown landed)
+- [x] **Velocity** — completed points per *completed* sprint, oldest first, in
+      `BoardAnalytics.velocity`; reads the frozen done-scope (completion rolls
+      unfinished work out, so what remains is what got done). Bar chart + a
+      dashed average line in the Insights dialog. → `9c5f7e0`
+- [x] **Burndown chart** — `BoardAnalytics.burndown`: remaining committed
+      points at each day's end over the active sprint's window, replayed from
+      `activity_log` (the CFD fold's shape — per-task sprint/column/estimate
+      state, a running total nudged by each event's delta). Future days null so
+      the actual line stops at today; ideal line committed→0. → `9c5f7e0`
 - [ ] **Backlog view** — the `sprint_id IS NULL` queue as its own surface,
       distinct from board columns; drag-to-sprint planning.
 - [ ] **Epics** — a larger-than-task grouping above the milestone.
