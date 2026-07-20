@@ -20,6 +20,7 @@ import {
   Columns3,
   Download,
   Flag,
+  Inbox,
   LayoutTemplate,
   List,
   Plus,
@@ -63,6 +64,7 @@ import {
   taskMatchesFilter,
   type BoardFilter,
 } from "./board-filter-bar";
+import { BacklogView } from "./backlog-view";
 import { CalendarView } from "./calendar-view";
 import { ListView } from "./list-view";
 import { SavedViews } from "@/features/views/components/saved-views";
@@ -227,6 +229,13 @@ export function Board({
     () => Object.values(visibleItems).reduce((n, list) => n + list.length, 0),
     [visibleItems]
   );
+  // The backlog lens groups by sprint, not column, so it wants the visible
+  // tasks as one flat list rather than the per-column buckets the other lenses
+  // read. Same source, different cut.
+  const visibleTaskList = useMemo(
+    () => Object.values(visibleItems).flat(),
+    [visibleItems]
+  );
 
   const sensors = useSensors(
     // The distance constraint lets plain clicks reach buttons inside cards
@@ -389,6 +398,21 @@ export function Board({
     tasksApi.deleteTask(task.id).catch(refresh);
   }
 
+  // Backlog planning: scheduling a task into a sprint (or null, back to the
+  // backlog) changes only its sprint_id, not its column — so the task stays put
+  // in `items`, its sprintId updated in place. The board refetches on failure,
+  // which is where a refused schedule (a completed or cross-board sprint, which
+  // the backlog lens does not offer as a target) would surface.
+  function handleAssignSprint(task: Task, sprintId: number | null) {
+    setItems((prev) => ({
+      ...prev,
+      [task.columnId]: (prev[task.columnId] ?? []).map((t) =>
+        t.id === task.id ? { ...t, sprintId } : t
+      ),
+    }));
+    tasksApi.updateTask(task.id, { sprintId }).catch(refresh);
+  }
+
   async function handleAddColumn() {
     const title = newColumnTitle.trim();
     if (!title) return;
@@ -514,6 +538,9 @@ export function Board({
             <ToggleGroupItem value="calendar">
               <CalendarDays /> Calendar
             </ToggleGroupItem>
+            <ToggleGroupItem value="backlog">
+              <Inbox /> Backlog
+            </ToggleGroupItem>
           </ToggleGroup>
           <Button
             variant="ghost"
@@ -604,6 +631,17 @@ export function Board({
           agentsById={agentsById}
           labelsById={labelsById}
           onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
+        />
+      ) : view === "backlog" ? (
+        <BacklogView
+          tasks={visibleTaskList}
+          sprints={sprints}
+          membersById={membersById}
+          agentsById={agentsById}
+          labelsById={labelsById}
+          canEdit={canEdit}
+          onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
+          onAssignSprint={handleAssignSprint}
         />
       ) : (
         <DndContext

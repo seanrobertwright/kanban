@@ -1,11 +1,12 @@
 import type { BoardFilter } from "@/features/board/components/board-filter-bar";
 
 /**
- * The three lenses the board offers. Defined here (not in board.tsx) so the
+ * The lenses the board offers. Defined here (not in board.tsx) so the
  * saved-view slice, the board, and the API all name them once. The values match
- * the CHECK constraint in 015.
+ * the CHECK constraint in 015, widened by 029 to admit 'backlog' — the
+ * sprint_id IS NULL queue as its own drag-to-sprint planning surface (028/M4).
  */
-export const BOARD_VIEW_MODES = ["board", "list", "calendar"] as const;
+export const BOARD_VIEW_MODES = ["board", "list", "calendar", "backlog"] as const;
 export type BoardViewMode = (typeof BOARD_VIEW_MODES)[number];
 
 export function isBoardViewMode(value: unknown): value is BoardViewMode {
