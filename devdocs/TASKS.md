@@ -55,7 +55,7 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–027.
 
 ## Next up — candidates, roughly by value
 
-### Agile & Product (M4 — sprints + velocity + burndown landed)
+### Agile & Product (M4 — sprints + velocity + burndown + backlog landed)
 - [x] **Velocity** — completed points per *completed* sprint, oldest first, in
       `BoardAnalytics.velocity`; reads the frozen done-scope (completion rolls
       unfinished work out, so what remains is what got done). Bar chart + a
@@ -65,8 +65,11 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–027.
       `activity_log` (the CFD fold's shape — per-task sprint/column/estimate
       state, a running total nudged by each event's delta). Future days null so
       the actual line stops at today; ideal line committed→0. → `9c5f7e0`
-- [ ] **Backlog view** — the `sprint_id IS NULL` queue as its own surface,
-      distinct from board columns; drag-to-sprint planning.
+- [x] **Backlog view** (029) — the `sprint_id IS NULL` queue as a fourth board
+      lens: the backlog beside the board's planning/active sprints, drag a card
+      into a sprint to schedule it (sets `sprint_id`, leaves the column alone).
+      Completed sprints are not drop targets (frozen scope). `view_mode` CHECK
+      widened to admit `backlog`; savable like any lens. → `fd8146f`
 - [ ] **Epics** — a larger-than-task grouping above the milestone.
 
 ### M2 hardening (leftovers from the pre-sweep handoff — stay on the wedge)
