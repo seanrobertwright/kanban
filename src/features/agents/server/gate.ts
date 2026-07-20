@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { query, queryOne } from "@/shared/db/client";
 import type { Principal } from "@/features/auth/server/principal";
 import { getTask } from "@/features/tasks/server/repository";
+import { captureActivity } from "@/features/activity/server/activity-capture";
 
 /**
  * §7.4's approval model, as the seam every mutating tool passes through. Three
@@ -104,11 +105,15 @@ async function recordAction(fields: {
   result: unknown;
   before: unknown;
   after: unknown;
+  /** The activity_log row this action produced (013), when it mutated the board
+   *  now (auto tier). Null for block/changeset, which log nothing at gate time,
+   *  and for auto tools that write no activity_log row (e.g. flag_blocker). */
+  activityId?: string | null;
 }): Promise<void> {
   await query(
     `INSERT INTO agent_action
-       (id, run_id, changeset_id, tool, tier, input, result, before, after)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       (id, run_id, changeset_id, tool, tier, input, result, before, after, activity_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       randomUUID(),
       fields.runId,
@@ -119,6 +124,7 @@ async function recordAction(fields: {
       fields.result ?? null,
       fields.before ?? null,
       fields.after ?? null,
+      fields.activityId ?? null,
     ]
   );
 }
@@ -185,8 +191,11 @@ export async function gate<T>(
     );
   }
 
-  // auto: execute now, record with before/after, hand the real result back.
-  const result = await spec.execute();
+  // auto: execute now, record with before/after, hand the real result back. The
+  // mutation logs its activity_log row inside its own transaction; captureActivity
+  // catches that row's id (out of band — it is not in the returned result) so the
+  // agent_action links to the activity it produced (013).
+  const { result, activityId } = await captureActivity(() => spec.execute());
   await recordAction({
     runId: ctx.runId,
     changesetId: null,
@@ -196,6 +205,7 @@ export async function gate<T>(
     result,
     before,
     after: result ?? null,
+    activityId,
   });
   return spec.describe(result);
 }

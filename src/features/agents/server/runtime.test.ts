@@ -166,6 +166,24 @@ describe("Door 1 runtime", () => {
       [runId]
     );
     expect(cs!.status).toBe("pending");
+
+    // An auto-tier action links to the activity_log row it produced (013): the
+    // set_priority action's activity_id resolves to the task.prioritized entry.
+    const prioritized = await queryOne<{ activityId: string; action: string }>(
+      `SELECT aa.activity_id AS "activityId", al.action
+         FROM agent_action aa JOIN activity_log al ON al.id = aa.activity_id
+        WHERE aa.run_id = $1 AND aa.tool = 'set_priority'`,
+      [runId]
+    );
+    expect(prioritized!.activityId).not.toBeNull();
+    expect(prioritized!.action).toBe("task.prioritized");
+    // The held changeset action has produced nothing yet, so it links to nothing.
+    const heldMove = await queryOne<{ activityId: string | null }>(
+      `SELECT activity_id AS "activityId" FROM agent_action
+        WHERE run_id = $1 AND tool = 'move_task'`,
+      [runId]
+    );
+    expect(heldMove!.activityId).toBeNull();
   });
 
   it("a run with only auto-tier actions succeeds outright", async () => {
@@ -208,12 +226,16 @@ describe("Door 1 runtime", () => {
     );
     expect(Number(edge!.n)).toBe(1);
 
-    // Recorded in the agent-action trail at the auto tier.
-    const act = await queryOne<{ tier: string }>(
-      `SELECT tier FROM agent_action WHERE run_id = $1 AND tool = 'flag_blocker'`,
+    // Recorded in the agent-action trail at the auto tier. activity_id stays null:
+    // a dependency edge is not written to activity_log (018), so there is no row
+    // to link — the honest value for a silent mutation.
+    const act = await queryOne<{ tier: string; activityId: string | null }>(
+      `SELECT tier, activity_id AS "activityId"
+         FROM agent_action WHERE run_id = $1 AND tool = 'flag_blocker'`,
       [runId]
     );
     expect(act!.tier).toBe("auto");
+    expect(act!.activityId).toBeNull();
   });
 
   it("halts cleanly when the workspace budget cap is exceeded", async () => {
@@ -288,6 +310,17 @@ describe("Door 1 runtime", () => {
     expect((await getTask(owner, taskId))!.columnId).toBe(done);
     const actions = (await listRawActivityForTask(taskId)).map((a) => a.action);
     expect(actions).toContain("task.moved");
+
+    // Accepting the proposal is where the move first mutates, so this is where its
+    // activity_id is stamped (013): the accepted action now links to task.moved.
+    const applied = await queryOne<{ activityId: string; action: string }>(
+      `SELECT aa.activity_id AS "activityId", al.action
+         FROM agent_action aa JOIN activity_log al ON al.id = aa.activity_id
+        WHERE aa.id = $1`,
+      [moveAction.id]
+    );
+    expect(applied!.activityId).not.toBeNull();
+    expect(applied!.action).toBe("task.moved");
 
     // A second review is refused.
     await expect(reviewChangeset(owner, changesetId, [])).rejects.toThrow(

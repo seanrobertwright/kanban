@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import { query } from "@/shared/db/client";
 import type { Principal } from "@/features/auth/server/principal";
 import { queueDelivery } from "@/features/webhooks/server/dispatch";
+import { noteActivity } from "./activity-capture";
 import {
   requireTaskRole,
   requireWorkspaceRole,
@@ -93,11 +94,15 @@ export type ActivityInput =
  *
  * PRD §7.2 states the same requirement from the agent side: the log is written
  * before the tool returns to the model.
+ *
+ * Returns the new row's id — a BIGSERIAL, so a string (see ACTIVITY_COLUMNS). The
+ * human path ignores it; an agent tool call captures it (activity-capture.ts) to
+ * populate `agent_action.activity_id` (013), the action→activity link.
  */
 export async function logActivity(
   client: PoolClient,
   entry: ActivityInput
-): Promise<void> {
+): Promise<string> {
   const { rows } = await client.query<{ id: string }>(
     `INSERT INTO activity_log
        (workspace_id, board_id, task_id, actor_type, actor_id, action, before, after)
@@ -114,11 +119,15 @@ export async function logActivity(
       entry.after ?? null,
     ]
   );
+  // Hand the id to whatever opened a capture (a gated tool call, or changeset
+  // apply); a no-op on the human path, which opens none.
+  noteActivity(rows[0].id);
   // Webhooks ride the log (025): every mutation already lands here, so this is
   // the one seam that reaches them all. Queued, not sent — the delivery runs
   // via after(), post-commit, and re-reads the row first so a rollback after
   // this INSERT delivers nothing. See webhooks/server/dispatch.ts.
   queueDelivery(rows[0].id);
+  return rows[0].id;
 }
 
 // `id` is BIGSERIAL: pg returns int8 as a string rather than a number, because

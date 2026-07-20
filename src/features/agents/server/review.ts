@@ -1,6 +1,7 @@
 import { query, queryOne } from "@/shared/db/client";
 import type { Principal } from "@/features/auth/server/principal";
 import { AuthzError, requireTaskRole } from "@/features/workspaces/server/authz";
+import { captureActivity } from "@/features/activity/server/activity-capture";
 import {
   createTask,
   moveTask,
@@ -174,11 +175,14 @@ export async function reviewChangeset(
   let accepted = 0;
   for (const action of proposed) {
     if (!accept.has(action.id)) continue;
-    await applyProposed(agent, action);
-    await query(`UPDATE agent_action SET approved_by = $2 WHERE id = $1`, [
-      action.id,
-      reviewer,
-    ]);
+    // A changeset action mutates for the first time here, at accept — so this is
+    // where its activity_log row is born, and where its agent_action finally links
+    // to it (013). captureActivity catches the id the applied mutation logs.
+    const { activityId } = await captureActivity(() => applyProposed(agent, action));
+    await query(
+      `UPDATE agent_action SET approved_by = $2, activity_id = $3 WHERE id = $1`,
+      [action.id, reviewer, activityId]
+    );
     accepted += 1;
   }
 
