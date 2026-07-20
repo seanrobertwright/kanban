@@ -91,6 +91,129 @@ function ThroughputChart({
   );
 }
 
+function VelocityChart({
+  sprints,
+}: {
+  sprints: { sprintId: number; name: string; points: number }[];
+}) {
+  const max = Math.max(...sprints.map((s) => s.points), 1);
+  const avg =
+    Math.round(
+      (sprints.reduce((s, v) => s + v.points, 0) / sprints.length) * 10
+    ) / 10;
+  const barWidth = 100 / sprints.length;
+  const avgY = 38 - (avg / max) * 34;
+  return (
+    <div className="grid gap-1.5">
+      <svg
+        viewBox="0 0 100 40"
+        className="h-24 w-full"
+        role="img"
+        aria-label={`Points completed per sprint: ${sprints.map((s) => s.points).join(", ")}. Average ${avg}.`}
+      >
+        {sprints.map((sprint, i) => {
+          const height = (sprint.points / max) * 34;
+          return (
+            <rect
+              key={sprint.sprintId}
+              x={i * barWidth + 1}
+              y={38 - height}
+              width={barWidth - 2}
+              height={height}
+              rx={1}
+              className="fill-primary"
+            >
+              <title>{`${sprint.name}: ${sprint.points} pts`}</title>
+            </rect>
+          );
+        })}
+        <line x1="0" y1="38.5" x2="100" y2="38.5" className="stroke-border" strokeWidth="0.5" />
+        <line
+          x1="0"
+          y1={avgY}
+          x2="100"
+          y2={avgY}
+          className="stroke-muted-foreground"
+          strokeWidth="0.5"
+          strokeDasharray="2 1.5"
+        />
+      </svg>
+      <p className="text-xs text-muted-foreground tabular-nums">
+        Average {avg} pts across {sprints.length} sprint
+        {sprints.length === 1 ? "" : "s"}
+      </p>
+    </div>
+  );
+}
+
+function BurndownChart({
+  burndown,
+}: {
+  burndown: NonNullable<BoardAnalytics["burndown"]>;
+}) {
+  const { days, committed, endDate } = burndown;
+  const actual = days.filter(
+    (d): d is { date: string; remaining: number } => d.remaining !== null
+  );
+  const max = Math.max(committed, ...actual.map((d) => d.remaining), 1);
+  const x = (i: number) => (i / Math.max(days.length - 1, 1)) * 100;
+  const y = (v: number) => 38 - (v / max) * 34;
+
+  // The ideal guideline runs committed → 0 over the planned window; its end is
+  // the day matching endDate (the last sample when a sprint has overrun).
+  const idealEnd = days.findIndex((d) => d.date === endDate);
+  const idealEndIdx = idealEnd === -1 ? days.length - 1 : idealEnd;
+
+  const actualPath = actual
+    .map((d, i) => `${i === 0 ? "M" : "L"} ${x(days.indexOf(d))} ${y(d.remaining)}`)
+    .join(" ");
+  const current = actual.at(-1)?.remaining ?? committed;
+
+  return (
+    <div className="grid gap-1.5">
+      <svg
+        viewBox="0 0 100 40"
+        className="h-28 w-full"
+        role="img"
+        aria-label={`Burndown: ${committed} points committed, ${current} remaining.`}
+      >
+        <line
+          x1={x(0)}
+          y1={y(committed)}
+          x2={x(idealEndIdx)}
+          y2={y(0)}
+          className="stroke-muted-foreground"
+          strokeWidth="0.5"
+          strokeDasharray="2 1.5"
+        />
+        <path
+          d={actualPath}
+          fill="none"
+          className="stroke-primary"
+          strokeWidth="1"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        <line x1="0" y1="38.5" x2="100" y2="38.5" className="stroke-border" strokeWidth="0.5" />
+      </svg>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
+        <span className="flex items-center gap-1">
+          <span className="h-px w-3 bg-primary" aria-hidden="true" />
+          {current} pts left
+        </span>
+        <span className="flex items-center gap-1">
+          <span
+            className="h-px w-3 bg-muted-foreground"
+            style={{ opacity: 0.7 }}
+            aria-hidden="true"
+          />
+          ideal from {committed}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function CumulativeFlowChart({
   cfd,
   columns,
@@ -250,6 +373,24 @@ export function InsightsDialog({
                   Throughput — completions per week
                 </p>
                 <ThroughputChart weeks={data.throughput} />
+              </div>
+            )}
+
+            {data.burndown && (
+              <div className="grid gap-1">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Burndown — {data.burndown.name}
+                </p>
+                <BurndownChart burndown={data.burndown} />
+              </div>
+            )}
+
+            {data.velocity.length > 0 && (
+              <div className="grid gap-1">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Velocity — points completed per sprint
+                </p>
+                <VelocityChart sprints={data.velocity} />
               </div>
             )}
 

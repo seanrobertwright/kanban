@@ -46,6 +46,28 @@ export interface BoardAnalytics {
     count: number;
     points: number;
   }[];
+  /**
+   * Points completed per finished sprint (028/M4), oldest first — the board's
+   * velocity history. `points` is the sprint's frozen donePoints: completing a
+   * sprint rolls its unfinished work out of scope, so what remains in a
+   * completed sprint is exactly what got done. Empty until a sprint completes.
+   */
+  velocity: { sprintId: number; name: string; points: number }[];
+  /**
+   * The active sprint's burndown, or null when no sprint is running. `days` is
+   * the remaining committed points at each day's end across the sprint window,
+   * replayed from the activity log; a day not yet reached carries null so the
+   * actual line stops at today while the ideal line (committed → 0) spans the
+   * whole window.
+   */
+  burndown: {
+    sprintId: number;
+    name: string;
+    startDate: string;
+    endDate: string;
+    committed: number;
+    days: { date: string; remaining: number | null }[];
+  } | null;
 }
 
 export interface BoardData {

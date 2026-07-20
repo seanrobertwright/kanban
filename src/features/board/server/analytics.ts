@@ -32,6 +32,139 @@ interface FlowEvent {
 
 const DAY_MS = 86_400_000;
 
+/** A day window longer than this is clamped — a burndown series is bounded. */
+const MAX_BURNDOWN_DAYS = 92;
+
+/** Midnight (UTC) of a 'YYYY-MM-DD' date string, in ms. */
+function dayStartMs(date: string): number {
+  return Date.parse(`${date}T00:00:00.000Z`);
+}
+
+/**
+ * The active sprint's burndown — remaining committed points at each day's end
+ * over its window, replayed from the activity log the same way the CFD is, and
+ * for the same reason: "how much work was left on Tuesday" is a time question
+ * state cannot answer.
+ *
+ * The fold tracks each top-level task's (sprintId, columnId, estimate) — every
+ * task.* row carries a full snapshot — and a task counts toward "remaining"
+ * only while it is in THIS sprint and not in the done column. A running total
+ * is nudged by each event's delta rather than re-summed per day, so the cost is
+ * one pass over the events plus one sample per day.
+ *
+ * Days past today carry null: the actual line stops at now, while the client
+ * draws the ideal line (committed → 0) across the whole window.
+ */
+async function computeBurndown(
+  boardId: number,
+  doneColumnId: number | null
+): Promise<BoardAnalytics["burndown"]> {
+  const sprint = await queryOne<{
+    id: number;
+    name: string;
+    startDate: string | null;
+    endDate: string | null;
+  }>(
+    `SELECT id, name, start_date AS "startDate", end_date AS "endDate"
+       FROM sprint WHERE board_id = $1 AND status = 'active'`,
+    [boardId]
+  );
+  if (!sprint) return null;
+
+  const now = Date.now();
+  const todayStart = new Date(now);
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const startMs = sprint.startDate
+    ? dayStartMs(sprint.startDate)
+    : todayStart.getTime();
+  // The ideal line ends at the planned end (or today, if unset); the actual
+  // line must still reach today when a sprint overruns, so the window runs to
+  // whichever is later, clamped so a mis-set year cannot explode the series.
+  const plannedEndMs = sprint.endDate
+    ? dayStartMs(sprint.endDate)
+    : todayStart.getTime();
+  const idealEndMs = Math.max(plannedEndMs, startMs);
+  let lastMs = Math.max(idealEndMs, todayStart.getTime());
+  const span = Math.round((lastMs - startMs) / DAY_MS);
+  if (span > MAX_BURNDOWN_DAYS) lastMs = startMs + MAX_BURNDOWN_DAYS * DAY_MS;
+
+  // Every top-level task event on the board, oldest first — task.updated is in
+  // the set (unlike the flow fold) because a sprint or estimate change rides
+  // that action. Missing sprintId/estimate (pre-028/pre-022 rows) read as
+  // backlog / unestimated, which is what they were.
+  const events = await query<{
+    taskId: number;
+    action: string;
+    columnId: number | null;
+    sprintId: number | null;
+    estimate: number | null;
+    createdAt: string;
+  }>(
+    `SELECT al.task_id AS "taskId", al.action,
+            COALESCE((al.after->>'columnId')::int,
+                     (al.before->>'columnId')::int) AS "columnId",
+            (al.after->>'sprintId')::int AS "sprintId",
+            (al.after->>'estimate')::int AS estimate,
+            al.created_at AS "createdAt"
+       FROM activity_log al
+      WHERE al.board_id = $1
+        AND al.action IN ('task.created', 'task.updated', 'task.moved', 'task.deleted')
+        AND COALESCE(al.after->>'parentId', al.before->>'parentId') IS NULL
+      ORDER BY al.id`,
+    [boardId]
+  );
+
+  const state = new Map<number, number>(); // taskId → its current contribution
+  let remaining = 0;
+  const contribution = (
+    sprintId: number | null,
+    columnId: number | null,
+    estimate: number | null
+  ): number =>
+    sprintId === sprint.id && columnId !== doneColumnId ? estimate ?? 0 : 0;
+
+  let cursor = 0;
+  const applyThrough = (untilMs: number) => {
+    while (cursor < events.length) {
+      const e = events[cursor];
+      if (Date.parse(e.createdAt) > untilMs) break;
+      cursor += 1;
+      const prev = state.get(e.taskId) ?? 0;
+      if (e.action === "task.deleted") {
+        remaining -= prev;
+        state.delete(e.taskId);
+        continue;
+      }
+      const next = contribution(e.sprintId, e.columnId, e.estimate);
+      remaining += next - prev;
+      state.set(e.taskId, next);
+    }
+  };
+
+  const days: { date: string; remaining: number | null }[] = [];
+  let committed = 0;
+  const todayEnd = todayStart.getTime() + DAY_MS - 1;
+  for (let ms = startMs; ms <= lastMs; ms += DAY_MS) {
+    const endOfDay = ms + DAY_MS - 1;
+    if (endOfDay <= todayEnd) {
+      applyThrough(endOfDay);
+      if (ms === startMs) committed = remaining;
+      days.push({ date: new Date(ms).toISOString().slice(0, 10), remaining });
+    } else {
+      days.push({ date: new Date(ms).toISOString().slice(0, 10), remaining: null });
+    }
+  }
+
+  return {
+    sprintId: sprint.id,
+    name: sprint.name,
+    startDate: new Date(startMs).toISOString().slice(0, 10),
+    endDate: new Date(idealEndMs).toISOString().slice(0, 10),
+    committed,
+    days,
+  };
+}
+
 function stats(days: number[]): FlowStats {
   const sorted = [...days].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -182,5 +315,23 @@ export async function getBoardAnalytics(
     [boardId]
   );
 
-  return { leadTime, cycleTime, throughput, cfd, workload };
+  // Velocity: completed points per finished sprint, oldest first. Reads the
+  // sprint's frozen scope — completing rolled its unfinished work out, so
+  // donePoints IS the sprint's velocity — the same PROGRESS_COLUMNS shape the
+  // sprint repository uses, restricted to done tasks.
+  const velocity = await query<BoardAnalytics["velocity"][number]>(
+    `SELECT s.id AS "sprintId", s.name,
+            (SELECT COALESCE(SUM(t.estimate), 0)::int
+               FROM task t
+              WHERE t.sprint_id = s.id AND t.parent_id IS NULL
+                AND $2::int IS NOT NULL AND t.column_id = $2::int) AS points
+       FROM sprint s
+      WHERE s.board_id = $1 AND s.status = 'completed'
+      ORDER BY s.end_date NULLS LAST, s.id`,
+    [boardId, doneColumnId]
+  );
+
+  const burndown = await computeBurndown(boardId, doneColumnId);
+
+  return { leadTime, cycleTime, throughput, cfd, workload, velocity, burndown };
 }

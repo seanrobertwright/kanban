@@ -3,12 +3,19 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createTask, moveTask } from "@/features/tasks/server/repository";
 import {
+  completeSprint,
+  createSprint,
+  startSprint,
+} from "@/features/sprints/server/repository";
+import {
   ensurePersonalWorkspace,
   getDefaultBoard,
 } from "@/features/workspaces/server/repository";
 import { pool, query } from "@/shared/db/client";
 import { getBoard, setBoardDoneColumn } from "./repository";
 import { getBoardAnalytics } from "./analytics";
+
+const human = (id: string) => ({ type: "human" as const, id });
 
 /**
  * Against a real Postgres because the analytics ARE a fold over activity_log
@@ -118,5 +125,61 @@ describe("board analytics", () => {
     const latest = analytics.cfd[29];
     const total = Object.values(latest.counts).reduce((s, n) => s + n, 0);
     expect(total).toBe(4);
+  });
+
+  it("velocity reads a completed sprint's frozen done points", async () => {
+    const sprint = await createSprint(alice, boardId, { name: "Sprint 1" }, human(alice));
+    await startSprint(alice, sprint.id, human(alice));
+    const done = await createTask(alice, {
+      columnId: todoId,
+      title: "Velocity-done",
+      estimate: 5,
+      sprintId: sprint.id,
+    });
+    await moveTask(alice, done.id, { columnId: doneId, position: 0 });
+    // An unfinished task that rolls out on complete — it must not count.
+    await createTask(alice, {
+      columnId: todoId,
+      title: "Velocity-open",
+      estimate: 3,
+      sprintId: sprint.id,
+    });
+    await completeSprint(alice, sprint.id, null, human(alice));
+
+    const analytics = await getBoardAnalytics(alice, boardId);
+    const row = analytics.velocity.find((v) => v.sprintId === sprint.id)!;
+    expect(row.points).toBe(5);
+  });
+
+  it("burndown tracks remaining points in the active sprint, ignoring done and backlog", async () => {
+    const sprint = await createSprint(alice, boardId, { name: "Live" }, human(alice));
+    await startSprint(alice, sprint.id, human(alice));
+    await createTask(alice, {
+      columnId: todoId,
+      title: "Burndown-open",
+      estimate: 8,
+      sprintId: sprint.id,
+    });
+    const shipped = await createTask(alice, {
+      columnId: todoId,
+      title: "Burndown-done",
+      estimate: 2,
+      sprintId: sprint.id,
+    });
+    await moveTask(alice, shipped.id, { columnId: doneId, position: 0 });
+
+    const analytics = await getBoardAnalytics(alice, boardId);
+    expect(analytics.burndown).not.toBeNull();
+    expect(analytics.burndown!.sprintId).toBe(sprint.id);
+    // Committed scope and today's remaining both see the 8-point open task; the
+    // 2-point done task and every non-sprint task on the board are excluded.
+    expect(analytics.burndown!.committed).toBe(8);
+    const today = analytics.burndown!.days.at(-1)!;
+    expect(today.remaining).toBe(8);
+
+    // No active sprint → no burndown.
+    await completeSprint(alice, sprint.id, null, human(alice));
+    const after = await getBoardAnalytics(alice, boardId);
+    expect(after.burndown).toBeNull();
   });
 });
