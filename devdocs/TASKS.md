@@ -79,8 +79,11 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–027.
       enqueued then interrupted stays `queued` with no worker.
 - [ ] **`agent_action.activity_id`** — column defined (013), never populated by
       `recordAction`; wiring it closes the action→activity link.
-- [ ] **Haiku in `cost.ts`** — §7.3's triage model prices as $0 today.
-- [ ] **Stale doc** — `mcp/README.md:83` still calls approval tiers "later work".
+- [x] **Haiku in `cost.ts`** — §7.3's triage model now meters at $1/$5 per MTok
+      (was falling back to the ~5x-dearer opus rate); shared `Price` type + tests.
+      → `7774f39`
+- [x] **Stale doc** — `mcp/README.md` now says approval tiers (§7.4 gate) and
+      native agents landed in M2, pointing at `gate.ts`. → `7774f39`
 
 ### Agent tools for the new fields (let the wedge use what this sweep built)
 - [ ] **set_estimate / set_type / aim_at_milestone / log_time** in both doors
