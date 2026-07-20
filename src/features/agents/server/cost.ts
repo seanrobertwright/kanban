@@ -10,17 +10,39 @@
  * prefix is re-read every turn, so pricing those tokens at the fresh-input rate
  * would overstate a multi-turn run's cost by roughly 10x.
  */
-const OPUS_4_8 = {
+/** Micro-dollars per token, one rate per usage kind. */
+interface Price {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+const OPUS_4_8: Price = {
   input: 5,
   output: 25,
   cacheRead: 0.5, // ~0.1x input
   cacheWrite: 6.25, // ~1.25x input
-} as const;
+};
 
-/** The per-model rate table. One entry today; keyed by model id so a cheaper
- *  triage model (§7.3 names claude-haiku-4-5) slots in without touching callers. */
-const PRICES: Record<string, typeof OPUS_4_8> = {
+/**
+ * The triage model §7.3 names, at $1 / $5 per MTok in / out (Claude API
+ * reference) = 1 / 5 micro-dollars per token, same unit and ~0.1x/~1.25x cache
+ * ratios as OPUS_4_8. Priced so a run routed here meters at real cost instead of
+ * the opus fallback (which was ~5x too dear for a Haiku turn).
+ */
+const HAIKU_4_5: Price = {
+  input: 1,
+  output: 5,
+  cacheRead: 0.1, // ~0.1x input
+  cacheWrite: 1.25, // ~1.25x input
+};
+
+/** The per-model rate table, keyed by model id so a cheaper triage model
+ *  (§7.3 names claude-haiku-4-5) meters at its own rate, not the opus fallback. */
+const PRICES: Record<string, Price> = {
   "claude-opus-4-8": OPUS_4_8,
+  "claude-haiku-4-5": HAIKU_4_5,
 };
 
 /** The token counts one turn reports, straight off `usage`. */

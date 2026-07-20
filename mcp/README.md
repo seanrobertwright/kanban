@@ -80,4 +80,5 @@ task's history under the agent's own name.
   when you start, release when you finish. A workspace admin can break a hold a
   crashed agent left stuck (from the board, once that UI lands).
 - Deleting or archiving is deliberately **not** exposed — this cut is read + add +
-  edit + claim. Approval tiers and native (hosted) agents are later M2 work.
+  edit + claim. Approval tiers (the §7.4 gate — auto/changeset/block) and native
+  (hosted) agents both landed in M2; see `src/features/agents/server/gate.ts`.
