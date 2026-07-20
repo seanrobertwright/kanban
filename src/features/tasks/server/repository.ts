@@ -13,6 +13,7 @@ import {
   setTaskLabels,
 } from "@/features/labels/server/repository";
 import { dispatchRun, enqueueRun } from "@/features/agents/server/runtime";
+import { assertEpicOnBoard } from "@/features/epics/server/repository";
 import {
   AuthzError,
   ROLE_RANK,
@@ -68,7 +69,8 @@ function sameDetails(a: TaskSnapshot, b: TaskSnapshot): boolean {
     (a.type ?? "task") === (b.type ?? "task") &&
     (a.estimate ?? null) === (b.estimate ?? null) &&
     (a.milestoneId ?? null) === (b.milestoneId ?? null) &&
-    (a.sprintId ?? null) === (b.sprintId ?? null)
+    (a.sprintId ?? null) === (b.sprintId ?? null) &&
+    (a.epicId ?? null) === (b.epicId ?? null)
   );
 }
 
@@ -464,6 +466,9 @@ export async function createTask(
     if (input.sprintId != null) {
       await assertSprintSchedulable(client, boardId, input.sprintId);
     }
+    if (input.epicId != null) {
+      await assertEpicOnBoard(client, boardId, input.epicId);
+    }
 
     // priority falls back to 'none' rather than being left to the column
     // default, so the INSERT states the value it means. due_date has no such
@@ -486,11 +491,11 @@ export async function createTask(
     const { rows } = await client.query<{ id: number }>(
       `INSERT INTO task (column_id, title, description, position, assignee_id,
                          agent_id, priority, type, estimate, milestone_id,
-                         sprint_id, due_date, parent_id)
+                         sprint_id, due_date, parent_id, epic_id)
        VALUES ($1, $2, $3,
                (SELECT COALESCE(MAX(position) + 1, 0) FROM task
                  WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $12),
-               $4, $5, $6, $7, $8, $9, $10, $11, $12)
+               $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
         input.columnId,
@@ -508,6 +513,10 @@ export async function createTask(
         input.sprintId ?? null,
         input.dueDate ?? null,
         parentId,
+        // Appended as $13 rather than slotted beside milestone_id: the position
+        // subquery above references $12 (parent_id), so renumbering would move a
+        // param out from under it. epic has no fallback to state — null is the value.
+        input.epicId ?? null,
       ]
     );
 
@@ -573,6 +582,8 @@ export async function updateTask(
   const setsMilestone = "milestoneId" in input;
   // Three-valued (028): null un-schedules to the backlog.
   const setsSprint = "sprintId" in input;
+  // Three-valued (031): null un-files the task from its epic.
+  const setsEpic = "epicId" in input;
   // Three-valued like the two above: the key's presence, not the value, decides
   // whether the rule is touched — null clears it, a frequency sets it, absent
   // leaves it. There is no frequency meaning "off", so COALESCE cannot serve.
@@ -594,6 +605,9 @@ export async function updateTask(
     }
     if (setsSprint && input.sprintId != null) {
       await assertSprintSchedulable(client, boardId, input.sprintId);
+    }
+    if (setsEpic && input.epicId != null) {
+      await assertEpicOnBoard(client, boardId, input.epicId);
     }
     // Before the UPDATE, so `after` reads them back. No supplied-flag: `[]` is
     // "no labels" and undefined is "not supplied", which is 006's rule holding
@@ -651,7 +665,10 @@ export async function updateTask(
                                ELSE sprint_id END,
               due_date = CASE WHEN $15::boolean
                               THEN $16::date
-                              ELSE due_date END
+                              ELSE due_date END,
+              epic_id = CASE WHEN $17::boolean
+                             THEN $18::integer
+                             ELSE epic_id END
         WHERE id = $1
         RETURNING ${TASK_COLUMNS}`,
       [
@@ -671,6 +688,8 @@ export async function updateTask(
         input.sprintId ?? null,
         setsDueDate,
         input.dueDate ?? null,
+        setsEpic,
+        input.epicId ?? null,
       ]
     );
     const after = rows[0];

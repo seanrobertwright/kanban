@@ -33,6 +33,7 @@ function subtask(over: Partial<Task> = {}): Task {
     type: "task",
     estimate: null,
     milestoneId: null,
+    epicId: null,
     sprintId: null,
     recurrence: null,
     attachmentCount: 0,

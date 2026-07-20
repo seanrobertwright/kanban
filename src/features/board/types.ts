@@ -1,4 +1,5 @@
 import type { Milestone } from "@/features/milestones/types";
+import type { Epic } from "@/features/epics/types";
 import type { Sprint } from "@/features/sprints/types";
 import type { Task } from "@/features/tasks/types";
 import type { Board } from "@/features/workspaces/types";
@@ -87,6 +88,11 @@ export interface BoardData {
    * both read them, and a board fact one read needs should ride that read.
    */
   milestones: Milestone[];
+  /**
+   * The board's epics (031), progress included — on BoardData for the milestone
+   * reason: the task dialog's epic picker and the EpicsDialog both read them.
+   */
+  epics: Epic[];
   /**
    * The board's sprints (028), progress included — on BoardData for the
    * milestone reason: the task dialog's sprint picker reads them, and the

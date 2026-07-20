@@ -147,6 +147,7 @@ export async function handleCreateTask(request: Request) {
     estimate,
     milestoneId,
     sprintId,
+    epicId,
     dueDate,
     labelIds,
     parentId,
@@ -181,6 +182,8 @@ export async function handleCreateTask(request: Request) {
     return badRequest("milestoneId must be a milestone id or null");
   if (sprintId !== undefined && sprintId !== null && !Number.isInteger(sprintId))
     return badRequest("sprintId must be a sprint id or null");
+  if (epicId !== undefined && epicId !== null && !Number.isInteger(epicId))
+    return badRequest("epicId must be an epic id or null");
   if (!isDueDate(dueDate))
     return badRequest("dueDate must be a YYYY-MM-DD date or null");
   if (!isLabelIds(labelIds))
@@ -201,6 +204,7 @@ export async function handleCreateTask(request: Request) {
       estimate: estimate as number | null | undefined,
       milestoneId: milestoneId as number | null | undefined,
       sprintId: sprintId as number | null | undefined,
+      epicId: epicId as number | null | undefined,
       dueDate,
       labelIds,
       parentId: parentId as number | undefined,
@@ -262,6 +266,7 @@ export async function handleUpdateTask(request: Request, id: number) {
     estimate,
     milestoneId,
     sprintId,
+    epicId,
     dueDate,
     labelIds,
     recurrence,
@@ -285,6 +290,8 @@ export async function handleUpdateTask(request: Request, id: number) {
   const setsMilestone = "milestoneId" in body;
   // sprintId three-valued too (028): `{"sprintId": null}` sends to backlog.
   const setsSprint = "sprintId" in body;
+  // epicId three-valued too (031): `{"epicId": null}` un-files the task.
+  const setsEpic = "epicId" in body;
   const setsRecurrence = "recurrence" in body;
 
   // Refused rather than ignored, and the difference matters because the failure
@@ -317,6 +324,7 @@ export async function handleUpdateTask(request: Request, id: number) {
       setsEstimate ||
       setsMilestone ||
       setsSprint ||
+      setsEpic ||
       setsDueDate ||
       labelIds !== undefined ||
       setsRecurrence
@@ -337,6 +345,8 @@ export async function handleUpdateTask(request: Request, id: number) {
         return badRequest("milestoneId must be a milestone id or null");
       if (sprintId !== undefined && sprintId !== null && !Number.isInteger(sprintId))
         return badRequest("sprintId must be a sprint id or null");
+      if (epicId !== undefined && epicId !== null && !Number.isInteger(epicId))
+        return badRequest("epicId must be an epic id or null");
       if (!isDueDate(dueDate))
         return badRequest("dueDate must be a YYYY-MM-DD date or null");
       if (!isLabelIds(labelIds))
@@ -368,6 +378,8 @@ export async function handleUpdateTask(request: Request, id: number) {
         ...(setsMilestone ? { milestoneId: milestoneId as number | null } : {}),
         // Spread, the same shape (028).
         ...(setsSprint ? { sprintId: sprintId as number | null } : {}),
+        // Spread, the same shape (031).
+        ...(setsEpic ? { epicId: epicId as number | null } : {}),
         // Spread, for assigneeId's reason exactly: `"dueDate" in input` decides
         // whether the date is written, so a stray undefined key would clear the
         // due date on every title-only edit.

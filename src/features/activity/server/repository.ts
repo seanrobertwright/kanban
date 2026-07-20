@@ -17,6 +17,8 @@ import type {
   ColumnSnapshot,
   CommentAction,
   CommentSnapshot,
+  EpicAction,
+  EpicSnapshot,
   LabelAction,
   LabelSnapshot,
   MilestoneAction,
@@ -69,6 +71,11 @@ export type ActivityInput =
       action: MilestoneAction;
       before?: MilestoneSnapshot | null;
       after?: MilestoneSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: EpicAction;
+      before?: EpicSnapshot | null;
+      after?: EpicSnapshot | null;
     })
   | (ActivityInputBase & {
       action: TimeAction;

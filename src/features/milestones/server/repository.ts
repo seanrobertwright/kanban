@@ -4,6 +4,7 @@ import { query, queryOne, withTransaction } from "@/shared/db/client";
 import { logActivity } from "@/features/activity/server/repository";
 import type { Actor, MilestoneSnapshot } from "@/features/activity/types";
 import type { Principal } from "@/features/auth/server/principal";
+import { assertEpicOnBoard } from "@/features/epics/server/repository";
 import {
   AuthzError,
   requireBoardRole,
@@ -22,7 +23,8 @@ import type {
  */
 
 const MILESTONE_COLUMNS = `m.id, m.board_id AS "boardId", m.name,
-                           m.due_date AS "dueDate", m.created_at AS "createdAt"`;
+                           m.due_date AS "dueDate", m.epic_id AS "epicId",
+                           m.created_at AS "createdAt"`;
 
 /** total/done ride every read — the dialog's progress bar is the feature. */
 const PROGRESS_COLUMNS = `
@@ -77,10 +79,13 @@ export async function createMilestone(
   const { workspaceId } = await requireBoardRole(userId, boardId, "member");
 
   return withTransaction(async (client) => {
+    if (input.epicId != null) {
+      await assertEpicOnBoard(client, boardId, input.epicId);
+    }
     const { rows } = await client.query<{ id: number }>(
-      `INSERT INTO milestone (board_id, name, due_date)
-       VALUES ($1, $2, $3) RETURNING id`,
-      [boardId, input.name, input.dueDate ?? null]
+      `INSERT INTO milestone (board_id, name, due_date, epic_id)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [boardId, input.name, input.dueDate ?? null, input.epicId ?? null]
     );
     const milestone = (await selectMilestone(client, rows[0].id))!;
 
@@ -118,22 +123,37 @@ export async function updateMilestone(
 ): Promise<Milestone | undefined> {
   const { boardId, workspaceId } = await requireMilestone(userId, id);
   const setsDueDate = "dueDate" in input;
+  // Three-valued (031): null un-files the milestone from its epic.
+  const setsEpic = "epicId" in input;
 
   return withTransaction(async (client) => {
     const before = await selectMilestone(client, id);
     if (!before) return undefined;
     if (
       (input.name === undefined || input.name === before.name) &&
-      (!setsDueDate || (input.dueDate ?? null) === before.dueDate)
+      (!setsDueDate || (input.dueDate ?? null) === before.dueDate) &&
+      (!setsEpic || (input.epicId ?? null) === before.epicId)
     )
       return before;
+
+    if (setsEpic && input.epicId != null) {
+      await assertEpicOnBoard(client, boardId, input.epicId);
+    }
 
     await client.query(
       `UPDATE milestone
           SET name = COALESCE($2, name),
-              due_date = CASE WHEN $3::boolean THEN $4::date ELSE due_date END
+              due_date = CASE WHEN $3::boolean THEN $4::date ELSE due_date END,
+              epic_id = CASE WHEN $5::boolean THEN $6::integer ELSE epic_id END
         WHERE id = $1`,
-      [id, input.name ?? null, setsDueDate, input.dueDate ?? null]
+      [
+        id,
+        input.name ?? null,
+        setsDueDate,
+        input.dueDate ?? null,
+        setsEpic,
+        input.epicId ?? null,
+      ]
     );
     const after = (await selectMilestone(client, id))!;
 

@@ -21,6 +21,7 @@ import {
   Download,
   Flag,
   Inbox,
+  Layers,
   LayoutTemplate,
   List,
   Plus,
@@ -55,6 +56,8 @@ import { BoardColumn } from "./board-column";
 import { InsightsDialog } from "./insights-dialog";
 import { MilestonesDialog } from "@/features/milestones/components/milestones-dialog";
 import type { Milestone } from "@/features/milestones/types";
+import { EpicsDialog } from "@/features/epics/components/epics-dialog";
+import type { Epic } from "@/features/epics/types";
 import { SprintsDialog } from "@/features/sprints/components/sprints-dialog";
 import type { Sprint } from "@/features/sprints/types";
 import {
@@ -121,6 +124,9 @@ interface BoardProps {
   /** The board's milestones (026), progress included — state because the
    * milestones dialog edits the set and the task dialog's picker reads it. */
   initialMilestones: Milestone[];
+  /** The board's epics (031), state because the EpicsDialog edits the set and
+   * the task dialog's picker reads it. */
+  initialEpics: Epic[];
   /** The board's sprints (028), state because the SprintsDialog edits the set
    * and the task dialog's picker reads it. */
   initialSprints: Sprint[];
@@ -157,6 +163,7 @@ export function Board({
   initialDoneColumnId,
   initialTemplates,
   initialMilestones,
+  initialEpics,
   initialSprints,
   canEdit,
   canDeleteColumns,
@@ -191,6 +198,8 @@ export function Board({
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
   const [milestonesOpen, setMilestonesOpen] = useState(false);
+  const [epics, setEpics] = useState<Epic[]>(initialEpics);
+  const [epicsOpen, setEpicsOpen] = useState(false);
   const [sprints, setSprints] = useState<Sprint[]>(initialSprints);
   const [sprintsOpen, setSprintsOpen] = useState(false);
   const [doneColumnId, setDoneColumnId] = useState<number | null>(
@@ -250,6 +259,7 @@ export function Board({
       setItems(groupTasks(data.columns, data.tasks));
       setDoneColumnId(data.doneColumnId);
       setMilestones(data.milestones);
+      setEpics(data.epics);
       setSprints(data.sprints);
     } catch {
       // Keep optimistic state if the server is unreachable.
@@ -578,6 +588,14 @@ export function Board({
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
+            onClick={() => setEpicsOpen(true)}
+          >
+            <Layers /> Epics
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
             onClick={() => setInsightsOpen(true)}
           >
             <ChartNoAxesColumn /> Insights
@@ -758,6 +776,7 @@ export function Board({
         labels={labels}
         templates={templates}
         milestones={milestones}
+        epics={epics}
         sprints={sprints}
         onOpenChange={(open) => {
           if (!open) setDialog(null);
@@ -812,8 +831,17 @@ export function Board({
         boardId={boardId}
         open={milestonesOpen}
         milestones={milestones}
+        epics={epics}
         canEdit={canEdit}
         onOpenChange={setMilestonesOpen}
+        onChanged={refresh}
+      />
+      <EpicsDialog
+        boardId={boardId}
+        open={epicsOpen}
+        epics={epics}
+        canEdit={canEdit}
+        onOpenChange={setEpicsOpen}
         onChanged={refresh}
       />
       <InsightsDialog

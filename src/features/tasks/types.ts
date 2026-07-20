@@ -224,6 +224,12 @@ export interface Task {
    */
   sprintId: number | null;
   /**
+   * The epic this task is filed under (031), or null. An id like milestoneId,
+   * and for its reason — the board holds the epic list. A task can be filed on
+   * an epic directly, independent of any milestone.
+   */
+  epicId: number | null;
+  /**
    * A calendar date as 'YYYY-MM-DD', or null for no due date.
    *
    * A string rather than a Date, deliberately and all the way down: 006 stores
@@ -287,6 +293,8 @@ export interface CreateTaskInput {
   milestoneId?: number | null;
   /** The sprint to schedule into (028), or null/absent for the backlog. */
   sprintId?: number | null;
+  /** The epic to file under (031), or null/absent for none. */
+  epicId?: number | null;
   dueDate?: string | null;
   /** Ids, not refs: the caller says which labels, the database knows their names. */
   labelIds?: number[];
@@ -365,6 +373,11 @@ export interface UpdateTaskInput {
    * and a cross-board one, the milestone tenancy check's shape.
    */
   sprintId?: number | null;
+  /**
+   * Three-valued, milestoneId's twin (031): `null` un-files the task. The
+   * repository refuses a cross-board epic, assertEpicOnBoard's tenancy check.
+   */
+  epicId?: number | null;
   /**
    * Three-valued, like assigneeId and for the identical reason: there is no date
    * that means "no due date", so `null` is the cleared state and cannot also be

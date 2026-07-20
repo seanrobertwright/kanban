@@ -9,6 +9,12 @@ export interface Milestone {
   name: string;
   /** 'YYYY-MM-DD' or null — a milestone can be a bucket before it is a deadline. */
   dueDate: string | null;
+  /**
+   * The epic this milestone is filed under (031), or null. An id, not a ref —
+   * the board holds the epic list, milestoneId's rule one level up. This is the
+   * "above the milestone" hierarchy: a milestone rolls up into an epic.
+   */
+  epicId: number | null;
   createdAt: string;
   /**
    * Progress, derived at read time: how many top-level tasks aim here, and how
@@ -23,10 +29,14 @@ export interface Milestone {
 export interface CreateMilestoneInput {
   name: string;
   dueDate?: string | null;
+  /** The epic to file under (031), or null/absent for none. */
+  epicId?: number | null;
 }
 
 export interface UpdateMilestoneInput {
   name?: string;
   /** Three-valued: undefined leaves the date, null clears it. */
   dueDate?: string | null;
+  /** Three-valued, dueDate's twin (031): null un-files from the epic. */
+  epicId?: number | null;
 }

@@ -2,6 +2,7 @@ import { query, queryOne } from "@/shared/db/client";
 import { AuthzError, requireBoardRole } from "@/features/workspaces/server/authz";
 import type { Principal } from "@/features/auth/server/principal";
 import type { Milestone } from "@/features/milestones/types";
+import type { Epic } from "@/features/epics/types";
 import type { Sprint } from "@/features/sprints/types";
 import { taskColumns } from "@/features/tasks/server/task-row";
 import type { Task } from "@/features/tasks/types";
@@ -80,6 +81,30 @@ export async function getBoard(
     [boardId]
   );
 
+  // Epics ride along for the task dialog's picker and the EpicsDialog's first
+  // paint, progress included — the milestone read's twin (031). An epic's rollup
+  // spans its direct tasks and the tasks of its member milestones, so the count
+  // predicate is the OR the epics repository documents. Authz already done above.
+  const epics = await query<Epic>(
+    `SELECT e.id, e.board_id AS "boardId", e.name,
+            e.created_at AS "createdAt",
+            (SELECT COUNT(*)::int FROM task t
+              WHERE t.parent_id IS NULL
+                AND (t.epic_id = e.id
+                     OR t.milestone_id IN (SELECT id FROM milestone WHERE epic_id = e.id))) AS total,
+            (SELECT COUNT(*)::int FROM task t
+              WHERE t.parent_id IS NULL
+                AND b2.done_column_id IS NOT NULL
+                AND t.column_id = b2.done_column_id
+                AND (t.epic_id = e.id
+                     OR t.milestone_id IN (SELECT id FROM milestone WHERE epic_id = e.id))) AS done
+       FROM epic e
+       JOIN board b2 ON b2.id = e.board_id
+      WHERE e.board_id = $1
+      ORDER BY e.name, e.id`,
+    [boardId]
+  );
+
   // Sprints ride along for the task dialog's picker and the SprintsDialog's
   // first paint, progress included — the milestone read's twin, one migration
   // on. Authz already done above.
@@ -113,6 +138,7 @@ export async function getBoard(
     tasks,
     doneColumnId: board.doneColumnId,
     milestones,
+    epics,
     sprints,
   };
 }

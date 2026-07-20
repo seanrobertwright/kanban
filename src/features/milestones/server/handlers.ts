@@ -53,17 +53,23 @@ export async function handleCreateMilestone(request: Request, id: string) {
   const payload = await request.json().catch(() => null);
   if (!payload || typeof payload !== "object")
     return badRequest("Invalid JSON body");
-  const { name, dueDate } = payload as Record<string, unknown>;
+  const { name, dueDate, epicId } = payload as Record<string, unknown>;
   if (typeof name !== "string" || name.trim() === "")
     return badRequest("name is required");
   if (!isDueDate(dueDate))
     return badRequest("dueDate must be a YYYY-MM-DD date or null");
+  if (epicId !== undefined && epicId !== null && !Number.isInteger(epicId))
+    return badRequest("epicId must be an epic id or null");
 
   try {
     const milestone = await createMilestone(
       session.user.id,
       boardId,
-      { name: name.trim(), dueDate: (dueDate as string | null) ?? null },
+      {
+        name: name.trim(),
+        dueDate: (dueDate as string | null) ?? null,
+        epicId: epicId as number | null | undefined,
+      },
       { type: "human", id: session.user.id }
     );
     return Response.json(milestone, { status: 201 });
@@ -81,12 +87,15 @@ export async function handleUpdateMilestone(request: Request, id: string) {
   const payload = await request.json().catch(() => null);
   if (!payload || typeof payload !== "object")
     return badRequest("Invalid JSON body");
-  const { name, dueDate } = payload as Record<string, unknown>;
+  const { name, dueDate, epicId } = payload as Record<string, unknown>;
   if (name !== undefined && (typeof name !== "string" || name.trim() === ""))
     return badRequest("name must be a non-empty string");
   if (!isDueDate(dueDate))
     return badRequest("dueDate must be a YYYY-MM-DD date or null");
+  if (epicId !== undefined && epicId !== null && !Number.isInteger(epicId))
+    return badRequest("epicId must be an epic id or null");
   const setsDueDate = "dueDate" in payload;
+  const setsEpic = "epicId" in payload;
 
   try {
     const milestone = await updateMilestone(
@@ -95,6 +104,7 @@ export async function handleUpdateMilestone(request: Request, id: string) {
       {
         name: name as string | undefined,
         ...(setsDueDate ? { dueDate: dueDate as string | null } : {}),
+        ...(setsEpic ? { epicId: epicId as number | null } : {}),
       },
       { type: "human", id: session.user.id }
     );

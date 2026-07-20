@@ -148,8 +148,8 @@ describe("activity log", () => {
       // be in here or undo silently restores an incomplete task — assigneeId
       // arrived at 004 exactly this way, priority and dueDate at 006, labels at
       // 007, parentId at 008, claimedBy at 010, type/estimate (022),
-      // milestoneId (026), and sprintId (028) each tripped it again. Nine for
-      // nine; the comment has earned its keep.
+      // milestoneId (026), sprintId (028), and epicId (031) each tripped it
+      // again. Ten for ten; the comment has earned its keep.
       const label = await createLabel(alice, workspaceId, { name: "recoverable" });
       const task = await createTask(alice, {
         columnId: todoId,
@@ -182,6 +182,8 @@ describe("activity log", () => {
         milestoneId: null,
         // Null (backlog), present for the same reason (028).
         sprintId: null,
+        // Null (filed under no epic), present for the same reason (031).
+        epicId: null,
         dueDate: "2026-08-01",
         // Name included: the label is what undo needs to restore, and 007's
         // whole point is that this stays readable after the label is deleted.

@@ -21,12 +21,13 @@ export async function fetchMilestones(boardId: number): Promise<Milestone[]> {
 export function createMilestone(
   boardId: number,
   name: string,
-  dueDate: string | null
+  dueDate: string | null,
+  epicId: number | null = null
 ): Promise<Milestone> {
   return fetch(`/api/board/${boardId}/milestones`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, dueDate }),
+    body: JSON.stringify({ name, dueDate, epicId }),
   }).then((res) => jsonOrThrow<Milestone>(res));
 }
 

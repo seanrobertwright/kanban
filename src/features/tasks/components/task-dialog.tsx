@@ -16,6 +16,7 @@ import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
 import type { Label as LabelData } from "@/features/labels/types";
 import type { Milestone } from "@/features/milestones/types";
+import type { Epic } from "@/features/epics/types";
 import type { Sprint } from "@/features/sprints/types";
 import type { TaskTemplate } from "@/features/templates/types";
 import type { Member } from "@/features/workspaces/types";
@@ -65,6 +66,8 @@ export interface TaskFormValues {
   milestoneId: number | null;
   /** The sprint to schedule into (028), or null (backlog). */
   sprintId: number | null;
+  /** The epic to file under (031), or null. null clears, like dueDate. */
+  epicId: number | null;
   /** null clears the date. The input always has a value, so never absent. */
   dueDate: string | null;
   /** Ids, not refs — the form picks from a vocabulary the server already knows. */
@@ -144,6 +147,12 @@ interface TaskDialogProps {
    */
   milestones?: Milestone[];
   /**
+   * The board's epics (031), the picker's options. Absent/empty renders no
+   * picker — the milestone rule. Hidden for a subtask, which is filed through
+   * its parent.
+   */
+  epics?: Epic[];
+  /**
    * The board's sprints (028). The picker offers only planning + active ones
    * to schedule into (a completed sprint's scope is frozen); a task already in
    * a completed sprint still shows it, disabled, so its home is legible.
@@ -181,6 +190,7 @@ export function TaskDialog({
   labels,
   templates = [],
   milestones = [],
+  epics = [],
   sprints = [],
   onOpenChange,
   onSubmit,
@@ -203,6 +213,8 @@ export function TaskDialog({
   const [milestoneId, setMilestoneId] = useState<string>("");
   // "" is "backlog" — the <option> stand-in for null (028).
   const [sprintId, setSprintId] = useState<string>("");
+  // "" is "no epic" — the <option> stand-in for null (031).
+  const [epicId, setEpicId] = useState<string>("");
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
   const [labelIds, setLabelIds] = useState<number[]>([]);
   // "" is "does not recur" — the <option> value standing in for null, since a DOM
@@ -246,6 +258,7 @@ export function TaskDialog({
       setEstimate(task?.estimate == null ? "" : String(task.estimate));
       setMilestoneId(task?.milestoneId == null ? "" : String(task.milestoneId));
       setSprintId(task?.sprintId == null ? "" : String(task.sprintId));
+      setEpicId(task?.epicId == null ? "" : String(task.epicId));
       setDueDate(task?.dueDate ?? NO_DUE_DATE);
       // Back to ids: the task carries {id, name} because the log needs the name
       // (LabelRef), but the form's business is which labels, not what they are
@@ -298,6 +311,8 @@ export function TaskDialog({
         milestoneId: milestoneId === "" ? null : Number(milestoneId),
         // "" is the DOM stand-in for "backlog"; the API speaks null.
         sprintId: sprintId === "" ? null : Number(sprintId),
+        // "" is the DOM stand-in for "no epic"; the API speaks null.
+        epicId: epicId === "" ? null : Number(epicId),
         // Converted for assigneeId's reason: "" is what an emptied date input
         // reports, and the API would read it as a malformed date rather than as
         // the clear it is.
@@ -538,6 +553,27 @@ export function TaskDialog({
                 {milestones.map((milestone) => (
                   <option key={milestone.id} value={milestone.id}>
                     {milestone.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {/* Epic (031). The milestone rule: only when the board has any, and
+              hidden for a subtask, which is filed through its parent. An epic is
+              a coarser grouping than a milestone — a task may carry both. */}
+          {!isSubtask && epics.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="task-epic">Epic</Label>
+              <select
+                id="task-epic"
+                value={epicId}
+                onChange={(e) => setEpicId(e.target.value)}
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                <option value="">No epic</option>
+                {epics.map((epic) => (
+                  <option key={epic.id} value={epic.id}>
+                    {epic.name}
                   </option>
                 ))}
               </select>

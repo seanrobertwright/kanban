@@ -39,6 +39,7 @@ interface ExportRow {
   estimate: number | null;
   assignee: string | null;
   milestone: string | null;
+  epic: string | null;
   sprint: string | null;
   dueDate: string | null;
   labels: string[];
@@ -56,6 +57,7 @@ const CSV_COLUMNS: [header: string, read: (r: ExportRow) => string | number | nu
   ["estimate", (r) => r.estimate],
   ["assignee", (r) => r.assignee],
   ["milestone", (r) => r.milestone],
+  ["epic", (r) => r.epic],
   ["sprint", (r) => r.sprint],
   ["due_date", (r) => r.dueDate],
   // One cell, "; "-joined: a CSV has no list type, and a second file of
@@ -114,6 +116,7 @@ export async function handleExportBoard(request: Request, id: string) {
     const columnTitle = new Map(data.columns.map((c) => [c.id, c.title]));
     const titleById = new Map(allTasks.map((t) => [t.id, t.title]));
     const milestoneName = new Map(data.milestones.map((m) => [m.id, m.name]));
+    const epicName = new Map(data.epics.map((e) => [e.id, e.name]));
     const sprintName = new Map(data.sprints.map((s) => [s.id, s.name]));
 
     const rows: ExportRow[] = allTasks.map((t) => ({
@@ -133,6 +136,8 @@ export async function handleExportBoard(request: Request, id: string) {
         t.milestoneId === null
           ? null
           : (milestoneName.get(t.milestoneId) ?? null),
+      epic:
+        t.epicId === null ? null : (epicName.get(t.epicId) ?? null),
       sprint:
         t.sprintId === null ? null : (sprintName.get(t.sprintId) ?? null),
       dueDate: t.dueDate,

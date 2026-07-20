@@ -13,6 +13,7 @@ import {
 } from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import type { Epic } from "@/features/epics/types";
 import * as api from "../client/api";
 import type { Milestone } from "../types";
 
@@ -21,6 +22,9 @@ interface MilestonesDialogProps {
   open: boolean;
   /** Owned by the board (BoardData.milestones); onChanged refetches them. */
   milestones: Milestone[];
+  /** The board's epics (031), the "file under" picker's options and the source
+   *  for a milestone row's epic name. Empty renders no picker. */
+  epics: Epic[];
   canEdit: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
@@ -35,15 +39,20 @@ export function MilestonesDialog({
   boardId,
   open,
   milestones,
+  epics,
   canEdit,
   onOpenChange,
   onChanged,
 }: MilestonesDialogProps) {
   const [name, setName] = useState("");
   const [dueDate, setDueDate] = useState("");
+  // "" is "no epic" — the <option> stand-in for null (031).
+  const [epicId, setEpicId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
+
+  const epicName = new Map(epics.map((e) => [e.id, e.name]));
 
   async function create() {
     const trimmed = name.trim();
@@ -51,9 +60,15 @@ export function MilestonesDialog({
     setBusy(true);
     setError(null);
     try {
-      await api.createMilestone(boardId, trimmed, dueDate || null);
+      await api.createMilestone(
+        boardId,
+        trimmed,
+        dueDate || null,
+        epicId === "" ? null : Number(epicId)
+      );
       setName("");
       setDueDate("");
+      setEpicId("");
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create the milestone");
@@ -108,8 +123,19 @@ export function MilestonesDialog({
                   className="grid gap-1 rounded-lg border px-3 py-2"
                 >
                   <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="min-w-0 truncate font-medium">
-                      {milestone.name}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 truncate font-medium">
+                        {milestone.name}
+                      </span>
+                      {/* The epic it rolls up into (031), when filed. A muted
+                          chip so the hierarchy reads without competing with the
+                          milestone's own name. */}
+                      {milestone.epicId != null &&
+                        epicName.has(milestone.epicId) && (
+                          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                            {epicName.get(milestone.epicId)}
+                          </span>
+                        )}
                     </span>
                     <span className="flex shrink-0 items-center gap-2">
                       {milestone.dueDate && (
@@ -186,6 +212,24 @@ export function MilestonesDialog({
                 Add
               </Button>
             </div>
+            {/* File the new milestone under an epic (031). Only when the board
+                has any — the picker is absent otherwise, so a board with no
+                epics shows the form exactly as before. */}
+            {epics.length > 0 && (
+              <select
+                aria-label="Epic"
+                value={epicId}
+                onChange={(e) => setEpicId(e.target.value)}
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                <option value="">No epic</option>
+                {epics.map((epic) => (
+                  <option key={epic.id} value={epic.id}>
+                    {epic.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
       </DialogContent>
