@@ -25,6 +25,7 @@ task's history under the agent's own name.
 | `release_task` | Drop your hold when you stop or finish. |
 | `comment_on_task` | Post a comment under the agent's name. |
 | `create_subtask` | Decompose a task into a piece (a whole task with its own status). |
+| `flag_blocker` | Record that a task is blocked by another on the same board (a blocked-by edge); self-references and cycles are refused. |
 
 ## Setup
 

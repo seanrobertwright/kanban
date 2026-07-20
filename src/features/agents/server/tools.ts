@@ -11,6 +11,7 @@ import {
   updateTask,
 } from "@/features/tasks/server/repository";
 import { createComment } from "@/features/comments/server/repository";
+import { addDependency } from "@/features/dependencies/server/repository";
 import { getBoard } from "@/features/board/server/repository";
 import { listActivityForTask } from "@/features/activity/server/repository";
 import { gate, type RunContext } from "./gate";
@@ -206,6 +207,28 @@ export function buildTools(
           execute: () => updateTask(p, id, { title, description }),
           describe: () => `Edited task ${id}.`,
           proposal: `edit task ${id}`,
+        }),
+    }),
+    betaZodTool({
+      name: "flag_blocker",
+      description:
+        "Record that a task is blocked by another task on the same board — a blocked-by edge everyone can see (§7.1). Both ids must be tasks on the same board; a self-reference or a cycle is refused, and re-flagging an existing edge is a harmless no-op.",
+      inputSchema: z.object({
+        id: z.number().int(),
+        dependsOnId: z.number().int(),
+      }),
+      run: ({ id, dependsOnId }) =>
+        gate(ctx, {
+          tool: "flag_blocker",
+          // taskId: null — a dependency is a relationship between two tasks, not
+          // state either one holds (018), so it never enters a TaskSnapshot; a
+          // before/after task snapshot would be misleading. The input carries both
+          // ids, which is the whole record of the edge.
+          input: { id, dependsOnId },
+          taskId: null,
+          execute: () => addDependency(p, id, dependsOnId),
+          describe: () => `Flagged task ${id} as blocked by ${dependsOnId}.`,
+          proposal: `flag task ${id} as blocked by ${dependsOnId}`,
         }),
     }),
 

@@ -181,5 +181,13 @@ tool(
   ({ parentId, ...rest }) => api("POST", "/api/tasks", { parentId, ...rest })
 );
 
+tool(
+  "flag_blocker",
+  "Record that a task is blocked by another task on the same board — a blocked-by edge everyone can see. Both ids must be tasks on the same board; a self-reference or a cycle is refused, and re-flagging an existing edge is a harmless no-op.",
+  { id: z.number().int(), dependsOnId: z.number().int() },
+  ({ id, dependsOnId }) =>
+    api("POST", `/api/tasks/${id}/dependencies`, { dependsOnId })
+);
+
 await server.connect(new StdioServerTransport());
 console.error(`kanban MCP server ready → ${BASE}`);

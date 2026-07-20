@@ -28,9 +28,10 @@ export type Tier = "auto" | "changeset" | "block";
  * approval_policy (012) overlays; an agent with an empty policy is gated exactly
  * this way. The mapping is §7.4's own examples made concrete:
  *
- *   auto      — comment, claim/release, and the field edits that are internally
+ *   auto      — comment, claim/release, the field edits that are internally
  *               reversible and trigger nothing outside the board (priority,
- *               labels, due date, rename).
+ *               labels, due date, rename), and flagging a blocked-by edge
+ *               (018's dependency: silent, idempotent, reversible by removal).
  *   changeset — the consequential moves §7.4 names by name: status (move),
  *               reassignment (assign), decomposition (create task/subtask).
  *
@@ -46,6 +47,7 @@ export const DEFAULT_TIER: Record<string, Tier> = {
   set_labels: "auto",
   set_due_date: "auto",
   rename_task: "auto",
+  flag_blocker: "auto",
   assign_task: "changeset",
   move_task: "changeset",
   create_task: "changeset",

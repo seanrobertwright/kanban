@@ -183,6 +183,39 @@ describe("Door 1 runtime", () => {
     expect(status).toBe("succeeded");
   });
 
+  it("flags a blocked-by edge immediately (auto tier) and records the action", async () => {
+    h.turns = 1;
+    const taskId = await seedTask();
+    const blockerId = await seedTask();
+    h.script = async (tools) => {
+      await run(tools, "flag_blocker").run({ id: taskId, dependsOnId: blockerId });
+    };
+    const runId = (await enqueue(taskId))!;
+    await executeRun(runId);
+
+    // Auto tier: the run has nothing to review, so it succeeds outright.
+    const status = (await queryOne<{ s: string }>(
+      `SELECT status AS s FROM agent_run WHERE id = $1`,
+      [runId]
+    ))!.s;
+    expect(status).toBe("succeeded");
+
+    // The edge landed on the real board, agent-authored.
+    const edge = await queryOne<{ n: string }>(
+      `SELECT count(*) AS n FROM task_dependency
+        WHERE task_id = $1 AND depends_on_task_id = $2`,
+      [taskId, blockerId]
+    );
+    expect(Number(edge!.n)).toBe(1);
+
+    // Recorded in the agent-action trail at the auto tier.
+    const act = await queryOne<{ tier: string }>(
+      `SELECT tier FROM agent_action WHERE run_id = $1 AND tool = 'flag_blocker'`,
+      [runId]
+    );
+    expect(act!.tier).toBe("auto");
+  });
+
   it("halts cleanly when the workspace budget cap is exceeded", async () => {
     // Set the cap just above what this workspace has already spent, so the
     // pre-loop check passes and the FIRST turn's usage is what pushes it over —
