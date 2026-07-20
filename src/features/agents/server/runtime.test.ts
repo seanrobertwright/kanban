@@ -52,6 +52,7 @@ vi.mock("@anthropic-ai/sdk", () => {
 // Imported AFTER the mock is registered (vi.mock is hoisted above it anyway).
 const { executeRun, enqueueRun, startRunForTask } = await import("./runtime");
 const { getRunDetail, reviewChangeset, revertAction } = await import("./review");
+const { drainOnce } = await import("./drainer");
 
 async function createUser(label: string): Promise<string> {
   const id = `test-${label}-${randomUUID()}`;
@@ -348,5 +349,93 @@ describe("Door 1 runtime", () => {
     await expect(revertAction(owner, action.id)).rejects.toThrow(
       /already undone/i
     );
+  });
+
+  it("drainer re-dispatches a stale queued run that after() never kicked", async () => {
+    h.turns = 1;
+    const taskId = await seedTask();
+    h.script = async (tools) => {
+      await run(tools, "set_priority").run({ id: taskId, priority: "low" });
+    };
+    // Enqueued but never dispatched (enqueue does not call dispatchRun). Backdate
+    // it past the grace window so the drainer treats it as an orphan.
+    const runId = (await enqueue(taskId))!;
+    await query(
+      `UPDATE agent_run SET created_at = now() - interval '5 minutes' WHERE id = $1`,
+      [runId]
+    );
+
+    const swept = await drainOnce();
+    expect(swept).toBeGreaterThanOrEqual(1);
+
+    const status = (await queryOne<{ s: string }>(
+      `SELECT status AS s FROM agent_run WHERE id = $1`,
+      [runId]
+    ))!.s;
+    expect(status).toBe("succeeded");
+  });
+
+  it("drainer leaves a fresh queued run inside the grace window alone", async () => {
+    const taskId = await seedTask();
+    // created_at defaults to now(): still within grace, so its own after() kick
+    // owns it and the drainer must not double-run it.
+    const runId = (await enqueue(taskId))!;
+
+    await drainOnce();
+
+    const status = (await queryOne<{ s: string }>(
+      `SELECT status AS s FROM agent_run WHERE id = $1`,
+      [runId]
+    ))!.s;
+    expect(status).toBe("queued");
+  });
+
+  it("drainer requeues and re-runs a run whose heartbeat went stale (crash)", async () => {
+    h.turns = 1;
+    const taskId = await seedTask();
+    h.script = async (tools) => {
+      await run(tools, "set_priority").run({ id: taskId, priority: "high" });
+    };
+    const runId = (await enqueue(taskId))!;
+    // Simulate a crash mid-flight: 'running', but the heartbeat stopped long ago.
+    // created_at stays recent — the crash path must dispatch it regardless of the
+    // orphan grace window, which this asserts by leaving created_at fresh.
+    await query(
+      `UPDATE agent_run
+          SET status = 'running',
+              started_at = now() - interval '1 hour',
+              last_heartbeat_at = now() - interval '1 hour'
+        WHERE id = $1`,
+      [runId]
+    );
+
+    const swept = await drainOnce();
+    expect(swept).toBeGreaterThanOrEqual(1);
+
+    const status = (await queryOne<{ s: string }>(
+      `SELECT status AS s FROM agent_run WHERE id = $1`,
+      [runId]
+    ))!.s;
+    expect(status).toBe("succeeded");
+  });
+
+  it("drainer leaves a healthy running run (fresh heartbeat) untouched", async () => {
+    const taskId = await seedTask();
+    const runId = (await enqueue(taskId))!;
+    // Running with a heartbeat as of now — a live loop, not a crash.
+    await query(
+      `UPDATE agent_run
+          SET status = 'running', started_at = now(), last_heartbeat_at = now()
+        WHERE id = $1`,
+      [runId]
+    );
+
+    await drainOnce();
+
+    const status = (await queryOne<{ s: string }>(
+      `SELECT status AS s FROM agent_run WHERE id = $1`,
+      [runId]
+    ))!.s;
+    expect(status).toBe("running");
   });
 });

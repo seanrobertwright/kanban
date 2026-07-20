@@ -78,9 +78,10 @@ async function finish(runId: string, status: string, error?: string): Promise<vo
 }
 
 /**
- * Drive one run to completion. Idempotent-ish by status: only a 'queued' run is
- * picked up, so a double-dispatch (the after() kick plus a stray worker) does not
- * run the loop twice.
+ * Drive one run to completion. Safe to call from more than one dispatcher (the
+ * after() kick and the durable drainer): the run is claimed atomically below
+ * (queued → running only if still queued), so a double-dispatch runs the loop
+ * exactly once — the loser of the claim reads zero rows and returns.
  */
 export async function executeRun(runId: string): Promise<void> {
   const run = await queryOne<RunRow>(
@@ -144,7 +145,20 @@ export async function executeRun(runId: string): Promise<void> {
     return;
   }
 
-  await query(`UPDATE agent_run SET status = 'running' WHERE id = $1`, [runId]);
+  // Claim the run atomically: flip queued → running only if it is STILL queued,
+  // and take it only if this worker won that flip. This is the concurrency fence
+  // that makes the run safe to dispatch from more than one place — the after()
+  // kick (dispatchRun) and the durable drainer (drainer.ts) can both call
+  // executeRun for the same row; exactly one claims it, the other reads zero rows
+  // and returns. started_at and the first heartbeat are stamped here (030).
+  const claimed = await query(
+    `UPDATE agent_run
+        SET status = 'running', started_at = now(), last_heartbeat_at = now()
+      WHERE id = $1 AND status = 'queued'
+      RETURNING id`,
+    [runId]
+  );
+  if (claimed.length === 0) return; // another worker claimed it first.
 
   const ctx: RunContext = {
     runId,
@@ -218,7 +232,7 @@ export async function executeRun(runId: string): Promise<void> {
         `UPDATE agent_run
             SET input_tokens = $2, output_tokens = $3,
                 cache_read_tokens = $4, cache_creation_tokens = $5,
-                cost_micros = $6
+                cost_micros = $6, last_heartbeat_at = now()
           WHERE id = $1`,
         [
           runId,
@@ -284,9 +298,10 @@ export async function enqueueRun(
  * Kick a queued run's execution off the request path via Next's after(), so the
  * assignment PATCH returns immediately while the loop runs on the persistent Node
  * server. Best-effort: outside a request scope (a test, the isolated agent-run
- * script) after() throws, and the run simply stays 'queued' for the run endpoint
- * or a worker to drain — which is the point of making a run a record, not a
- * request. The dynamic import keeps next/server out of the module graph until a
+ * script) after() throws, and the run simply stays 'queued' — and if the process
+ * dies before the callback fires, likewise. Either way the durable drainer
+ * (drainer.ts) re-dispatches it, which is the point of making a run a record, not
+ * a request. The dynamic import keeps next/server out of the module graph until a
  * dispatch actually happens.
  */
 export function dispatchRun(runId: string): void {
