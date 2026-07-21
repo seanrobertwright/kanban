@@ -11,7 +11,7 @@ Companion docs: `SESSION_HANDOFF.md` (per-session narrative + gotchas),
 55 ✅ / 85 ❌).
 
 Convention: `[x]` done → cite the commit; `[ ]` open → one line on the slice.
-Migrations are numbered in `src/shared/db/migrations/` and applied 001–027.
+Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
 
 ---
 
@@ -70,15 +70,24 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–027.
       into a sprint to schedule it (sets `sprint_id`, leaves the column alone).
       Completed sprints are not drop targets (frozen scope). `view_mode` CHECK
       widened to admit `backlog`; savable like any lens. → `fd8146f`
-- [ ] **Epics** — a larger-than-task grouping above the milestone.
+- [x] **Epics** (031) — a board-scoped grouping one level above the milestone.
+      Tasks file directly (`task.epic_id`) and milestones file under
+      (`milestone.epic_id`); epic progress rolls up direct + member-milestone tasks
+      (counted once). Name-only (no due date); both FKs SET NULL, so CRUD is member.
+      Epic dialog + task/milestone pickers + export column. → `54c75a0`
 
 ### M2 hardening (leftovers from the pre-sweep handoff — stay on the wedge)
-- [ ] **`flag_blocker` tool** — record a `task_dependency` blocked-by edge from an
-      agent; named in §7.1, exists in neither door. Cleanest next M2 slice.
-- [ ] **Durable run-queue drainer** — `dispatchRun` relies on `after()`; a run
-      enqueued then interrupted stays `queued` with no worker.
-- [ ] **`agent_action.activity_id`** — column defined (013), never populated by
-      `recordAction`; wiring it closes the action→activity link.
+- [x] **`flag_blocker` tool** — records a `task_dependency` blocked-by edge from an
+      agent, in both doors (runtime `tools.ts` + `mcp/server.mjs`). Auto tier: the
+      edge is idempotent, cycle-checked, same-board, silent, and reversible by
+      removal, so it lands immediately via `addDependency` (018). → `e8b40e3`
+- [x] **Durable run-queue drainer** (030) — `instrumentation.ts` `register()` starts
+      a sweep that revives crashed `running` runs (stale heartbeat) and re-dispatches
+      `queued` orphans past a grace window. `executeRun` now claims atomically, so
+      re-dispatch from more than one caller runs the loop once. → `6a2b827`
+- [x] **`agent_action.activity_id`** — the 013 column is now populated: `logActivity`
+      returns the id into an `AsyncLocalStorage` sink, the gate stamps it on the
+      auto tier, and changeset apply stamps it at accept time. → `2c3c440`
 - [x] **Haiku in `cost.ts`** — §7.3's triage model now meters at $1/$5 per MTok
       (was falling back to the ~5x-dearer opus rate); shared `Price` type + tests.
       → `7774f39`
