@@ -41,6 +41,7 @@ interface ExportRow {
   assignee: string | null;
   milestone: string | null;
   epic: string | null;
+  objective: string | null;
   sprint: string | null;
   value: number | null;
   risk: number | null;
@@ -67,6 +68,7 @@ const CSV_COLUMNS: [header: string, read: (r: ExportRow) => string | number | nu
   ["assignee", (r) => r.assignee],
   ["milestone", (r) => r.milestone],
   ["epic", (r) => r.epic],
+  ["objective", (r) => r.objective],
   ["sprint", (r) => r.sprint],
   ["value", (r) => r.value],
   ["risk", (r) => r.risk],
@@ -140,6 +142,7 @@ export async function handleExportBoard(request: Request, id: string) {
     const titleById = new Map(allTasks.map((t) => [t.id, t.title]));
     const milestoneName = new Map(data.milestones.map((m) => [m.id, m.name]));
     const epicName = new Map(data.epics.map((e) => [e.id, e.name]));
+    const objectiveName = new Map(data.objectives.map((o) => [o.id, o.name]));
     const sprintName = new Map(data.sprints.map((s) => [s.id, s.name]));
 
     // Custom fields (035): the board's definitions in display order, and every
@@ -184,6 +187,10 @@ export async function handleExportBoard(request: Request, id: string) {
           : (milestoneName.get(t.milestoneId) ?? null),
       epic:
         t.epicId === null ? null : (epicName.get(t.epicId) ?? null),
+      objective:
+        t.objectiveId === null
+          ? null
+          : (objectiveName.get(t.objectiveId) ?? null),
       sprint:
         t.sprintId === null ? null : (sprintName.get(t.sprintId) ?? null),
       value: t.value,

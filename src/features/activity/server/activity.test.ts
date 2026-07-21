@@ -184,6 +184,8 @@ describe("activity log", () => {
         sprintId: null,
         // Null (filed under no epic), present for the same reason (031).
         epicId: null,
+        // Null (aims at no objective), present for the same reason (037).
+        objectiveId: null,
         // Null (unscored), present for the same reason (034); the derived score
         // is never snapshotted.
         value: null,

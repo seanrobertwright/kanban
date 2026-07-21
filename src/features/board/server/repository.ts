@@ -4,6 +4,7 @@ import type { Principal } from "@/features/auth/server/principal";
 import type { CustomField } from "@/features/custom-fields/types";
 import type { TaskDependencyEdge } from "@/features/dependencies/types";
 import type { Milestone } from "@/features/milestones/types";
+import { listObjectives } from "@/features/objectives/server/repository";
 import type { Epic } from "@/features/epics/types";
 import type { Sprint } from "@/features/sprints/types";
 import { taskColumns } from "@/features/tasks/server/task-row";
@@ -162,6 +163,12 @@ export async function getBoard(
     [boardId]
   );
 
+  // Objectives (037) with their key results + progress. listObjectives owns the
+  // two-read + progress-fold, so it is called rather than duplicated here; its
+  // requireBoardRole is a second cheap check the other reads skip, worth it not
+  // to re-implement the KR maths in a second place.
+  const objectives = await listObjectives(actor, boardId);
+
   return {
     board,
     columns,
@@ -172,6 +179,7 @@ export async function getBoard(
     sprints,
     dependencies,
     customFields,
+    objectives,
   };
 }
 

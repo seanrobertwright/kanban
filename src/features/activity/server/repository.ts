@@ -21,6 +21,8 @@ import type {
   CustomFieldValueSnapshot,
   EpicAction,
   EpicSnapshot,
+  ObjectiveAction,
+  ObjectiveSnapshot,
   LabelAction,
   LabelSnapshot,
   MilestoneAction,
@@ -78,6 +80,11 @@ export type ActivityInput =
       action: EpicAction;
       before?: EpicSnapshot | null;
       after?: EpicSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: ObjectiveAction;
+      before?: ObjectiveSnapshot | null;
+      after?: ObjectiveSnapshot | null;
     })
   | (ActivityInputBase & {
       action: TimeAction;

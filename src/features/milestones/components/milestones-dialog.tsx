@@ -14,6 +14,7 @@ import {
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import type { Epic } from "@/features/epics/types";
+import type { Objective } from "@/features/objectives/types";
 import * as api from "../client/api";
 import type { Milestone } from "../types";
 
@@ -25,6 +26,9 @@ interface MilestonesDialogProps {
   /** The board's epics (031), the "file under" picker's options and the source
    *  for a milestone row's epic name. Empty renders no picker. */
   epics: Epic[];
+  /** The board's objectives (037), the "aim at" picker's options and the source
+   *  for a milestone row's objective name. Empty renders no picker. */
+  objectives: Objective[];
   canEdit: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
@@ -40,6 +44,7 @@ export function MilestonesDialog({
   open,
   milestones,
   epics,
+  objectives,
   canEdit,
   onOpenChange,
   onChanged,
@@ -48,11 +53,14 @@ export function MilestonesDialog({
   const [dueDate, setDueDate] = useState("");
   // "" is "no epic" — the <option> stand-in for null (031).
   const [epicId, setEpicId] = useState("");
+  // "" is "no objective" — the <option> stand-in for null (037).
+  const [objectiveId, setObjectiveId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
 
   const epicName = new Map(epics.map((e) => [e.id, e.name]));
+  const objectiveName = new Map(objectives.map((o) => [o.id, o.name]));
 
   async function create() {
     const trimmed = name.trim();
@@ -64,11 +72,13 @@ export function MilestonesDialog({
         boardId,
         trimmed,
         dueDate || null,
-        epicId === "" ? null : Number(epicId)
+        epicId === "" ? null : Number(epicId),
+        objectiveId === "" ? null : Number(objectiveId)
       );
       setName("");
       setDueDate("");
       setEpicId("");
+      setObjectiveId("");
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create the milestone");
@@ -134,6 +144,14 @@ export function MilestonesDialog({
                         epicName.has(milestone.epicId) && (
                           <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                             {epicName.get(milestone.epicId)}
+                          </span>
+                        )}
+                      {/* The objective it aims at (037), when linked — an outline
+                          chip so it reads apart from the epic's filled one. */}
+                      {milestone.objectiveId != null &&
+                        objectiveName.has(milestone.objectiveId) && (
+                          <span className="shrink-0 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">
+                            {objectiveName.get(milestone.objectiveId)}
                           </span>
                         )}
                     </span>
@@ -226,6 +244,23 @@ export function MilestonesDialog({
                 {epics.map((epic) => (
                   <option key={epic.id} value={epic.id}>
                     {epic.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {/* Aim the new milestone at an objective (037). Epic's rule: only
+                when the board has any. */}
+            {objectives.length > 0 && (
+              <select
+                aria-label="Objective"
+                value={objectiveId}
+                onChange={(e) => setObjectiveId(e.target.value)}
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                <option value="">No objective</option>
+                {objectives.map((objective) => (
+                  <option key={objective.id} value={objective.id}>
+                    {objective.name}
                   </option>
                 ))}
               </select>

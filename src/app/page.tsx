@@ -135,6 +135,7 @@ export default async function Home({
         initialSprints={data.sprints}
         initialDependencies={data.dependencies}
         initialCustomFields={data.customFields}
+        initialObjectives={data.objectives}
         canEdit={canEdit}
         canDeleteColumns={canDeleteColumns}
       />

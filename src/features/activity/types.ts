@@ -195,6 +195,17 @@ export type EpicAction =
   | "epic.deleted";
 
 /**
+ * Objective lifecycle (037) — board-scoped entries (taskId null, boardId
+ * locates), epic's three verbs for epic's reasons. Key-result edits are not
+ * logged separately: a KR's current value is read live and nudged often, so the
+ * feed tracks the objective's own fields, not every measurement.
+ */
+export type ObjectiveAction =
+  | "objective.created"
+  | "objective.updated"
+  | "objective.deleted";
+
+/**
  * The time ledger (027). Logged and deleted, never edited — a wrong entry is
  * retracted and re-logged, which keeps each row one attributable fact.
  */
@@ -235,6 +246,7 @@ export type ActivityAction =
   | LabelAction
   | MilestoneAction
   | EpicAction
+  | ObjectiveAction
   | TimeAction
   | SprintAction
   | CustomFieldValueAction;
@@ -300,6 +312,11 @@ export interface TaskSnapshot {
    * `null` means "filed under none".
    */
   epicId?: number | null;
+  /**
+   * Optional for 003's reason (037): `undefined` means "written before
+   * objectives", `null` means "aimed at none".
+   */
+  objectiveId?: number | null;
   /**
    * Optional for 003's reason (028): `undefined` means "written before
    * sprints", `null` means "was in the backlog".
@@ -465,6 +482,14 @@ export interface EpicSnapshot {
   name: string;
 }
 
+/** What an objective looked like at one instant (037). Name only, epic's shape:
+ *  the description and date are objective data a reader reads live; the log's job
+ *  is to name what was created, renamed, or deleted so the entry still reads. */
+export interface ObjectiveSnapshot {
+  objectiveId: number;
+  name: string;
+}
+
 /**
  * What a time entry said (027). Carries `by` for CommentSnapshot.author's
  * reason: an admin deleting someone's entry makes actor and author two
@@ -511,6 +536,7 @@ export type Snapshot =
   | LabelSnapshot
   | MilestoneSnapshot
   | EpicSnapshot
+  | ObjectiveSnapshot
   | TimeSnapshot
   | SprintSnapshot
   | CustomFieldValueSnapshot;
@@ -572,6 +598,12 @@ export interface EpicActivity extends ActivityBase {
   after: EpicSnapshot | null;
 }
 
+export interface ObjectiveActivity extends ActivityBase {
+  action: ObjectiveAction;
+  before: ObjectiveSnapshot | null;
+  after: ObjectiveSnapshot | null;
+}
+
 export interface TimeActivity extends ActivityBase {
   action: TimeAction;
   before: TimeSnapshot | null;
@@ -597,6 +629,7 @@ export type Activity =
   | LabelActivity
   | MilestoneActivity
   | EpicActivity
+  | ObjectiveActivity
   | TimeActivity
   | SprintActivity
   | CustomFieldValueActivity;

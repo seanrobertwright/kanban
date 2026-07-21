@@ -231,6 +231,13 @@ export interface Task {
    */
   epicId: number | null;
   /**
+   * The objective this task aims at (037), or null. An id like epicId, and for
+   * its reason — the board holds the objective list. A task contributes to an
+   * outcome directly, independent of any milestone; the objective's key results
+   * measure the outcome, this link says the work is meant to move it.
+   */
+  objectiveId: number | null;
+  /**
    * Relative business value on a 0–10 scale (034), or null for unscored. Bounded
    * so a score is comparable; feeds priorityScore's numerator.
    */
@@ -331,6 +338,8 @@ export interface CreateTaskInput {
   sprintId?: number | null;
   /** The epic to file under (031), or null/absent for none. */
   epicId?: number | null;
+  /** The objective to aim at (037), or null/absent for none. */
+  objectiveId?: number | null;
   /** Business value 0–10 (034), or null/absent for unscored. */
   value?: number | null;
   /** Risk 0–10 (034), or null/absent. */
@@ -420,6 +429,11 @@ export interface UpdateTaskInput {
    * repository refuses a cross-board epic, assertEpicOnBoard's tenancy check.
    */
   epicId?: number | null;
+  /**
+   * Three-valued, epicId's twin (037): `null` un-aims the task. The repository
+   * refuses a cross-board objective, assertObjectiveOnBoard's tenancy check.
+   */
+  objectiveId?: number | null;
   /**
    * Three-valued, estimate's rule (034): 0 is a real value, so `null` is the
    * cleared (unscored) state and `undefined` leaves it alone. The score is

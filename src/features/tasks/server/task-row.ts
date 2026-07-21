@@ -45,6 +45,7 @@ export function taskColumns(alias = ""): string {
           ${p}position, ${assigneeObject(p)} AS assignee, ${p}priority,
           ${p}type, ${p}estimate, ${p}milestone_id AS "milestoneId",
           ${p}sprint_id AS "sprintId", ${p}epic_id AS "epicId",
+          ${p}objective_id AS "objectiveId",
           ${p}value, ${p}risk, ${priorityScore(p)} AS "priorityScore",
           ${p}start_date AS "startDate", ${p}due_date AS "dueDate",
           ${p}parent_id AS "parentId",
@@ -349,6 +350,7 @@ export function taskSnapshot(task: Task): TaskSnapshot {
     milestoneId: task.milestoneId,
     sprintId: task.sprintId,
     epicId: task.epicId,
+    objectiveId: task.objectiveId,
     // The scoring inputs (034) ride every snapshot for 006's reason; the score
     // itself is derived, so it is not carried — restoring these restores it.
     value: task.value,

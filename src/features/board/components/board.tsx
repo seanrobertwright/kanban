@@ -29,6 +29,7 @@ import {
   Rocket,
   SlidersHorizontal,
   Tags,
+  Target,
   Waypoints,
 } from "lucide-react";
 
@@ -64,6 +65,8 @@ import { MilestonesDialog } from "@/features/milestones/components/milestones-di
 import type { Milestone } from "@/features/milestones/types";
 import { EpicsDialog } from "@/features/epics/components/epics-dialog";
 import type { Epic } from "@/features/epics/types";
+import { ObjectivesDialog } from "@/features/objectives/components/objectives-dialog";
+import type { Objective } from "@/features/objectives/types";
 import { SprintsDialog } from "@/features/sprints/components/sprints-dialog";
 import type { Sprint } from "@/features/sprints/types";
 import {
@@ -146,6 +149,9 @@ interface BoardProps {
   /** The board's custom-field definitions (035 → 036 follow-up), state because
    * the manager dialog edits the set and cards + list columns read them. */
   initialCustomFields: CustomField[];
+  /** The board's objectives + key results (037), state because the
+   * ObjectivesDialog edits them and the task dialog's picker reads them. */
+  initialObjectives: Objective[];
   /** False for viewers. The server enforces this too — this only hides the UI. */
   canEdit: boolean;
   /**
@@ -183,6 +189,7 @@ export function Board({
   initialSprints,
   initialDependencies,
   initialCustomFields,
+  initialObjectives,
   canEdit,
   canDeleteColumns,
 }: BoardProps) {
@@ -218,6 +225,9 @@ export function Board({
   const [milestonesOpen, setMilestonesOpen] = useState(false);
   const [epics, setEpics] = useState<Epic[]>(initialEpics);
   const [epicsOpen, setEpicsOpen] = useState(false);
+  const [objectives, setObjectives] =
+    useState<Objective[]>(initialObjectives);
+  const [objectivesOpen, setObjectivesOpen] = useState(false);
   const [sprints, setSprints] = useState<Sprint[]>(initialSprints);
   const [sprintsOpen, setSprintsOpen] = useState(false);
   const [dependencies, setDependencies] =
@@ -290,6 +300,7 @@ export function Board({
       setSprints(data.sprints);
       setDependencies(data.dependencies);
       setCustomFields(data.customFields);
+      setObjectives(data.objectives);
     } catch {
       // Keep optimistic state if the server is unreachable.
     }
@@ -631,6 +642,14 @@ export function Board({
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
+            onClick={() => setObjectivesOpen(true)}
+          >
+            <Target /> Objectives
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
             onClick={() => setFieldsOpen(true)}
           >
             <SlidersHorizontal /> Fields
@@ -841,6 +860,7 @@ export function Board({
         templates={templates}
         milestones={milestones}
         epics={epics}
+        objectives={objectives}
         sprints={sprints}
         onOpenChange={(open) => {
           if (!open) setDialog(null);
@@ -896,6 +916,7 @@ export function Board({
         open={milestonesOpen}
         milestones={milestones}
         epics={epics}
+        objectives={objectives}
         canEdit={canEdit}
         onOpenChange={setMilestonesOpen}
         onChanged={refresh}
@@ -906,6 +927,14 @@ export function Board({
         epics={epics}
         canEdit={canEdit}
         onOpenChange={setEpicsOpen}
+        onChanged={refresh}
+      />
+      <ObjectivesDialog
+        boardId={boardId}
+        open={objectivesOpen}
+        objectives={objectives}
+        canEdit={canEdit}
+        onOpenChange={setObjectivesOpen}
         onChanged={refresh}
       />
       <CustomFieldsDialog

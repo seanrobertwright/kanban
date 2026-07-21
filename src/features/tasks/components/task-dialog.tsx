@@ -18,6 +18,7 @@ import { LabelPicker } from "@/features/labels/components/label-picker";
 import type { Label as LabelData } from "@/features/labels/types";
 import type { Milestone } from "@/features/milestones/types";
 import type { Epic } from "@/features/epics/types";
+import type { Objective } from "@/features/objectives/types";
 import type { Sprint } from "@/features/sprints/types";
 import type { TaskTemplate } from "@/features/templates/types";
 import type { Member } from "@/features/workspaces/types";
@@ -73,6 +74,8 @@ export interface TaskFormValues {
   sprintId: number | null;
   /** The epic to file under (031), or null. null clears, like dueDate. */
   epicId: number | null;
+  /** The objective to aim at (037), or null. null clears, like dueDate. */
+  objectiveId: number | null;
   /** When work begins (032), or null. null clears, dueDate's shape. */
   startDate: string | null;
   /** null clears the date. The input always has a value, so never absent. */
@@ -185,6 +188,11 @@ interface TaskDialogProps {
    */
   epics?: Epic[];
   /**
+   * The board's objectives (037), the picker's options. Absent/empty renders no
+   * picker — the epic rule. Hidden for a subtask, filed through its parent.
+   */
+  objectives?: Objective[];
+  /**
    * The board's sprints (028). The picker offers only planning + active ones
    * to schedule into (a completed sprint's scope is frozen); a task already in
    * a completed sprint still shows it, disabled, so its home is legible.
@@ -223,6 +231,7 @@ export function TaskDialog({
   templates = [],
   milestones = [],
   epics = [],
+  objectives = [],
   sprints = [],
   onOpenChange,
   onSubmit,
@@ -251,6 +260,8 @@ export function TaskDialog({
   const [sprintId, setSprintId] = useState<string>("");
   // "" is "no epic" — the <option> stand-in for null (031).
   const [epicId, setEpicId] = useState<string>("");
+  // "" is "no objective" — the <option> stand-in for null (037).
+  const [objectiveId, setObjectiveId] = useState<string>("");
   // "" is "no start date" — the empty type="date" input, dueDate's shape (032).
   const [startDate, setStartDate] = useState<string>(NO_DUE_DATE);
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
@@ -299,6 +310,7 @@ export function TaskDialog({
       setMilestoneId(task?.milestoneId == null ? "" : String(task.milestoneId));
       setSprintId(task?.sprintId == null ? "" : String(task.sprintId));
       setEpicId(task?.epicId == null ? "" : String(task.epicId));
+      setObjectiveId(task?.objectiveId == null ? "" : String(task.objectiveId));
       setStartDate(task?.startDate ?? NO_DUE_DATE);
       setDueDate(task?.dueDate ?? NO_DUE_DATE);
       // Back to ids: the task carries {id, name} because the log needs the name
@@ -357,6 +369,8 @@ export function TaskDialog({
         sprintId: sprintId === "" ? null : Number(sprintId),
         // "" is the DOM stand-in for "no epic"; the API speaks null.
         epicId: epicId === "" ? null : Number(epicId),
+        // "" is the DOM stand-in for "no objective"; the API speaks null (037).
+        objectiveId: objectiveId === "" ? null : Number(objectiveId),
         // "" is the emptied date input; the API speaks null (032), dueDate below.
         startDate: startDate === NO_DUE_DATE ? null : startDate,
         // Converted for assigneeId's reason: "" is what an emptied date input
@@ -676,6 +690,27 @@ export function TaskDialog({
                 {epics.map((epic) => (
                   <option key={epic.id} value={epic.id}>
                     {epic.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {/* Objective (037). The epic rule: only when the board has any, hidden
+              for a subtask. A task aims at an outcome the objective's key results
+              measure — independent of any milestone or epic it also carries. */}
+          {!isSubtask && objectives.length > 0 && (
+            <div className="grid gap-2">
+              <Label htmlFor="task-objective">Objective</Label>
+              <select
+                id="task-objective"
+                value={objectiveId}
+                onChange={(e) => setObjectiveId(e.target.value)}
+                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+              >
+                <option value="">No objective</option>
+                {objectives.map((objective) => (
+                  <option key={objective.id} value={objective.id}>
+                    {objective.name}
                   </option>
                 ))}
               </select>

@@ -1,6 +1,7 @@
 import type { CustomField } from "@/features/custom-fields/types";
 import type { TaskDependencyEdge } from "@/features/dependencies/types";
 import type { Milestone } from "@/features/milestones/types";
+import type { Objective } from "@/features/objectives/types";
 import type { Epic } from "@/features/epics/types";
 import type { Sprint } from "@/features/sprints/types";
 import type { Task } from "@/features/tasks/types";
@@ -120,4 +121,11 @@ export interface BoardData {
    * board read's copy for the surfaces that render values.
    */
   customFields: CustomField[];
+  /**
+   * The board's objectives (037), key results and progress included — on
+   * BoardData for the milestone reason: the task dialog's objective picker reads
+   * them, and the ObjectivesDialog opens against them. Ordered by due date, then
+   * name.
+   */
+  objectives: Objective[];
 }

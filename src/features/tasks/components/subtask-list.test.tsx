@@ -34,6 +34,7 @@ function subtask(over: Partial<Task> = {}): Task {
     estimate: null,
     milestoneId: null,
     epicId: null,
+    objectiveId: null,
     sprintId: null,
     value: null,
     risk: null,

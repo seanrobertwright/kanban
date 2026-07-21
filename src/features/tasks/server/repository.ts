@@ -14,6 +14,7 @@ import {
 } from "@/features/labels/server/repository";
 import { dispatchRun, enqueueRun } from "@/features/agents/server/runtime";
 import { assertEpicOnBoard } from "@/features/epics/server/repository";
+import { assertObjectiveOnBoard } from "@/features/objectives/server/repository";
 import {
   AuthzError,
   ROLE_RANK,
@@ -73,6 +74,7 @@ function sameDetails(a: TaskSnapshot, b: TaskSnapshot): boolean {
     (a.milestoneId ?? null) === (b.milestoneId ?? null) &&
     (a.sprintId ?? null) === (b.sprintId ?? null) &&
     (a.epicId ?? null) === (b.epicId ?? null) &&
+    (a.objectiveId ?? null) === (b.objectiveId ?? null) &&
     (a.startDate ?? null) === (b.startDate ?? null) &&
     (a.value ?? null) === (b.value ?? null) &&
     (a.risk ?? null) === (b.risk ?? null)
@@ -486,6 +488,9 @@ export async function createTask(
     if (input.epicId != null) {
       await assertEpicOnBoard(client, boardId, input.epicId);
     }
+    if (input.objectiveId != null) {
+      await assertObjectiveOnBoard(client, boardId, input.objectiveId);
+    }
 
     // priority falls back to 'none' rather than being left to the column
     // default, so the INSERT states the value it means. due_date has no such
@@ -509,11 +514,11 @@ export async function createTask(
       `INSERT INTO task (column_id, title, description, position, assignee_id,
                          agent_id, priority, type, estimate, milestone_id,
                          sprint_id, due_date, parent_id, epic_id, start_date,
-                         value, risk)
+                         value, risk, objective_id)
        VALUES ($1, $2, $3,
                (SELECT COALESCE(MAX(position) + 1, 0) FROM task
                  WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $12),
-               $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+               $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING id`,
       [
         input.columnId,
@@ -541,6 +546,9 @@ export async function createTask(
         // $15/$16, the scoring inputs (034). No fallback — null is unscored.
         input.value ?? null,
         input.risk ?? null,
+        // $17, appended for epic_id's reason — $12 must stay parent_id. No
+        // fallback to state: null is "aims at no objective" (037).
+        input.objectiveId ?? null,
       ]
     );
 
@@ -613,6 +621,8 @@ export async function updateTask(
   const setsSprint = "sprintId" in input;
   // Three-valued (031): null un-files the task from its epic.
   const setsEpic = "epicId" in input;
+  // Three-valued (037): null un-aims the task from its objective.
+  const setsObjective = "objectiveId" in input;
   // Three-valued like the two above: the key's presence, not the value, decides
   // whether the rule is touched — null clears it, a frequency sets it, absent
   // leaves it. There is no frequency meaning "off", so COALESCE cannot serve.
@@ -637,6 +647,9 @@ export async function updateTask(
     }
     if (setsEpic && input.epicId != null) {
       await assertEpicOnBoard(client, boardId, input.epicId);
+    }
+    if (setsObjective && input.objectiveId != null) {
+      await assertObjectiveOnBoard(client, boardId, input.objectiveId);
     }
     // Before the UPDATE, so `after` reads them back. No supplied-flag: `[]` is
     // "no labels" and undefined is "not supplied", which is 006's rule holding
@@ -706,7 +719,10 @@ export async function updateTask(
                            ELSE value END,
               risk = CASE WHEN $23::boolean
                           THEN $24::integer
-                          ELSE risk END
+                          ELSE risk END,
+              objective_id = CASE WHEN $25::boolean
+                                  THEN $26::integer
+                                  ELSE objective_id END
         WHERE id = $1
         RETURNING ${TASK_COLUMNS}`,
       [
@@ -734,6 +750,8 @@ export async function updateTask(
         input.value ?? null,
         setsRisk,
         input.risk ?? null,
+        setsObjective,
+        input.objectiveId ?? null,
       ]
     );
     const after = rows[0];

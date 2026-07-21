@@ -22,12 +22,13 @@ export function createMilestone(
   boardId: number,
   name: string,
   dueDate: string | null,
-  epicId: number | null = null
+  epicId: number | null = null,
+  objectiveId: number | null = null
 ): Promise<Milestone> {
   return fetch(`/api/board/${boardId}/milestones`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, dueDate, epicId }),
+    body: JSON.stringify({ name, dueDate, epicId, objectiveId }),
   }).then((res) => jsonOrThrow<Milestone>(res));
 }
 

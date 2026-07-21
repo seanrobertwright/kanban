@@ -15,6 +15,12 @@ export interface Milestone {
    * "above the milestone" hierarchy: a milestone rolls up into an epic.
    */
   epicId: number | null;
+  /**
+   * The objective this milestone aims at (037), or null. An id like epicId — the
+   * board holds the objective list. A whole checkpoint contributing to an
+   * outcome, beside filing under an epic (the two are independent).
+   */
+  objectiveId: number | null;
   createdAt: string;
   /**
    * Progress, derived at read time: how many top-level tasks aim here, and how
@@ -31,6 +37,8 @@ export interface CreateMilestoneInput {
   dueDate?: string | null;
   /** The epic to file under (031), or null/absent for none. */
   epicId?: number | null;
+  /** The objective to aim at (037), or null/absent for none. */
+  objectiveId?: number | null;
 }
 
 export interface UpdateMilestoneInput {
@@ -39,4 +47,6 @@ export interface UpdateMilestoneInput {
   dueDate?: string | null;
   /** Three-valued, dueDate's twin (031): null un-files from the epic. */
   epicId?: number | null;
+  /** Three-valued, epicId's twin (037): null un-aims from the objective. */
+  objectiveId?: number | null;
 }

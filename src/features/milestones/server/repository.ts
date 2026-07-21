@@ -5,6 +5,7 @@ import { logActivity } from "@/features/activity/server/repository";
 import type { Actor, MilestoneSnapshot } from "@/features/activity/types";
 import type { Principal } from "@/features/auth/server/principal";
 import { assertEpicOnBoard } from "@/features/epics/server/repository";
+import { assertObjectiveOnBoard } from "@/features/objectives/server/repository";
 import {
   AuthzError,
   requireBoardRole,
@@ -24,6 +25,7 @@ import type {
 
 const MILESTONE_COLUMNS = `m.id, m.board_id AS "boardId", m.name,
                            m.due_date AS "dueDate", m.epic_id AS "epicId",
+                           m.objective_id AS "objectiveId",
                            m.created_at AS "createdAt"`;
 
 /** total/done ride every read — the dialog's progress bar is the feature. */
@@ -82,10 +84,19 @@ export async function createMilestone(
     if (input.epicId != null) {
       await assertEpicOnBoard(client, boardId, input.epicId);
     }
+    if (input.objectiveId != null) {
+      await assertObjectiveOnBoard(client, boardId, input.objectiveId);
+    }
     const { rows } = await client.query<{ id: number }>(
-      `INSERT INTO milestone (board_id, name, due_date, epic_id)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [boardId, input.name, input.dueDate ?? null, input.epicId ?? null]
+      `INSERT INTO milestone (board_id, name, due_date, epic_id, objective_id)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [
+        boardId,
+        input.name,
+        input.dueDate ?? null,
+        input.epicId ?? null,
+        input.objectiveId ?? null,
+      ]
     );
     const milestone = (await selectMilestone(client, rows[0].id))!;
 
@@ -125,6 +136,8 @@ export async function updateMilestone(
   const setsDueDate = "dueDate" in input;
   // Three-valued (031): null un-files the milestone from its epic.
   const setsEpic = "epicId" in input;
+  // Three-valued (037): null un-aims the milestone from its objective.
+  const setsObjective = "objectiveId" in input;
 
   return withTransaction(async (client) => {
     const before = await selectMilestone(client, id);
@@ -132,19 +145,24 @@ export async function updateMilestone(
     if (
       (input.name === undefined || input.name === before.name) &&
       (!setsDueDate || (input.dueDate ?? null) === before.dueDate) &&
-      (!setsEpic || (input.epicId ?? null) === before.epicId)
+      (!setsEpic || (input.epicId ?? null) === before.epicId) &&
+      (!setsObjective || (input.objectiveId ?? null) === before.objectiveId)
     )
       return before;
 
     if (setsEpic && input.epicId != null) {
       await assertEpicOnBoard(client, boardId, input.epicId);
     }
+    if (setsObjective && input.objectiveId != null) {
+      await assertObjectiveOnBoard(client, boardId, input.objectiveId);
+    }
 
     await client.query(
       `UPDATE milestone
           SET name = COALESCE($2, name),
               due_date = CASE WHEN $3::boolean THEN $4::date ELSE due_date END,
-              epic_id = CASE WHEN $5::boolean THEN $6::integer ELSE epic_id END
+              epic_id = CASE WHEN $5::boolean THEN $6::integer ELSE epic_id END,
+              objective_id = CASE WHEN $7::boolean THEN $8::integer ELSE objective_id END
         WHERE id = $1`,
       [
         id,
@@ -153,6 +171,8 @@ export async function updateMilestone(
         input.dueDate ?? null,
         setsEpic,
         input.epicId ?? null,
+        setsObjective,
+        input.objectiveId ?? null,
       ]
     );
     const after = (await selectMilestone(client, id))!;

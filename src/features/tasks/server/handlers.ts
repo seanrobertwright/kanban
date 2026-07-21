@@ -161,6 +161,7 @@ export async function handleCreateTask(request: Request) {
     milestoneId,
     sprintId,
     epicId,
+    objectiveId,
     value,
     risk,
     startDate,
@@ -200,6 +201,8 @@ export async function handleCreateTask(request: Request) {
     return badRequest("sprintId must be a sprint id or null");
   if (epicId !== undefined && epicId !== null && !Number.isInteger(epicId))
     return badRequest("epicId must be an epic id or null");
+  if (objectiveId !== undefined && objectiveId !== null && !Number.isInteger(objectiveId))
+    return badRequest("objectiveId must be an objective id or null");
   if (!isScore(value))
     return badRequest("value must be an integer 0–10 or null");
   if (!isScore(risk)) return badRequest("risk must be an integer 0–10 or null");
@@ -227,6 +230,7 @@ export async function handleCreateTask(request: Request) {
       milestoneId: milestoneId as number | null | undefined,
       sprintId: sprintId as number | null | undefined,
       epicId: epicId as number | null | undefined,
+      objectiveId: objectiveId as number | null | undefined,
       value: value as number | null | undefined,
       risk: risk as number | null | undefined,
       startDate: startDate as string | null | undefined,
@@ -292,6 +296,7 @@ export async function handleUpdateTask(request: Request, id: number) {
     milestoneId,
     sprintId,
     epicId,
+    objectiveId,
     value,
     risk,
     startDate,
@@ -325,6 +330,8 @@ export async function handleUpdateTask(request: Request, id: number) {
   const setsSprint = "sprintId" in body;
   // epicId three-valued too (031): `{"epicId": null}` un-files the task.
   const setsEpic = "epicId" in body;
+  // objectiveId three-valued too (037): `{"objectiveId": null}` un-aims the task.
+  const setsObjective = "objectiveId" in body;
   const setsRecurrence = "recurrence" in body;
 
   // Refused rather than ignored, and the difference matters because the failure
@@ -358,6 +365,7 @@ export async function handleUpdateTask(request: Request, id: number) {
       setsMilestone ||
       setsSprint ||
       setsEpic ||
+      setsObjective ||
       setsValue ||
       setsRisk ||
       setsStartDate ||
@@ -383,6 +391,8 @@ export async function handleUpdateTask(request: Request, id: number) {
         return badRequest("sprintId must be a sprint id or null");
       if (epicId !== undefined && epicId !== null && !Number.isInteger(epicId))
         return badRequest("epicId must be an epic id or null");
+      if (objectiveId !== undefined && objectiveId !== null && !Number.isInteger(objectiveId))
+        return badRequest("objectiveId must be an objective id or null");
       if (!isScore(value))
         return badRequest("value must be an integer 0–10 or null");
       if (!isScore(risk))
@@ -422,6 +432,8 @@ export async function handleUpdateTask(request: Request, id: number) {
         ...(setsSprint ? { sprintId: sprintId as number | null } : {}),
         // Spread, the same shape (031).
         ...(setsEpic ? { epicId: epicId as number | null } : {}),
+        // Spread, the same shape (037).
+        ...(setsObjective ? { objectiveId: objectiveId as number | null } : {}),
         // Spread, estimate's shape (034): key present only when sent.
         ...(setsValue ? { value: value as number | null } : {}),
         ...(setsRisk ? { risk: risk as number | null } : {}),
