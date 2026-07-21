@@ -1,3 +1,4 @@
+import type { CustomField } from "@/features/custom-fields/types";
 import type { TaskDependencyEdge } from "@/features/dependencies/types";
 import type { Milestone } from "@/features/milestones/types";
 import type { Epic } from "@/features/epics/types";
@@ -110,4 +111,13 @@ export interface BoardData {
    * view of the same table.
    */
   dependencies: TaskDependencyEdge[];
+  /**
+   * The board's custom-field definitions (035 → 036 follow-up), in display
+   * order — on BoardData for the milestone reason: a card and a list cell resolve
+   * a task's answer (which carries only {fieldId, value}) to a name and type
+   * through this list, the way a label chip resolves its colour. The manager
+   * dialog and the task dialog's section fetch their own copies; this is the
+   * board read's copy for the surfaces that render values.
+   */
+  customFields: CustomField[];
 }

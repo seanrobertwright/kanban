@@ -52,6 +52,7 @@ export function taskColumns(alias = ""): string {
           ${p}claimed_at AS "claimedAt",
           ${p}created_at AS "createdAt",
           ${labelsSubquery(self)} AS labels,
+          ${customFieldsSubquery(self)} AS "customFields",
           ${subtaskCountSubquery(self)} AS "subtaskCount",
           ${blockedBySubquery(self)} AS "blockedByCount",
           ${blockedByOpenSubquery(self)} AS "blockedByOpenCount",
@@ -293,6 +294,32 @@ function labelsSubquery(taskRef: string): string {
                       FROM task_label tl
                       JOIN label l ON l.id = tl.label_id
                      WHERE tl.task_id = ${taskRef}), '[]'::json)`;
+}
+
+/**
+ * A task's answered custom fields as a json array of {fieldId, value} (035 →
+ * 036 follow-up). labelsSubquery's twin in every respect: a correlated subquery
+ * so it fits a column list, json_agg so the pairs parse without hand-picking,
+ * COALESCE to '[]' so `customFields` is never null (the empty set is `[]`, the
+ * discipline that keeps it two-valued), and ORDER BY field_id so two reads of an
+ * unchanged task produce the same array rather than a spurious diff.
+ *
+ * Only the *value* travels, not the definition — a card resolves name and type
+ * from the board's custom_field list the way it resolves a label's colour from
+ * the vocabulary. Unanswered fields simply have no row here, so they are absent
+ * rather than carried as null.
+ *
+ * `taskRef` qualified for labelsSubquery's reason: the inner scope has its own
+ * columns, and a bare correlation would compile while comparing the wrong one.
+ * One more index lookup per row (custom_field_value's PK leads with task_id),
+ * the labels/subtask cost, worth revisiting when boards paginate (M3).
+ */
+function customFieldsSubquery(taskRef: string): string {
+  return `COALESCE((SELECT json_agg(
+                       json_build_object('fieldId', cfv.field_id, 'value', cfv.value)
+                       ORDER BY cfv.field_id)
+                      FROM custom_field_value cfv
+                     WHERE cfv.task_id = ${taskRef}), '[]'::json)`;
 }
 
 /**

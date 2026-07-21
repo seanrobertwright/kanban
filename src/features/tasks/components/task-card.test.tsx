@@ -50,6 +50,7 @@ function task(over: Partial<Task> = {}): Task {
     recurrence: null,
     attachmentCount: 0,
     checklist: { total: 0, done: 0 },
+    customFields: [],
     claimedBy: null,
     claimedAt: null,
     createdAt: "2026-07-15T00:00:00.000Z",
@@ -228,5 +229,64 @@ describe("TaskCard dependency state", () => {
   it("shows no dependency badge when a task depends on nothing", () => {
     render(card({ blockedByCount: 0, blockedByOpenCount: 0 }));
     expect(screen.queryByTitle(/Depends on|Blocked by/)).toBeNull();
+  });
+});
+
+describe("TaskCard custom fields (036 follow-up)", () => {
+  const FIELDS = {
+    3: {
+      id: 3,
+      boardId: 1,
+      name: "Region",
+      type: "text" as const,
+      options: [],
+      position: 0,
+      createdAt: "2026-07-15T00:00:00.000Z",
+    },
+    4: {
+      id: 4,
+      boardId: 1,
+      name: "Escalated",
+      type: "checkbox" as const,
+      options: [],
+      position: 1,
+      createdAt: "2026-07-15T00:00:00.000Z",
+    },
+  };
+
+  it("renders an answered field as a name + value chip", () => {
+    render(
+      <TaskCard
+        task={task({ customFields: [{ fieldId: 3, value: "EU" }] })}
+        membersById={MEMBERS_BY_ID}
+        customFieldsById={FIELDS}
+      />
+    );
+    expect(screen.getByTitle("Region: EU")).toBeDefined();
+  });
+
+  it("reads a checkbox value as Yes/No", () => {
+    render(
+      <TaskCard
+        task={task({ customFields: [{ fieldId: 4, value: "true" }] })}
+        membersById={MEMBERS_BY_ID}
+        customFieldsById={FIELDS}
+      />
+    );
+    expect(screen.getByTitle("Escalated: Yes")).toBeDefined();
+  });
+
+  it("drops an answer whose field no longer exists", () => {
+    // A field deleted between the board read and this render (CASCADE removes the
+    // value, but the task list in hand still carries it) must not crash or render
+    // a nameless chip.
+    render(
+      <TaskCard
+        task={task({ customFields: [{ fieldId: 999, value: "orphan" }] })}
+        membersById={MEMBERS_BY_ID}
+        customFieldsById={FIELDS}
+      />
+    );
+    expect(screen.queryByText("orphan")).toBeNull();
   });
 });

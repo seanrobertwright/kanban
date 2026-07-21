@@ -5,6 +5,10 @@ import { Bot, ListTree, X } from "lucide-react";
 
 import type { Actor } from "@/features/activity/types";
 import type { AgentSummary } from "@/features/agents/types";
+import {
+  type CustomField,
+  formatCustomFieldValue,
+} from "@/features/custom-fields/types";
 import { LabelChip } from "@/features/labels/components/label-chip";
 import type { Label as LabelData } from "@/features/labels/types";
 import * as tasksApi from "@/features/tasks/client/api";
@@ -31,6 +35,13 @@ export interface BoardViewProps {
   membersById: Record<string, Member>;
   agentsById: Record<string, AgentSummary>;
   labelsById: Record<number, LabelData>;
+  /**
+   * Custom-field definitions by id (035 → 036 follow-up), for the list's per-field
+   * columns and — where a view renders cards — their value chips. Optional: only
+   * the list and the board columns read it; the calendar, timeline and gantt
+   * ignore it, so their call sites need not thread it.
+   */
+  customFieldsById?: Record<number, CustomField>;
   onEditTask: (task: Task) => void;
 }
 
@@ -71,6 +82,7 @@ export function ListView({
   membersById,
   agentsById,
   labelsById,
+  customFieldsById = {},
   members,
   agents,
   canEdit,
@@ -78,6 +90,11 @@ export function ListView({
   onChanged,
 }: ListViewProps) {
   const today = useToday();
+  // The board's fields in display order — a column each, after the fixed set.
+  // Integer-keyed object iteration is by ascending id, not position, so sort.
+  const fields = Object.values(customFieldsById).sort(
+    (a, b) => a.position - b.position || a.id - b.id
+  );
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -298,6 +315,13 @@ export function ListView({
               </th>
               <th className="px-3 py-2 font-medium">Due</th>
               <th className="px-3 py-2 font-medium">Labels</th>
+              {/* One column per custom field (035 → 036 follow-up), in display
+                  order, after the fixed set — the export's rule for the same. */}
+              {fields.map((field) => (
+                <th key={field.id} className="px-3 py-2 font-medium">
+                  {field.name}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -427,6 +451,25 @@ export function ListView({
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
+                  {/* This task's answer for each field, or an em-dash when it has
+                      none — the fixed cells' rule for an empty value. */}
+                  {fields.map((field) => {
+                    const answer = task.customFields.find(
+                      (v) => v.fieldId === field.id
+                    );
+                    return (
+                      <td
+                        key={field.id}
+                        className="px-3 py-2 text-muted-foreground"
+                      >
+                        {answer ? (
+                          formatCustomFieldValue(field, answer.value)
+                        ) : (
+                          <span>—</span>
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}

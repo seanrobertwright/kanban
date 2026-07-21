@@ -134,6 +134,7 @@ export default async function Home({
         initialEpics={data.epics}
         initialSprints={data.sprints}
         initialDependencies={data.dependencies}
+        initialCustomFields={data.customFields}
         canEdit={canEdit}
         canDeleteColumns={canDeleteColumns}
       />

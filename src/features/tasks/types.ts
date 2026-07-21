@@ -1,4 +1,5 @@
 import type { Actor } from "@/features/activity/types";
+import type { CustomFieldValue } from "@/features/custom-fields/types";
 import type { LabelRef } from "@/features/labels/types";
 
 /**
@@ -270,6 +271,19 @@ export interface Task {
    * the picker holds anyway.
    */
   labels: LabelRef[];
+  /**
+   * This task's answers to the board's custom fields (035 → 036 follow-up), the
+   * ones it actually has — `[]` when unanswered. Each is a bare {fieldId, value};
+   * the name, type and options are on the board (BoardData.customFields), so a
+   * card resolves the definition the way it resolves a label's colour.
+   *
+   * Derived like labels — a subquery in taskColumns — but, unlike labels, absent
+   * from TaskSnapshot: 035 deliberately kept custom-field values out of the undo
+   * machinery (the fixed-shape snapshot problem), so surfacing them on the card
+   * here does not draw them into a diff undo would try to restore. The card reads
+   * them; the value edit path (setTaskFieldValues) still writes no log row.
+   */
+  customFields: CustomFieldValue[];
   /**
    * Who holds the exclusive working claim (010), or null if the task is free.
    *

@@ -6,6 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { TaskCard } from "@/features/tasks/components/task-card";
 import type { Task } from "@/features/tasks/types";
 import type { AgentSummary } from "@/features/agents/types";
+import type { CustomField } from "@/features/custom-fields/types";
 import type { Label as LabelData } from "@/features/labels/types";
 import type { Member } from "@/features/workspaces/types";
 
@@ -14,6 +15,9 @@ interface SortableTaskCardProps {
   membersById: Record<string, Member>;
   agentsById: Record<string, AgentSummary>;
   labelsById: Record<number, LabelData>;
+  /** Custom-field defs by id (035), for a card's value chips. Optional: the
+   *  board threads it, the backlog (a grooming surface) leaves cards chip-free. */
+  customFieldsById?: Record<number, CustomField>;
   // Omitted for viewers, which is what hides TaskCard's action menu.
   onEdit?: (task: Task) => void;
   onDelete?: (task: Task) => void;
@@ -24,6 +28,7 @@ export function SortableTaskCard({
   membersById,
   agentsById,
   labelsById,
+  customFieldsById,
   onEdit,
   onDelete,
 }: SortableTaskCardProps) {
@@ -49,6 +54,7 @@ export function SortableTaskCard({
         membersById={membersById}
         agentsById={agentsById}
         labelsById={labelsById}
+        customFieldsById={customFieldsById}
         onEdit={onEdit}
         onDelete={onDelete}
       />

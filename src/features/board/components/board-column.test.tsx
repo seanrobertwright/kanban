@@ -23,6 +23,7 @@ function renderColumn(
     membersById: {},
     agentsById: {},
     labelsById: {},
+    customFieldsById: {},
     canEdit: true,
     canDelete: true,
     isDone: false,

@@ -1,6 +1,7 @@
 import { query, queryOne } from "@/shared/db/client";
 import { AuthzError, requireBoardRole } from "@/features/workspaces/server/authz";
 import type { Principal } from "@/features/auth/server/principal";
+import type { CustomField } from "@/features/custom-fields/types";
 import type { TaskDependencyEdge } from "@/features/dependencies/types";
 import type { Milestone } from "@/features/milestones/types";
 import type { Epic } from "@/features/epics/types";
@@ -148,6 +149,19 @@ export async function getBoard(
     [boardId]
   );
 
+  // The board's custom-field definitions (035 → 036 follow-up), so a card and a
+  // list cell can resolve a task's {fieldId, value} answers to a name and type.
+  // Authz already done above — read the table directly, listBoardFields' query
+  // without its second identical role check, the milestone read's shape.
+  const customFields = await query<CustomField>(
+    `SELECT id, board_id AS "boardId", name, type, options, position,
+            created_at AS "createdAt"
+       FROM custom_field
+      WHERE board_id = $1
+      ORDER BY position, id`,
+    [boardId]
+  );
+
   return {
     board,
     columns,
@@ -157,6 +171,7 @@ export async function getBoard(
     epics,
     sprints,
     dependencies,
+    customFields,
   };
 }
 

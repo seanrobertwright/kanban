@@ -59,6 +59,7 @@ import type { Column } from "../types";
 import { BoardColumn } from "./board-column";
 import { InsightsDialog } from "./insights-dialog";
 import { CustomFieldsDialog } from "@/features/custom-fields/components/custom-fields-dialog";
+import type { CustomField } from "@/features/custom-fields/types";
 import { MilestonesDialog } from "@/features/milestones/components/milestones-dialog";
 import type { Milestone } from "@/features/milestones/types";
 import { EpicsDialog } from "@/features/epics/components/epics-dialog";
@@ -142,6 +143,9 @@ interface BoardProps {
    * the whole board — the milestone/epic pattern, so the Gantt redraws its arrows
    * the moment a dependency changes rather than on a full page reload. */
   initialDependencies: TaskDependencyEdge[];
+  /** The board's custom-field definitions (035 → 036 follow-up), state because
+   * the manager dialog edits the set and cards + list columns read them. */
+  initialCustomFields: CustomField[];
   /** False for viewers. The server enforces this too — this only hides the UI. */
   canEdit: boolean;
   /**
@@ -178,6 +182,7 @@ export function Board({
   initialEpics,
   initialSprints,
   initialDependencies,
+  initialCustomFields,
   canEdit,
   canDeleteColumns,
 }: BoardProps) {
@@ -217,6 +222,12 @@ export function Board({
   const [sprintsOpen, setSprintsOpen] = useState(false);
   const [dependencies, setDependencies] =
     useState<TaskDependencyEdge[]>(initialDependencies);
+  const [customFields, setCustomFields] =
+    useState<CustomField[]>(initialCustomFields);
+  const customFieldsById = useMemo(
+    () => Object.fromEntries(customFields.map((f) => [f.id, f])),
+    [customFields]
+  );
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [doneColumnId, setDoneColumnId] = useState<number | null>(
     initialDoneColumnId
@@ -278,6 +289,7 @@ export function Board({
       setEpics(data.epics);
       setSprints(data.sprints);
       setDependencies(data.dependencies);
+      setCustomFields(data.customFields);
     } catch {
       // Keep optimistic state if the server is unreachable.
     }
@@ -666,6 +678,7 @@ export function Board({
           membersById={membersById}
           agentsById={agentsById}
           labelsById={labelsById}
+          customFieldsById={customFieldsById}
           members={members}
           agents={agents}
           canEdit={canEdit}
@@ -734,6 +747,7 @@ export function Board({
               membersById={membersById}
               agentsById={agentsById}
               labelsById={labelsById}
+              customFieldsById={customFieldsById}
               canEdit={canEdit}
               canDelete={canDeleteColumns}
               isDone={column.id === doneColumnId}
@@ -899,6 +913,7 @@ export function Board({
         open={fieldsOpen}
         canEdit={canEdit}
         onOpenChange={setFieldsOpen}
+        onChanged={refresh}
       />
       <InsightsDialog
         boardId={boardId}

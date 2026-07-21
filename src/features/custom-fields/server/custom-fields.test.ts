@@ -146,4 +146,28 @@ describe("custom fields", () => {
     );
     expect(rows).toHaveLength(0);
   });
+
+  it("surfaces a task's answers on the board read for cards (036)", async () => {
+    // The values follow-up: taskColumns now carries {fieldId, value} per task,
+    // and BoardData carries the definitions, so a card can render both without
+    // its own fetch.
+    const field = await createField(alice, boardId, {
+      name: "Region",
+      type: "text",
+    });
+    const task = await createTask(alice, { columnId, title: "On a card" });
+    await setTaskFieldValues(alice, task.id, [
+      { fieldId: field.id, value: "EU" },
+    ]);
+
+    const board = await getBoard(alice, boardId);
+    const read = board!.tasks.find((t) => t.id === task.id);
+
+    expect(read!.customFields).toContainEqual({
+      fieldId: field.id,
+      value: "EU",
+    });
+    // The definition rides on BoardData so the card can resolve the name + type.
+    expect(board!.customFields.some((f) => f.id === field.id)).toBe(true);
+  });
 });

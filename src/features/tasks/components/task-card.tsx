@@ -32,6 +32,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
+import {
+  type CustomField,
+  formatCustomFieldValue,
+} from "@/features/custom-fields/types";
 import { LabelChip } from "@/features/labels/components/label-chip";
 import type { Label as LabelData } from "@/features/labels/types";
 import { formatDueDate, useToday } from "@/shared/lib/due-date";
@@ -51,6 +55,13 @@ interface TaskCardProps {
    * onto every task that wears the label.
    */
   labelsById?: Record<number, LabelData>;
+  /**
+   * Custom-field definitions by id (035 → 036 follow-up), for name + type only —
+   * the task carries its own {fieldId, value} answers, and the definition is
+   * resolved here the way a label's colour is. Absent when the board has no
+   * fields, so the chips simply do not render.
+   */
+  customFieldsById?: Record<number, CustomField>;
   onEdit?: (task: Task) => void;
   onDelete?: (task: Task) => void;
 }
@@ -169,10 +180,18 @@ export function TaskCard({
   membersById,
   agentsById = {},
   labelsById = {},
+  customFieldsById = {},
   onEdit,
   onDelete,
 }: TaskCardProps) {
   const assignee = resolveAssignee(task.assignee, membersById, agentsById);
+  // Only answers whose field still exists get a chip — a field deleted between
+  // the board read and this render (CASCADE clears its values, 035) is dropped
+  // rather than rendered nameless, the LabelChip miss handled a step earlier.
+  const customFields = task.customFields.flatMap((v) => {
+    const field = customFieldsById[v.fieldId];
+    return field ? [{ field, value: v.value }] : [];
+  });
   return (
     <Card className="cursor-grab gap-1 py-3 active:cursor-grabbing">
       <CardHeader className="px-3">
@@ -227,6 +246,26 @@ export function TaskCard({
               name={label.name}
               color={labelsById[label.id]?.color}
             />
+          ))}
+        </CardContent>
+      )}
+      {/* Custom-field answers (035 → 036 follow-up): the values the board defined
+          for itself, surfaced past the dialog and the export. A "name: value"
+          chip each, so a card carries its own metadata at a glance; a checkbox
+          reads Yes/No. Rendered only for fields that still exist. */}
+      {customFields.length > 0 && (
+        <CardContent className="flex flex-wrap gap-1 px-3">
+          {customFields.map(({ field, value }) => (
+            <span
+              key={field.id}
+              className="inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+              title={`${field.name}: ${formatCustomFieldValue(field, value)}`}
+            >
+              <span className="font-medium text-foreground/70">{field.name}</span>
+              <span className="truncate">
+                {formatCustomFieldValue(field, value)}
+              </span>
+            </span>
           ))}
         </CardContent>
       )}

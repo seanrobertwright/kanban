@@ -24,6 +24,12 @@ interface CustomFieldsDialogProps {
   open: boolean;
   canEdit: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * A definition changed (035 → 036 follow-up): values now show on cards and in
+   * list columns, so the board must re-read its custom_field list when a field
+   * is added or deleted. The milestones dialog's onChanged, one feature on.
+   */
+  onChanged?: () => void;
 }
 
 const SELECT_CLASS =
@@ -49,6 +55,7 @@ export function CustomFieldsDialog({
   open,
   canEdit,
   onOpenChange,
+  onChanged,
 }: CustomFieldsDialogProps) {
   const [fields, setFields] = useState<CustomField[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +90,9 @@ export function CustomFieldsDialog({
     try {
       await action();
       setVersion((v) => v + 1);
+      // The board's copy of the definitions is now stale — its cards and list
+      // columns read them. Re-read the whole board, the milestones dialog's path.
+      onChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {

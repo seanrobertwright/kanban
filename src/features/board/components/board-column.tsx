@@ -30,6 +30,7 @@ import {
 import { Input } from "@/shared/ui/input";
 import type { Task } from "@/features/tasks/types";
 import type { AgentSummary } from "@/features/agents/types";
+import type { CustomField } from "@/features/custom-fields/types";
 import type { Label as LabelData } from "@/features/labels/types";
 import type { Member } from "@/features/workspaces/types";
 import type { Column } from "../types";
@@ -43,6 +44,8 @@ interface BoardColumnProps {
   agentsById: Record<string, AgentSummary>;
   /** Labels by id, for chip colour. The task carries its own names (LabelRef). */
   labelsById: Record<number, LabelData>;
+  /** Custom-field defs by id (035), for a card's value chips — name + type. */
+  customFieldsById: Record<number, CustomField>;
   /** Member and up: add a task, add/rename/reorder a column. */
   canEdit: boolean;
   /** Admin and up. Deleting can destroy work, so it is gated harder (§7.4). */
@@ -69,6 +72,7 @@ export function BoardColumn({
   membersById,
   agentsById,
   labelsById,
+  customFieldsById,
   canEdit,
   canDelete,
   isDone,
@@ -290,6 +294,7 @@ export function BoardColumn({
               membersById={membersById}
               agentsById={agentsById}
               labelsById={labelsById}
+              customFieldsById={customFieldsById}
               onEdit={canEdit ? onEditTask : undefined}
               onDelete={canEdit ? onDeleteTask : undefined}
             />

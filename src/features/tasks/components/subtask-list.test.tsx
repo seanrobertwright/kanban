@@ -42,6 +42,7 @@ function subtask(over: Partial<Task> = {}): Task {
     recurrence: null,
     attachmentCount: 0,
     checklist: { total: 0, done: 0 },
+    customFields: [],
     claimedBy: null,
     claimedAt: null,
     createdAt: "2026-07-15T00:00:00.000Z",
