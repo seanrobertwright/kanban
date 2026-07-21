@@ -1,6 +1,8 @@
 import type { PoolClient } from "pg";
 
 import { query, queryOne, withTransaction } from "@/shared/db/client";
+import { logActivity } from "@/features/activity/server/repository";
+import type { Actor } from "@/features/activity/types";
 import type { Principal } from "@/features/auth/server/principal";
 import {
   AuthzError,
@@ -17,14 +19,20 @@ import type {
 } from "../types";
 
 /**
- * Custom fields (035). Board-scoped definitions and per-task values. Deliberately
- * outside the activity_log/undo machinery — see 035_custom_field.sql for why —
- * so this repository writes no log rows; it is metadata management, not the
- * mutation stream undo replays.
+ * Custom fields (035). Board-scoped definitions and per-task values.
  *
  * Definitions are member-gated (defining how a board models its work is a board
  * mutation, a column's rank). Values are member-gated too: filling a field is
  * editing the task's data. Reads are viewer, the ordinary floor.
+ *
+ * The log boundary moved once (035 → 036 follow-up). 035 kept everything here
+ * out of activity_log because TaskSnapshot could not hold a dynamic field set.
+ * Value edits now log a `customField.valued` row each — a dedicated snapshot
+ * family (CustomFieldValueSnapshot) carries the before/after string, so the feed
+ * reads the change and undo has what it needs. Definition management (create,
+ * rename, delete) is still outside the log: a field-delete CASCADEs a whole
+ * board's values, and teaching undo to recreate the definition and every value
+ * it took is the larger cut 035 named and this follow-up does not take.
  */
 
 const fieldColumns = (p: "" | "cf." = "") =>
@@ -197,18 +205,31 @@ export async function setTaskFieldValues(
   taskId: number,
   values: CustomFieldValueInput[]
 ): Promise<TaskCustomField[]> {
-  const { boardId } = await requireTaskRole(userId, taskId, "member");
+  const { boardId, workspaceId } = await requireTaskRole(userId, taskId, "member");
+  // Human-only path: the value editor is the task dialog's section, driven by a
+  // member session — no agent tool writes custom fields, so the actor is always
+  // the calling user. See the 036-follow-up note in the module header.
+  const actor: Actor = { type: "human", id: userId };
 
   await withTransaction(async (client) => {
     // The board's fields, by id, so each input is checked for tenancy and type
     // against a definition read once rather than per value.
     const fields = await boardFieldsById(client, boardId);
+    // The answers as they stand, so a change can be diffed against them: a value
+    // set to what it already was writes nothing and logs nothing (the label
+    // set's no-op guard), and a real change carries its before into the log.
+    const current = await currentValues(client, taskId);
     for (const { fieldId, value } of values) {
       const field = fields.get(fieldId);
       if (!field) {
         throw new AuthzError("not_found", "That field is not on this task's board");
       }
       const coerced = coerceValue(field, value);
+      const before = current.get(fieldId) ?? null;
+      // Nothing actually changed — neither a write nor a log row. Clearing an
+      // already-empty answer and re-setting an identical value both land here.
+      if (coerced === before) continue;
+
       if (coerced === null) {
         await client.query(
           `DELETE FROM custom_field_value WHERE task_id = $1 AND field_id = $2`,
@@ -222,10 +243,37 @@ export async function setTaskFieldValues(
           [taskId, fieldId, coerced]
         );
       }
+
+      // One row per changed answer (035 → 036 follow-up), inside the same
+      // transaction as the write — logActivity's atomicity requirement. before
+      // and after carry the field name so a later-deleted field still reads.
+      await logActivity(client, {
+        workspaceId,
+        boardId,
+        taskId,
+        actor,
+        action: "customField.valued",
+        before: { fieldId, fieldName: field.name, value: before },
+        after: { fieldId, fieldName: field.name, value: coerced },
+      });
     }
   });
 
   return getTaskFields(userId, taskId);
+}
+
+/** A task's stored answers as a {fieldId → value} map, for diffing a write
+ *  against what is already there. Read on the caller's transaction client so it
+ *  cannot shift between the diff and the writes that trust it. */
+async function currentValues(
+  client: PoolClient,
+  taskId: number
+): Promise<Map<number, string>> {
+  const { rows } = await client.query<{ fieldId: number; value: string }>(
+    `SELECT field_id AS "fieldId", value FROM custom_field_value WHERE task_id = $1`,
+    [taskId]
+  );
+  return new Map(rows.map((r) => [r.fieldId, r.value]));
 }
 
 async function boardFieldsById(

@@ -232,6 +232,17 @@ function describe(
       if (author.type === "agent") return "deleted an agent's comment";
       return `deleted ${name(author)}'s comment`;
     }
+    case "customField.valued": {
+      if (!entry.before || !entry.after) return "changed a custom field";
+      // The name travels in the snapshot (CustomFieldValueSnapshot), so a
+      // deleted field's entry still reads — after wins, before is the fallback.
+      const fieldName = entry.after.fieldName || entry.before.fieldName;
+      const from = entry.before.value;
+      const to = entry.after.value;
+      if (from === null && to !== null) return `set ${fieldName} to "${to}"`;
+      if (to === null && from !== null) return `cleared ${fieldName}`;
+      return `changed ${fieldName} from "${from}" to "${to}"`;
+    }
     default:
       // `action` is TEXT in Postgres and this union grows every milestone, so a
       // row written by newer code can reach older code. Say something true

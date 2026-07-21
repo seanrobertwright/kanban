@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { listActivityForTask } from "@/features/activity/server/repository";
+import type { CustomFieldValueSnapshot } from "@/features/activity/types";
 import { getBoard } from "@/features/board/server/repository";
 import { createTask } from "@/features/tasks/server/repository";
 import {
@@ -169,5 +171,66 @@ describe("custom fields", () => {
     });
     // The definition rides on BoardData so the card can resolve the name + type.
     expect(board!.customFields.some((f) => f.id === field.id)).toBe(true);
+  });
+
+  it("logs a customField.valued entry on set, change, and clear (036)", async () => {
+    const field = await createField(alice, boardId, {
+      name: "Owner team",
+      type: "text",
+    });
+    const task = (await createTask(alice, { columnId, title: "Logged" })).id;
+
+    // Set, then change, then clear — three real transitions, three log rows.
+    await setTaskFieldValues(alice, task, [{ fieldId: field.id, value: "Platform" }]);
+    await setTaskFieldValues(alice, task, [{ fieldId: field.id, value: "Infra" }]);
+    await setTaskFieldValues(alice, task, [{ fieldId: field.id, value: null }]);
+
+    const entries = (await listActivityForTask(alice, task)).filter(
+      (e) => e.action === "customField.valued"
+    );
+    // Newest first: clear, then change, then set.
+    expect(entries).toHaveLength(3);
+    const before = (e: (typeof entries)[number]) =>
+      e.before as CustomFieldValueSnapshot | null;
+    const after = (e: (typeof entries)[number]) =>
+      e.after as CustomFieldValueSnapshot | null;
+
+    // The clear: Infra → null, and the field name travels for a deleted-field read.
+    expect(before(entries[0])?.value).toBe("Infra");
+    expect(after(entries[0])?.value).toBeNull();
+    expect(after(entries[0])?.fieldName).toBe("Owner team");
+    // The change: Platform → Infra.
+    expect(before(entries[1])?.value).toBe("Platform");
+    expect(after(entries[1])?.value).toBe("Infra");
+    // The set: null → Platform.
+    expect(before(entries[2])?.value).toBeNull();
+    expect(after(entries[2])?.value).toBe("Platform");
+  });
+
+  it("does not log when a value is set to what it already was (036)", async () => {
+    const field = await createField(alice, boardId, {
+      name: "Quiet",
+      type: "text",
+    });
+    const task = (await createTask(alice, { columnId, title: "No-op" })).id;
+
+    await setTaskFieldValues(alice, task, [{ fieldId: field.id, value: "same" }]);
+    const firstCount = (await listActivityForTask(alice, task)).filter(
+      (e) => e.action === "customField.valued"
+    ).length;
+
+    // Re-setting the identical value, and clearing an already-empty field, both
+    // write nothing and log nothing — the no-op guard.
+    await setTaskFieldValues(alice, task, [{ fieldId: field.id, value: "same" }]);
+    const otherField = await createField(alice, boardId, {
+      name: "Never set",
+      type: "text",
+    });
+    await setTaskFieldValues(alice, task, [{ fieldId: otherField.id, value: null }]);
+
+    const secondCount = (await listActivityForTask(alice, task)).filter(
+      (e) => e.action === "customField.valued"
+    ).length;
+    expect(secondCount).toBe(firstCount);
   });
 });

@@ -17,6 +17,8 @@ import type {
   ColumnSnapshot,
   CommentAction,
   CommentSnapshot,
+  CustomFieldValueAction,
+  CustomFieldValueSnapshot,
   EpicAction,
   EpicSnapshot,
   LabelAction,
@@ -86,6 +88,11 @@ export type ActivityInput =
       action: SprintAction;
       before?: SprintSnapshot | null;
       after?: SprintSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: CustomFieldValueAction;
+      before?: CustomFieldValueSnapshot | null;
+      after?: CustomFieldValueSnapshot | null;
     });
 
 /**

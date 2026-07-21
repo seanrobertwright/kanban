@@ -52,6 +52,7 @@ const ACTION_VERB: Record<string, string> = {
   "sprint.started": "started a sprint",
   "sprint.completed": "completed a sprint",
   "sprint.deleted": "deleted a sprint",
+  "customField.valued": "updated a field on",
 };
 
 const POLL_MS = 60_000;

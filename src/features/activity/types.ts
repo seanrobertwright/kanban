@@ -213,6 +213,21 @@ export type SprintAction =
   | "sprint.completed"
   | "sprint.deleted";
 
+/**
+ * A task's answer to a custom field changed (035 → 036 follow-up). One action
+ * covering set, changed, and cleared — task.prioritized's shape, and for its
+ * reason: all three are "the value changed", and before/after say which. A
+ * task-shaped entry (taskId set, boardId locates), because a custom-field value
+ * lives on a task the way a priority does.
+ *
+ * 035 deliberately left value edits out of the log — TaskSnapshot is a fixed
+ * shape and cannot hold a per-board set of dynamic fields. The answer is not to
+ * widen TaskSnapshot but to give the value its own snapshot family, which is
+ * what CustomFieldValueSnapshot below is: the deferred problem solved the way
+ * every other subject the log grew to cover was.
+ */
+export type CustomFieldValueAction = "customField.valued";
+
 export type ActivityAction =
   | TaskAction
   | CommentAction
@@ -221,7 +236,8 @@ export type ActivityAction =
   | MilestoneAction
   | EpicAction
   | TimeAction
-  | SprintAction;
+  | SprintAction
+  | CustomFieldValueAction;
 
 /** What a task looked like at one instant. */
 export interface TaskSnapshot {
@@ -470,6 +486,24 @@ export interface SprintSnapshot {
   status: "planning" | "active" | "completed";
 }
 
+/**
+ * One task's answer to one custom field at an instant (035 → 036 follow-up). The
+ * before/after pair on a customField.valued row carries two of these — the value
+ * as it was and as it became — so undo has the string it needs to restore.
+ *
+ * `fieldName` is recorded, not just `fieldId`, for ColumnSnapshot.title's reason:
+ * a field can be deleted (CASCADE takes its values with it), and the feed resolves
+ * names against a board that may no longer have the field — so a history entry
+ * could never name what was answered unless the name travelled in the snapshot.
+ * `value` is the stored TEXT (interpreted by the field's type) or null when the
+ * answer was empty — the same three-valued shape the value store itself has.
+ */
+export interface CustomFieldValueSnapshot {
+  fieldId: number;
+  fieldName: string;
+  value: string | null;
+}
+
 export type Snapshot =
   | TaskSnapshot
   | CommentSnapshot
@@ -478,7 +512,8 @@ export type Snapshot =
   | MilestoneSnapshot
   | EpicSnapshot
   | TimeSnapshot
-  | SprintSnapshot;
+  | SprintSnapshot
+  | CustomFieldValueSnapshot;
 
 interface ActivityBase {
   id: string;
@@ -549,6 +584,12 @@ export interface SprintActivity extends ActivityBase {
   after: SprintSnapshot | null;
 }
 
+export interface CustomFieldValueActivity extends ActivityBase {
+  action: CustomFieldValueAction;
+  before: CustomFieldValueSnapshot | null;
+  after: CustomFieldValueSnapshot | null;
+}
+
 export type Activity =
   | TaskActivity
   | CommentActivity
@@ -557,7 +598,8 @@ export type Activity =
   | MilestoneActivity
   | EpicActivity
   | TimeActivity
-  | SprintActivity;
+  | SprintActivity
+  | CustomFieldValueActivity;
 
 /**
  * An activity joined to the human who caused it, for rendering.
