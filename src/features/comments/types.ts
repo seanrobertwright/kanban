@@ -18,6 +18,12 @@ export interface Comment {
   resolvedAt: string | null;
   /** Who resolved it — a user id, humans only. Null while open. */
   resolvedBy: string | null;
+  /**
+   * The comment this one replies to (033), or null for a top-level remark. One
+   * level deep only — subtasks' rule — so a comment with a parent never has
+   * replies of its own. The thread nests replies under their parent client-side.
+   */
+  parentId: number | null;
 }
 
 /**
@@ -44,6 +50,12 @@ export interface CommentEntry extends Comment {
 export interface CreateCommentInput {
   taskId: number;
   body: string;
+  /**
+   * The comment to reply under (033), or absent for a top-level remark. Must be
+   * a top-level comment on the same task — a reply-to-a-reply is refused (depth
+   * is 1), the repository's check.
+   */
+  parentId?: number;
 }
 
 export interface UpdateCommentInput {

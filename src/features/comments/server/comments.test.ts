@@ -352,6 +352,8 @@ describe("comments", () => {
         commentId: comment.id,
         body: "Logged",
         author: { type: "human", id: bob },
+        // Carried since 033 — a top-level remark's parent is null.
+        parentId: null,
       });
     });
 

@@ -67,8 +67,19 @@ export async function handleCreateComment(request: Request, id: string) {
   const body = parseBody((payload as Record<string, unknown>).body);
   if (body === null) return badRequest("body must be a non-empty string");
 
+  // parentId is optional — absent for a top-level remark, a comment id to reply
+  // under (033). Whether that id is a top-level comment on this task is a tenancy
+  // question, answered in the repository against the write's transaction.
+  const { parentId } = payload as Record<string, unknown>;
+  if (parentId !== undefined && !Number.isInteger(parentId))
+    return badRequest("parentId must be a comment id");
+
   try {
-    const comment = await createComment(principal, { taskId, body });
+    const comment = await createComment(principal, {
+      taskId,
+      body,
+      parentId: parentId as number | undefined,
+    });
     return Response.json(comment, { status: 201 });
   } catch (error) {
     return authzErrorResponse(error);

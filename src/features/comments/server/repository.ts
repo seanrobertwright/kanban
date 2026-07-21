@@ -30,7 +30,8 @@ const commentColumns = (p: "" | "c." = "") =>
   `${p}id, ${p}task_id AS "taskId", ${p}author_type AS "authorType",
    ${p}author_id AS "authorId", ${p}body,
    ${p}created_at AS "createdAt", ${p}updated_at AS "updatedAt",
-   ${p}resolved_at AS "resolvedAt", ${p}resolved_by AS "resolvedBy"`;
+   ${p}resolved_at AS "resolvedAt", ${p}resolved_by AS "resolvedBy",
+   ${p}parent_id AS "parentId"`;
 
 /** Every caller here is a signed-in person; agents become authors at M2. */
 function human(userId: string): Actor {
@@ -42,7 +43,44 @@ function snapshot(comment: Comment): CommentSnapshot {
     commentId: comment.id,
     body: comment.body,
     author: { type: comment.authorType, id: comment.authorId },
+    // Immutable metadata, carried so undo can recreate a deleted reply under the
+    // parent it answered (033) — TaskSnapshot.parentId's reasoning exactly.
+    parentId: comment.parentId,
   };
+}
+
+/**
+ * Enforces the two rules 033 states but cannot express — that a reply answers a
+ * comment on its *own* task, and that the discussion is one level deep.
+ *
+ * assertDecomposable's shape, one feature over: an authz check proves the caller
+ * may touch the task, never that the parent comment belongs to it. A parent on
+ * another task (or gone) is "not_found" — the anti-oracle answer, and the honest
+ * one for a reply whose target does not exist here. A parent that is itself a
+ * reply is a "conflict": the caller may attempt it, but depth-1 refuses it, the
+ * same 409 assertDecomposable raises for a subtask of a subtask.
+ *
+ * The depth read needs no lock — parent_id is set at creation and never changes
+ * (there is no re-parent path), so the answer is permanent the instant it is
+ * read, assertDecomposable's lock-free reasoning verbatim.
+ */
+async function assertReplyable(
+  client: PoolClient,
+  taskId: number,
+  parentId: number
+): Promise<void> {
+  const { rows } = await client.query<{ taskId: number; parentId: number | null }>(
+    `SELECT task_id AS "taskId", parent_id AS "parentId"
+       FROM comment WHERE id = $1`,
+    [parentId]
+  );
+  const parent = rows[0];
+  if (!parent || parent.taskId !== taskId) {
+    throw new AuthzError("not_found", "That comment is not on this task");
+  }
+  if (parent.parentId !== null) {
+    throw new AuthzError("conflict", "A reply cannot have replies of its own");
+  }
 }
 
 /**
@@ -239,11 +277,15 @@ export async function createComment(
   );
 
   return withTransaction(async (client) => {
+    // A reply's parent must be a top-level comment on this same task (033).
+    if (input.parentId != null) {
+      await assertReplyable(client, input.taskId, input.parentId);
+    }
     const { rows } = await client.query<Comment>(
-      `INSERT INTO comment (task_id, author_type, author_id, body)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO comment (task_id, author_type, author_id, body, parent_id)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING ${commentColumns()}`,
-      [input.taskId, by.type, by.id, input.body]
+      [input.taskId, by.type, by.id, input.body, input.parentId ?? null]
     );
     const comment = rows[0];
 

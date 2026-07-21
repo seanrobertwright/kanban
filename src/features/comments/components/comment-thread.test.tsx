@@ -27,6 +27,7 @@ function comment(over: Partial<CommentEntry> = {}): CommentEntry {
     updatedAt: null,
     resolvedAt: null,
     resolvedBy: null,
+    parentId: null,
     canEdit: false,
     canDelete: false,
     canResolve: false,

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { relativeTime } from "@/shared/lib/relative-time";
+import { RichText } from "@/shared/ui/rich-text";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
@@ -48,6 +49,10 @@ export function CommentThread({ taskId, onChanged }: CommentThreadProps) {
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  // Which comment a reply is being written under (033), and its draft. Only
+  // top-level comments can be replied to — depth is 1.
+  const [replyingToId, setReplyingToId] = useState<number | null>(null);
+  const [replyDraft, setReplyDraft] = useState("");
   // Delete is two clicks rather than a confirm() — a modal inside a modal, and
   // one that blocks the whole page. Until M2 ships undo, the second click is the
   // only thing standing between a slip and a lost remark.
@@ -82,10 +87,26 @@ export function CommentThread({ taskId, onChanged }: CommentThreadProps) {
     };
   }, [taskId, version]);
 
+  // Top-level remarks in order, each with its replies gathered under it (033).
+  // The server returns a flat list ordered by id; nesting is a client shape, so
+  // the query stays one index scan and the thread decides how deep to draw.
+  const threads = useMemo(() => {
+    const replies = new Map<number, CommentEntry[]>();
+    for (const c of comments) {
+      if (c.parentId === null) continue;
+      const list = replies.get(c.parentId);
+      if (list) list.push(c);
+      else replies.set(c.parentId, [c]);
+    }
+    return comments
+      .filter((c) => c.parentId === null)
+      .map((c) => ({ comment: c, replies: replies.get(c.id) ?? [] }));
+  }, [comments]);
+
   /**
-   * One wrapper for all three mutations: each refetches rather than patching
-   * state locally. The server decides canEdit/canDelete and stamps updated_at,
-   * so reconstructing the row here would mean reimplementing those rules in the
+   * One wrapper for all mutations: each refetches rather than patching state
+   * locally. The server decides canEdit/canDelete and stamps updated_at, so
+   * reconstructing the row here would mean reimplementing those rules in the
    * client — the exact duplication CommentEntry exists to avoid.
    */
   async function mutate(action: () => Promise<unknown>) {
@@ -111,6 +132,16 @@ export function CommentThread({ taskId, onChanged }: CommentThreadProps) {
     });
   }
 
+  async function postReply(parentId: number) {
+    const body = replyDraft.trim();
+    if (!body) return;
+    await mutate(async () => {
+      await createComment(taskId, body, parentId);
+      setReplyingToId(null);
+      setReplyDraft("");
+    });
+  }
+
   async function saveEdit(id: number) {
     const body = editDraft.trim();
     if (!body) return;
@@ -118,6 +149,189 @@ export function CommentThread({ taskId, onChanged }: CommentThreadProps) {
       await updateComment(id, body);
       setEditingId(null);
     });
+  }
+
+  /** One comment's row — author line, body (or the edit form), and its actions.
+   *  Reused for a top-level remark and for a reply; `canReply` is false for a
+   *  reply, since depth is 1. */
+  function CommentRow({
+    comment,
+    canReply,
+  }: {
+    comment: CommentEntry;
+    canReply: boolean;
+  }) {
+    return (
+      <div className="flex items-start gap-2.5">
+        <Avatar className="size-6">
+          <AvatarImage src={comment.authorImage ?? undefined} alt="" />
+          <AvatarFallback className="text-[10px]">
+            {authorLabel(comment).slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <div className="grid flex-1 gap-1">
+          <p className="text-xs leading-5 text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {authorLabel(comment)}
+            </span>{" "}
+            <time dateTime={comment.createdAt} title={comment.createdAt}>
+              {relativeTime(comment.createdAt, now)}
+            </time>
+            {comment.updatedAt && (
+              <span title={`Edited ${comment.updatedAt}`}> · edited</span>
+            )}
+            {comment.resolvedAt && (
+              <span
+                className="text-primary"
+                title={`Resolved ${comment.resolvedAt}`}
+              >
+                {" "}
+                · resolved
+              </span>
+            )}
+          </p>
+
+          {editingId === comment.id ? (
+            <div className="grid gap-1.5">
+              <Textarea
+                value={editDraft}
+                onChange={(e) => setEditDraft(e.target.value)}
+                rows={3}
+                aria-label="Edit comment"
+                autoFocus
+              />
+              <div className="flex gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={busy || !editDraft.trim()}
+                  onClick={() => saveEdit(comment.id)}
+                >
+                  Save
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setEditingId(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Rendered as a safe Markdown subset (033) — React elements, never
+                  HTML: an agent writes here, so its body is escaped by
+                  construction and cannot smuggle markup. See shared/ui/rich-text. */}
+              <RichText
+                text={comment.body}
+                className={`text-sm ${
+                  comment.resolvedAt ? "text-muted-foreground" : ""
+                }`}
+              />
+              <div className="flex gap-2">
+                {canReply && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setReplyingToId(
+                        replyingToId === comment.id ? null : comment.id
+                      );
+                      setReplyDraft("");
+                    }}
+                  >
+                    Reply
+                  </button>
+                )}
+                {comment.canResolve && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    disabled={busy}
+                    onClick={() =>
+                      mutate(() =>
+                        resolveComment(comment.id, !comment.resolvedAt)
+                      )
+                    }
+                  >
+                    {comment.resolvedAt ? "Reopen" : "Resolve"}
+                  </button>
+                )}
+                {comment.canEdit && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setEditingId(comment.id);
+                      setEditDraft(comment.body);
+                      setConfirmingId(null);
+                    }}
+                  >
+                    Edit
+                  </button>
+                )}
+                {comment.canDelete && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-destructive"
+                    disabled={busy}
+                    onClick={() =>
+                      confirmingId === comment.id
+                        ? mutate(() => deleteComment(comment.id))
+                        : setConfirmingId(comment.id)
+                    }
+                    onBlur={() => setConfirmingId(null)}
+                  >
+                    {confirmingId === comment.id ? "Really?" : "Delete"}
+                  </button>
+                )}
+              </div>
+
+              {/* The reply box, scoped to this comment (033). Not a <form> — it
+                  sits inside the dialog's task form, and a nested one is invalid. */}
+              {replyingToId === comment.id && (
+                <div className="mt-1 grid gap-1.5">
+                  <Textarea
+                    value={replyDraft}
+                    onChange={(e) => setReplyDraft(e.target.value)}
+                    placeholder="Reply…"
+                    rows={2}
+                    aria-label="Reply"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                        e.preventDefault();
+                        void postReply(comment.id);
+                      }
+                    }}
+                  />
+                  <div className="flex justify-end gap-1.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setReplyingToId(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={busy || !replyDraft.trim()}
+                      onClick={() => postReply(comment.id)}
+                    >
+                      Reply
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -140,129 +354,22 @@ export function CommentThread({ taskId, onChanged }: CommentThreadProps) {
         <p className="text-xs text-muted-foreground">No comments yet.</p>
       )}
 
-      {comments.length > 0 && (
+      {threads.length > 0 && (
         <ul className="grid gap-3">
-          {comments.map((comment) => (
-            <li key={comment.id} className="flex items-start gap-2.5">
-              <Avatar className="size-6">
-                <AvatarImage src={comment.authorImage ?? undefined} alt="" />
-                <AvatarFallback className="text-[10px]">
-                  {authorLabel(comment).slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div className="grid flex-1 gap-1">
-                <p className="text-xs leading-5 text-muted-foreground">
-                  <span className="font-medium text-foreground">
-                    {authorLabel(comment)}
-                  </span>{" "}
-                  <time dateTime={comment.createdAt} title={comment.createdAt}>
-                    {relativeTime(comment.createdAt, now)}
-                  </time>
-                  {comment.updatedAt && (
-                    <span title={`Edited ${comment.updatedAt}`}> · edited</span>
-                  )}
-                  {/* Handled (024). The word, not just the fade below — the
-                      fade alone would read as "less important" rather than
-                      "dealt with". */}
-                  {comment.resolvedAt && (
-                    <span
-                      className="text-primary"
-                      title={`Resolved ${comment.resolvedAt}`}
-                    >
-                      {" "}
-                      · resolved
-                    </span>
-                  )}
-                </p>
-
-                {editingId === comment.id ? (
-                  <div className="grid gap-1.5">
-                    <Textarea
-                      value={editDraft}
-                      onChange={(e) => setEditDraft(e.target.value)}
-                      rows={3}
-                      aria-label="Edit comment"
-                      autoFocus
-                    />
-                    <div className="flex gap-1.5">
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={busy || !editDraft.trim()}
-                        onClick={() => saveEdit(comment.id)}
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setEditingId(null)}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* whitespace-pre-wrap, so the newlines someone typed are the
-                        newlines they get. The body is rendered as text and never
-                        as markup — an agent writes here from M2, and its output
-                        is not to be trusted with HTML. */}
-                    <p
-                      className={`text-sm leading-6 whitespace-pre-wrap ${
-                        comment.resolvedAt ? "text-muted-foreground" : ""
-                      }`}
-                    >
-                      {comment.body}
-                    </p>
-                    <div className="flex gap-2">
-                      {comment.canResolve && (
-                        <button
-                          type="button"
-                          className="text-xs text-muted-foreground hover:text-foreground"
-                          disabled={busy}
-                          onClick={() =>
-                            mutate(() =>
-                              resolveComment(comment.id, !comment.resolvedAt)
-                            )
-                          }
-                        >
-                          {comment.resolvedAt ? "Reopen" : "Resolve"}
-                        </button>
-                      )}
-                      {comment.canEdit && (
-                        <button
-                          type="button"
-                          className="text-xs text-muted-foreground hover:text-foreground"
-                          onClick={() => {
-                            setEditingId(comment.id);
-                            setEditDraft(comment.body);
-                            setConfirmingId(null);
-                          }}
-                        >
-                          Edit
-                        </button>
-                      )}
-                      {comment.canDelete && (
-                        <button
-                          type="button"
-                          className="text-xs text-muted-foreground hover:text-destructive"
-                          disabled={busy}
-                          onClick={() =>
-                            confirmingId === comment.id
-                              ? mutate(() => deleteComment(comment.id))
-                              : setConfirmingId(comment.id)
-                          }
-                          onBlur={() => setConfirmingId(null)}
-                        >
-                          {confirmingId === comment.id ? "Really?" : "Delete"}
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
+          {threads.map(({ comment, replies }) => (
+            <li key={comment.id} className="grid gap-2">
+              <CommentRow comment={comment} canReply />
+              {replies.length > 0 && (
+                // Replies indented under their parent, with a rule to read the
+                // nesting. One level only (033), so this never recurses.
+                <ul className="ml-4 grid gap-3 border-l pl-3">
+                  {replies.map((reply) => (
+                    <li key={reply.id}>
+                      <CommentRow comment={reply} canReply={false} />
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>
@@ -275,7 +382,7 @@ export function CommentThread({ taskId, onChanged }: CommentThreadProps) {
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Leave a comment"
+          placeholder="Leave a comment — **bold**, *italic*, `code`, - lists, [links](https://…)"
           rows={2}
           aria-label="New comment"
           onKeyDown={(e) => {

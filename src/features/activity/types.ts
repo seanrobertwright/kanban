@@ -398,6 +398,13 @@ export interface CommentSnapshot {
   commentId: number;
   body: string;
   author: Actor;
+  /**
+   * The comment this one replies to (033), or null/undefined for a top-level
+   * remark. `undefined` means "written before threading"; null means top-level.
+   * Immutable metadata, TaskSnapshot.parentId's twin — undo recreates a deleted
+   * reply under the parent it answered, which a body-only snapshot could not.
+   */
+  parentId?: number | null;
 }
 
 /**

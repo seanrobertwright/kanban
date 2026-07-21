@@ -17,11 +17,16 @@ export async function fetchTaskComments(taskId: number): Promise<CommentEntry[]>
   return jsonOrThrow<CommentEntry[]>(res);
 }
 
-export function createComment(taskId: number, body: string): Promise<Comment> {
+/** Post a comment, or a reply under `parentId` (033) when one is given. */
+export function createComment(
+  taskId: number,
+  body: string,
+  parentId?: number
+): Promise<Comment> {
   return fetch(`/api/tasks/${taskId}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ body }),
+    body: JSON.stringify(parentId === undefined ? { body } : { body, parentId }),
   }).then((res) => jsonOrThrow<Comment>(res));
 }
 
