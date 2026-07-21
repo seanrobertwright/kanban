@@ -5,56 +5,8 @@ import { useMemo } from "react";
 import { PriorityDot } from "@/features/tasks/components/task-card";
 import type { Task } from "@/features/tasks/types";
 import { useToday } from "@/shared/lib/due-date";
+import { addDays, dayDiff, shortLabel, spanOf } from "../lib/schedule";
 import type { BoardViewProps } from "./list-view";
-
-const MONTH_ABBR = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-const pad = (n: number) => String(n).padStart(2, "0");
-
-/**
- * Date maths on 'YYYY-MM-DD' strings, kept in UTC so a zoneless calendar date
- * never drifts a day through the server's local zone — the trap 006, due-date.ts
- * and the calendar all avoid. Only the *window* touches Date here; a task's own
- * dates stay strings and are placed by day-count, never parsed into a Date.
- */
-function addDays(iso: string, n: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d + n));
-  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
-}
-
-/** Whole days from `a` to `b` (b − a); negative when b precedes a. */
-function dayDiff(a: string, b: string): number {
-  const [ay, am, ad] = a.split("-").map(Number);
-  const [by, bm, bd] = b.split("-").map(Number);
-  return Math.round(
-    (Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000
-  );
-}
-
-/** "Mar 3" — a short, zone-free label read straight off the string. */
-function shortLabel(iso: string): string {
-  const [, m, d] = iso.split("-").map(Number);
-  return `${MONTH_ABBR[m - 1]} ${d}`;
-}
-
-/**
- * A task's span on the timeline: [start, end] as 'YYYY-MM-DD'. A task with both
- * dates spans them; one with only a start (or only a due) is a zero-length span
- * on that single day — the bar renders as a marker rather than nothing. Returns
- * null for a task with neither date, which has no place on a timeline.
- */
-function spanOf(task: Task): [string, string] | null {
-  const start = task.startDate ?? task.dueDate;
-  const end = task.dueDate ?? task.startDate;
-  if (!start || !end) return null;
-  // Guard a backwards pair (start after due) by ordering lexicographically —
-  // YYYY-MM-DD sorts as dates, so no Date is needed to compare them.
-  return start <= end ? [start, end] : [end, start];
-}
 
 /**
  * The board's tasks as bars over time (032) — the one lens a single date could

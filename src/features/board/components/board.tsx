@@ -29,6 +29,7 @@ import {
   Rocket,
   SlidersHorizontal,
   Tags,
+  Waypoints,
 } from "lucide-react";
 
 import type { AgentSummary } from "@/features/agents/types";
@@ -40,6 +41,7 @@ import {
   TaskDialog,
   type TaskFormValues,
 } from "@/features/tasks/components/task-dialog";
+import type { TaskDependencyEdge } from "@/features/dependencies/types";
 import type { Task } from "@/features/tasks/types";
 import type { Member } from "@/features/workspaces/types";
 import { Button } from "@/shared/ui/button";
@@ -72,6 +74,7 @@ import {
 } from "./board-filter-bar";
 import { BacklogView } from "./backlog-view";
 import { CalendarView } from "./calendar-view";
+import { GanttView } from "./gantt-view";
 import { TimelineView } from "./timeline-view";
 import { ListView } from "./list-view";
 import { SavedViews } from "@/features/views/components/saved-views";
@@ -134,6 +137,11 @@ interface BoardProps {
   /** The board's sprints (028), state because the SprintsDialog edits the set
    * and the task dialog's picker reads it. */
   initialSprints: Sprint[];
+  /** The board's blocked-by edges (036), for the Gantt's arrows + critical path.
+   * State because the task dialog adds and removes edges and `refresh()` re-reads
+   * the whole board — the milestone/epic pattern, so the Gantt redraws its arrows
+   * the moment a dependency changes rather than on a full page reload. */
+  initialDependencies: TaskDependencyEdge[];
   /** False for viewers. The server enforces this too — this only hides the UI. */
   canEdit: boolean;
   /**
@@ -169,6 +177,7 @@ export function Board({
   initialMilestones,
   initialEpics,
   initialSprints,
+  initialDependencies,
   canEdit,
   canDeleteColumns,
 }: BoardProps) {
@@ -206,6 +215,8 @@ export function Board({
   const [epicsOpen, setEpicsOpen] = useState(false);
   const [sprints, setSprints] = useState<Sprint[]>(initialSprints);
   const [sprintsOpen, setSprintsOpen] = useState(false);
+  const [dependencies, setDependencies] =
+    useState<TaskDependencyEdge[]>(initialDependencies);
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [doneColumnId, setDoneColumnId] = useState<number | null>(
     initialDoneColumnId
@@ -266,6 +277,7 @@ export function Board({
       setMilestones(data.milestones);
       setEpics(data.epics);
       setSprints(data.sprints);
+      setDependencies(data.dependencies);
     } catch {
       // Keep optimistic state if the server is unreachable.
     }
@@ -556,6 +568,9 @@ export function Board({
             <ToggleGroupItem value="timeline">
               <GanttChartSquare /> Timeline
             </ToggleGroupItem>
+            <ToggleGroupItem value="gantt">
+              <Waypoints /> Gantt
+            </ToggleGroupItem>
             <ToggleGroupItem value="backlog">
               <Inbox /> Backlog
             </ToggleGroupItem>
@@ -673,6 +688,16 @@ export function Board({
           membersById={membersById}
           agentsById={agentsById}
           labelsById={labelsById}
+          onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
+        />
+      ) : view === "gantt" ? (
+        <GanttView
+          columns={cols}
+          itemsByColumn={visibleItems}
+          membersById={membersById}
+          agentsById={agentsById}
+          labelsById={labelsById}
+          dependencies={dependencies}
           onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
         />
       ) : view === "backlog" ? (

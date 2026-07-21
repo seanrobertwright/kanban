@@ -34,3 +34,15 @@ export interface AddDependencyInput {
   /** The task that must finish first — the blocker this task will depend on. */
   dependsOnId: number;
 }
+
+/**
+ * One blocked-by edge, board-wide (036). Where TaskDependencyRef names a single
+ * task for one dialog's list, this is the bare relationship the Gantt reads
+ * across the whole board: `taskId` is blocked by `dependsOnId`. Ids only — the
+ * Gantt already holds every task's title from the board read, so an edge needs
+ * to carry nothing but which two tasks it joins.
+ */
+export interface TaskDependencyEdge {
+  taskId: number;
+  dependsOnId: number;
+}

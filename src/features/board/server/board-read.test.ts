@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { addDependency } from "@/features/dependencies/server/repository";
 import { createTask } from "@/features/tasks/server/repository";
 import {
   ensurePersonalWorkspace,
@@ -80,5 +81,23 @@ describe("getBoard", () => {
     const task = board!.tasks.find((t) => t.id === created.id);
 
     expect(task).toEqual(created);
+  });
+
+  it("returns the board's blocked-by edges for the Gantt (036)", async () => {
+    // Two tasks and one edge: the read must surface the relationship board-wide,
+    // ids only, the way the Gantt reads it to draw arrows and the critical path.
+    const blocker = await createTask(alice, { columnId: todoId, title: "First" });
+    const dependent = await createTask(alice, {
+      columnId: todoId,
+      title: "Second",
+    });
+    await addDependency(alice, dependent.id, blocker.id);
+
+    const board = await getBoard(alice, boardId);
+
+    expect(board!.dependencies).toContainEqual({
+      taskId: dependent.id,
+      dependsOnId: blocker.id,
+    });
   });
 });

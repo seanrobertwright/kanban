@@ -133,6 +133,7 @@ export default async function Home({
         initialMilestones={data.milestones}
         initialEpics={data.epics}
         initialSprints={data.sprints}
+        initialDependencies={data.dependencies}
         canEdit={canEdit}
         canDeleteColumns={canDeleteColumns}
       />

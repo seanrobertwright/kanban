@@ -1,3 +1,4 @@
+import type { TaskDependencyEdge } from "@/features/dependencies/types";
 import type { Milestone } from "@/features/milestones/types";
 import type { Epic } from "@/features/epics/types";
 import type { Sprint } from "@/features/sprints/types";
@@ -100,4 +101,13 @@ export interface BoardData {
    * against them. Ordered active → planning → completed.
    */
   sprints: Sprint[];
+  /**
+   * Every blocked-by edge among the board's tasks (036) — on BoardData for the
+   * milestone reason, but read board-wide rather than per task: the Gantt draws
+   * dependency arrows and the critical path across all bars at once, which needs
+   * the whole edge set in one read. A single task's blockers are still fetched
+   * on demand when its dialog opens (getDependencies); this is the board-scale
+   * view of the same table.
+   */
+  dependencies: TaskDependencyEdge[];
 }

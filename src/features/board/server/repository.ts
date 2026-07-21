@@ -1,6 +1,7 @@
 import { query, queryOne } from "@/shared/db/client";
 import { AuthzError, requireBoardRole } from "@/features/workspaces/server/authz";
 import type { Principal } from "@/features/auth/server/principal";
+import type { TaskDependencyEdge } from "@/features/dependencies/types";
 import type { Milestone } from "@/features/milestones/types";
 import type { Epic } from "@/features/epics/types";
 import type { Sprint } from "@/features/sprints/types";
@@ -132,6 +133,21 @@ export async function getBoard(
     [boardId]
   );
 
+  // Every blocked-by edge on this board (036), for the Gantt's arrows and
+  // critical path. Both endpoints of an edge are always on the same board
+  // (addDependency enforces it), so joining the dependent to its board is enough
+  // to scope the set. Authz already done above — read the table directly, the
+  // milestone read's shape. Subtask edges ride along; the Gantt keeps only the
+  // ones whose both ends are top-level tasks it actually draws.
+  const dependencies = await query<TaskDependencyEdge>(
+    `SELECT d.task_id AS "taskId", d.depends_on_task_id AS "dependsOnId"
+       FROM task_dependency d
+       JOIN task t ON t.id = d.task_id
+       JOIN board_column bc ON bc.id = t.column_id
+      WHERE bc.board_id = $1`,
+    [boardId]
+  );
+
   return {
     board,
     columns,
@@ -140,6 +156,7 @@ export async function getBoard(
     milestones,
     epics,
     sprints,
+    dependencies,
   };
 }
 
