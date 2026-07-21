@@ -8,7 +8,8 @@ added here is the next session's starting menu.
 Companion docs: `SESSION_HANDOFF.md` (per-session narrative + gotchas),
 `prd.md` (the milestone bet), `features.md` (breadth catalogue),
 `../docs/task_management_feature_summary.md` (the 140-criterion scoreboard,
-60 ✅ / 80 ❌ as of 2026-07-20 — the M4 agile cluster is now scored ✅).
+64 ✅ / 76 ❌ as of 2026-07-20 — the M4 agile cluster plus the planning +
+collaboration sweep are now scored ✅).
 
 Convention: `[x]` done → cite the commit; `[ ]` open → one line on the slice.
 Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
@@ -108,15 +109,48 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
       Logging agent minutes would overturn that documented invariant, so the tool
       is intentionally not built.
 
+## Done — 2026-07-20 planning + collaboration sweep
+
+- [x] **Task start date + Timeline lens** (032) — `task.start_date` (DATE,
+      three-valued like dueDate); TimelineView draws each dated task as a
+      start→due bar over the tasks' own window, percentage-positioned (no per-day
+      grid), with weekly ticks + a today marker; recurrence advances both dates.
+      Both doors' create/update carry `startDate`; export column. → `80d1b65`
+- [x] **Threaded comments + safe rich text** (033) — `comment.parent_id`
+      (self-ref, CASCADE, depth-1 held in the repo like subtasks); replies nest
+      client-side. `shared/ui/rich-text` renders a Markdown subset to React
+      *elements*, never HTML — hostile input escapes by construction, link hrefs
+      whitelisted, no dangerouslySetInnerHTML. Comment bodies render through it;
+      a per-comment reply box. → `2f3fc0a`
+- [x] **Prioritisation scoring** (034) — `value` + `risk` (0–10, CHECK-bounded)
+      reuse `estimate` as effort; the score `value / (estimate × (1 + risk/10))`
+      is derived in `taskColumns` (formula in code, no migration to change it).
+      Dialog inputs + live readout; list-view Score column click-sorts; export;
+      both doors + Door 1 `score_task` (auto tier, the triage payoff). → `90114d5`
+- [x] **Custom fields** (035) — board-scoped definitions (`custom_field`: text /
+      number / date / select / checkbox) + per-task values (`custom_field_value`,
+      TEXT coerced by type). Manager dialog, self-fetching task-dialog section,
+      dynamic export columns. Deliberate cuts (stated in code): no activity/undo
+      wiring, values not on cards. → `68b4697`
+
+## Next up — candidates, roughly by value
+
 ### Planning & Views breadth
-- [ ] **Timeline view** — needs a task start-date field; estimate/milestone
-      groundwork helps.
+- [ ] **Gantt / critical path** — start_date (032) + dependencies (018) are the
+      groundwork; the Timeline draws bars, a Gantt adds dependency arrows and the
+      schedule-driving path.
 - [ ] **Goals/OKRs** — link tasks/milestones to measurable objectives.
 
 ### Collaboration breadth
-- [ ] **Threaded comments** — replies under a comment (parent_id on `comment`).
-- [ ] **Rich text** — task/comment bodies beyond plain TEXT (sanitised — an agent
-      writes here).
+- [ ] **Rich text on task descriptions** — 033's `RichText` renders comment
+      bodies; task descriptions still edit/show as plain textarea. Needs an
+      edit/preview surface (the renderer already exists and is safe).
+
+### Custom-fields follow-ups (035 cuts, if the wedge wants them)
+- [ ] **Custom-field activity/undo** — snapshot values into the log so undo can
+      restore them (the fixed-shape TaskSnapshot problem 035 deferred).
+- [ ] **Custom-field values on cards / list columns** — surface answers beyond
+      the dialog + export (would want values on the board read / taskColumns).
 
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
