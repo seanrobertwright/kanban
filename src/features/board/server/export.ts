@@ -41,6 +41,9 @@ interface ExportRow {
   milestone: string | null;
   epic: string | null;
   sprint: string | null;
+  value: number | null;
+  risk: number | null;
+  priorityScore: number | null;
   startDate: string | null;
   dueDate: string | null;
   labels: string[];
@@ -60,6 +63,9 @@ const CSV_COLUMNS: [header: string, read: (r: ExportRow) => string | number | nu
   ["milestone", (r) => r.milestone],
   ["epic", (r) => r.epic],
   ["sprint", (r) => r.sprint],
+  ["value", (r) => r.value],
+  ["risk", (r) => r.risk],
+  ["priority_score", (r) => r.priorityScore],
   ["start_date", (r) => r.startDate],
   ["due_date", (r) => r.dueDate],
   // One cell, "; "-joined: a CSV has no list type, and a second file of
@@ -142,6 +148,9 @@ export async function handleExportBoard(request: Request, id: string) {
         t.epicId === null ? null : (epicName.get(t.epicId) ?? null),
       sprint:
         t.sprintId === null ? null : (sprintName.get(t.sprintId) ?? null),
+      value: t.value,
+      risk: t.risk,
+      priorityScore: t.priorityScore,
       startDate: t.startDate,
       dueDate: t.dueDate,
       labels: t.labels.map((l) => l.name),

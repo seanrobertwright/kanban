@@ -62,6 +62,10 @@ export interface TaskFormValues {
   type: TaskType;
   /** Points, or null for unestimated (022). null clears, like dueDate. */
   estimate: number | null;
+  /** Business value 0–10 (034), or null for unscored. */
+  value: number | null;
+  /** Risk 0–10 (034), or null. */
+  risk: number | null;
   /** The milestone to aim at (026), or null. null clears, like dueDate. */
   milestoneId: number | null;
   /** The sprint to schedule into (028), or null (backlog). */
@@ -107,6 +111,31 @@ function decodeAssignee(value: string): Actor | null {
  * different boundaries, and collapsing them to one constant would be a pun.
  */
 const NO_DUE_DATE = "";
+
+/** A scoring input's DOM string to the API's number-or-null: "" is unscored,
+ *  otherwise clamp into the 0–10 the CHECK accepts (034). */
+function clampScore(s: string): number | null {
+  if (s === "") return null;
+  return Math.max(0, Math.min(10, parseInt(s, 10) || 0));
+}
+
+/**
+ * The live prioritisation score preview — the server's formula (034) mirrored so
+ * the reader sees the number update as they type, before saving. Null (shown as
+ * "—") until both value and a non-zero estimate exist, exactly as taskColumns'
+ * derivation returns null then.
+ */
+function previewScore(
+  valueStr: string,
+  estimateStr: string,
+  riskStr: string
+): number | null {
+  const value = clampScore(valueStr);
+  const estimate = estimateStr === "" ? null : Math.max(0, parseInt(estimateStr, 10) || 0);
+  const risk = clampScore(riskStr) ?? 0;
+  if (value === null || estimate === null || estimate === 0) return null;
+  return Math.round((value / (estimate * (1 + risk / 10))) * 100) / 100;
+}
 
 interface TaskDialogProps {
   open: boolean;
@@ -211,6 +240,10 @@ export function TaskDialog({
   const [type, setType] = useState<TaskType>("task");
   // "" is "unestimated" — the empty <input type="number">, dueDate's shape.
   const [estimate, setEstimate] = useState<string>("");
+  // Scoring inputs (034), "" = unscored. Named businessValue, not value, so it
+  // does not shadow the `value` loop param the option maps below use.
+  const [businessValue, setBusinessValue] = useState<string>("");
+  const [risk, setRisk] = useState<string>("");
   // "" is "no milestone" — the <option> stand-in for null (026).
   const [milestoneId, setMilestoneId] = useState<string>("");
   // "" is "backlog" — the <option> stand-in for null (028).
@@ -260,6 +293,8 @@ export function TaskDialog({
       setPriority(task?.priority ?? "none");
       setType(task?.type ?? "task");
       setEstimate(task?.estimate == null ? "" : String(task.estimate));
+      setBusinessValue(task?.value == null ? "" : String(task.value));
+      setRisk(task?.risk == null ? "" : String(task.risk));
       setMilestoneId(task?.milestoneId == null ? "" : String(task.milestoneId));
       setSprintId(task?.sprintId == null ? "" : String(task.sprintId));
       setEpicId(task?.epicId == null ? "" : String(task.epicId));
@@ -312,6 +347,9 @@ export function TaskDialog({
         // "" is the emptied number input; the API speaks null. parseInt rather
         // than Number so a stray "3.7" degrades to 3 instead of a 400.
         estimate: estimate === "" ? null : Math.max(0, parseInt(estimate, 10) || 0),
+        // "" is unscored; otherwise clamp to the 0–10 the API and CHECK accept.
+        value: clampScore(businessValue),
+        risk: clampScore(risk),
         // "" is the DOM stand-in for "no milestone"; the API speaks null.
         milestoneId: milestoneId === "" ? null : Number(milestoneId),
         // "" is the DOM stand-in for "backlog"; the API speaks null.
@@ -559,6 +597,46 @@ export function TaskDialog({
                 onChange={(e) => setEstimate(e.target.value)}
                 placeholder="Points"
               />
+            </div>
+          </div>
+          {/* Prioritisation scoring (034): value and risk, 0–10, with the live
+              score = value / (estimate × (1 + risk/10)) the board ranks by. The
+              readout mirrors taskColumns' derivation so it updates as you type. */}
+          <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="task-value">Value</Label>
+              <Input
+                id="task-value"
+                type="number"
+                min={0}
+                max={10}
+                step={1}
+                value={businessValue}
+                onChange={(e) => setBusinessValue(e.target.value)}
+                placeholder="0–10"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="task-risk">Risk</Label>
+              <Input
+                id="task-risk"
+                type="number"
+                min={0}
+                max={10}
+                step={1}
+                value={risk}
+                onChange={(e) => setRisk(e.target.value)}
+                placeholder="0–10"
+              />
+            </div>
+            <div className="grid gap-2 text-center">
+              <Label>Score</Label>
+              <p
+                className="flex h-8 min-w-14 items-center justify-center rounded-lg border bg-muted/40 px-2 text-sm font-medium tabular-nums"
+                title="value / (estimate × (1 + risk/10)) — needs value and an estimate"
+              >
+                {previewScore(businessValue, estimate, risk) ?? "—"}
+              </p>
             </div>
           </div>
           {/* Milestone (026). Only when the board has any — the templates

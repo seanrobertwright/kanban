@@ -45,6 +45,7 @@ export function taskColumns(alias = ""): string {
           ${p}position, ${assigneeObject(p)} AS assignee, ${p}priority,
           ${p}type, ${p}estimate, ${p}milestone_id AS "milestoneId",
           ${p}sprint_id AS "sprintId", ${p}epic_id AS "epicId",
+          ${p}value, ${p}risk, ${priorityScore(p)} AS "priorityScore",
           ${p}start_date AS "startDate", ${p}due_date AS "dueDate",
           ${p}parent_id AS "parentId",
           ${claimedByObject(p)} AS "claimedBy",
@@ -57,6 +58,31 @@ export function taskColumns(alias = ""): string {
           ${recurrenceSubquery(self)} AS recurrence,
           ${attachmentCountSubquery(self)} AS "attachmentCount",
           ${checklistSubquery(self)} AS checklist`;
+}
+
+/**
+ * The task's priority score (034) — value per unit effort, risk-adjusted:
+ *
+ *   value / (estimate × (1 + risk/10))
+ *
+ * Derived here rather than stored, subtaskCount's reasoning: it is a fact about
+ * three other columns, not state this task holds, so keeping it in the SELECT
+ * lets the formula change without a migration and keeps undo out of it (restoring
+ * value/estimate/risk restores the score). NULL until both value and a non-zero
+ * estimate exist — a value-per-effort with no effort is undefined, not zero.
+ *
+ * ::float8 so node-postgres hands back a JS number rather than the string it
+ * returns for numeric; round to two places keeps the ratio legible. COALESCE on
+ * risk so an unset risk is no penalty (factor 1), not a null that voids the score.
+ * These are the row's own columns, so the caller's prefix is all they need — no
+ * correlation trap like the subqueries below.
+ */
+function priorityScore(p: string): string {
+  return `CASE WHEN ${p}value IS NOT NULL
+                AND ${p}estimate IS NOT NULL AND ${p}estimate > 0
+               THEN round((${p}value::numeric
+                           / (${p}estimate * (1 + COALESCE(${p}risk, 0) / 10.0))), 2)::float8
+               ELSE NULL END`;
 }
 
 /**
@@ -296,6 +322,10 @@ export function taskSnapshot(task: Task): TaskSnapshot {
     milestoneId: task.milestoneId,
     sprintId: task.sprintId,
     epicId: task.epicId,
+    // The scoring inputs (034) ride every snapshot for 006's reason; the score
+    // itself is derived, so it is not carried — restoring these restores it.
+    value: task.value,
+    risk: task.risk,
     // Both dates ride every snapshot for 006's reason: undo restores what the
     // task *was*, and a date missing here is one undo silently fails to restore.
     startDate: task.startDate,

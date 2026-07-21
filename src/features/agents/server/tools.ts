@@ -232,6 +232,31 @@ export function buildTools(
         }),
     }),
     betaZodTool({
+      name: "score_task",
+      description:
+        "Score a task for prioritisation (034): value and risk on a 0–10 scale, or null to clear either. With the task's estimate this yields a priority score = value / (estimate × (1 + risk/10)) the board ranks by — the triage payoff. Pass whichever of value/risk you mean to set.",
+      inputSchema: z.object({
+        id: z.number().int(),
+        value: z.number().int().min(0).max(10).nullish(),
+        risk: z.number().int().min(0).max(10).nullish(),
+      }),
+      run: ({ id, value, risk }) =>
+        gate(ctx, {
+          tool: "score_task",
+          input: { id, value, risk },
+          taskId: id,
+          // Spread so a field is written only when the caller named it — an
+          // absent key leaves that input alone, updateTask's presence rule (034).
+          execute: () =>
+            updateTask(p, id, {
+              ...(value !== undefined ? { value } : {}),
+              ...(risk !== undefined ? { risk } : {}),
+            }),
+          describe: () => `Scored task ${id} (value ${value ?? "—"}, risk ${risk ?? "—"}).`,
+          proposal: `score task ${id} value ${value ?? "—"} risk ${risk ?? "—"}`,
+        }),
+    }),
+    betaZodTool({
       name: "aim_at_milestone",
       description:
         "Aim a task at one of its board's milestones (026), or null to un-aim it. Get the milestone id from list_board or a task already aimed at it; a milestone on another board is refused.",
@@ -342,6 +367,8 @@ export function buildTools(
         title: z.string().min(1),
         description: z.string().optional(),
         priority: priority.optional(),
+        value: z.number().int().min(0).max(10).optional(),
+        risk: z.number().int().min(0).max(10).optional(),
         startDate: z.string().optional(),
         dueDate: z.string().optional(),
         labelIds: z.array(z.number().int()).optional(),

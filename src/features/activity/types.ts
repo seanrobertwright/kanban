@@ -290,6 +290,13 @@ export interface TaskSnapshot {
    */
   sprintId?: number | null;
   /**
+   * The scoring inputs (034), optional for 003's reason: `undefined` means
+   * "written before scoring", `null` means "was unscored". The score itself is
+   * derived and never snapshotted — restoring these restores it.
+   */
+  value?: number | null;
+  risk?: number | null;
+  /**
    * Optional for 003's reason (032): `undefined` means "written before start
    * dates", `null` means "had no start date". dueDate's 'YYYY-MM-DD'-not-Date
    * discipline exactly, and JSONB-frozen for the same reason.

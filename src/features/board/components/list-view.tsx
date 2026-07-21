@@ -81,10 +81,28 @@ export function ListView({
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Ranking by prioritisation score (034): off, then highest-first, then
+  // lowest-first, cycled by clicking the Score header. Off keeps board order.
+  const [scoreSort, setScoreSort] = useState<"none" | "desc" | "asc">("none");
 
   const rows = columns.flatMap((column) =>
     (itemsByColumn[column.id] ?? []).map((task) => ({ task, column }))
   );
+  // Sorted for display only — selection and counts read `rows`, so ranking never
+  // changes which tasks a bulk action sees. Unscored tasks (null) sink to the
+  // bottom either way: a task with no score is not "lowest priority", it is
+  // simply not yet ranked.
+  const sortedRows =
+    scoreSort === "none"
+      ? rows
+      : [...rows].sort((a, b) => {
+          const av = a.task.priorityScore;
+          const bv = b.task.priorityScore;
+          if (av === null && bv === null) return 0;
+          if (av === null) return 1;
+          if (bv === null) return -1;
+          return scoreSort === "desc" ? bv - av : av - bv;
+        });
   // Selection is pruned against what is on screen at render time, so ids from
   // a previous filter cannot ride into a bulk action the user cannot see.
   const visibleIds = new Set(rows.map((r) => r.task.id));
@@ -260,12 +278,30 @@ export function ListView({
               <th className="px-3 py-2 font-medium">Status</th>
               <th className="px-3 py-2 font-medium">Assignee</th>
               <th className="px-3 py-2 font-medium">Priority</th>
+              <th className="px-3 py-2 font-medium">
+                {/* Click to rank by score (034): none → high-first → low-first. */}
+                <button
+                  type="button"
+                  className="flex items-center gap-1 font-medium hover:text-foreground"
+                  onClick={() =>
+                    setScoreSort((s) =>
+                      s === "none" ? "desc" : s === "desc" ? "asc" : "none"
+                    )
+                  }
+                  title="Rank by prioritisation score"
+                >
+                  Score
+                  <span aria-hidden className="text-[10px]">
+                    {scoreSort === "desc" ? "▼" : scoreSort === "asc" ? "▲" : "↕"}
+                  </span>
+                </button>
+              </th>
               <th className="px-3 py-2 font-medium">Due</th>
               <th className="px-3 py-2 font-medium">Labels</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map(({ task, column }) => {
+            {sortedRows.map(({ task, column }) => {
               const assignee = resolveAssignee(
                 task.assignee,
                 membersById,
@@ -350,6 +386,18 @@ export function ListView({
                     {task.priority === "none"
                       ? "—"
                       : PRIORITY_LABELS[task.priority]}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {task.priorityScore === null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <span
+                        className="font-medium"
+                        title={`value ${task.value ?? "—"} · risk ${task.risk ?? 0} · estimate ${task.estimate ?? "—"}`}
+                      >
+                        {task.priorityScore}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     {task.dueDate ? (

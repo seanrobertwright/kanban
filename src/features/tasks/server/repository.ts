@@ -73,7 +73,9 @@ function sameDetails(a: TaskSnapshot, b: TaskSnapshot): boolean {
     (a.milestoneId ?? null) === (b.milestoneId ?? null) &&
     (a.sprintId ?? null) === (b.sprintId ?? null) &&
     (a.epicId ?? null) === (b.epicId ?? null) &&
-    (a.startDate ?? null) === (b.startDate ?? null)
+    (a.startDate ?? null) === (b.startDate ?? null) &&
+    (a.value ?? null) === (b.value ?? null) &&
+    (a.risk ?? null) === (b.risk ?? null)
   );
 }
 
@@ -304,7 +306,8 @@ async function spawnNextOccurrence(
   const { assigneeId, agentId } = assigneeColumns(before.assignee);
   const { rows } = await client.query<{ id: number }>(
     `INSERT INTO task (column_id, title, description, position, assignee_id,
-                       agent_id, priority, type, estimate, due_date, start_date)
+                       agent_id, priority, type, estimate, due_date, start_date,
+                       value, risk)
      VALUES ($1, $2, $3,
              (SELECT COALESCE(MAX(position) + 1, 0) FROM task
                WHERE column_id = $1 AND parent_id IS NULL),
@@ -315,7 +318,8 @@ async function spawnNextOccurrence(
              -- weekly task that ran Mon→Fri recurs Mon→Fri the next week. $10 (the
              -- interval) serves both; a null start date stays null.
              CASE WHEN $11::date IS NULL THEN NULL
-                  ELSE ($11::date + $10::interval)::date END)
+                  ELSE ($11::date + $10::interval)::date END,
+             $12, $13)
      RETURNING id`,
     [
       firstColumnId,
@@ -329,6 +333,10 @@ async function spawnNextOccurrence(
       before.dueDate,
       RECURRENCE_INTERVAL[frequency],
       before.startDate,
+      // Scoring inputs copied to the successor (034) — they are task config like
+      // priority and estimate, not a date to advance.
+      before.value,
+      before.risk,
     ]
   );
   const newId = rows[0].id;
@@ -500,11 +508,12 @@ export async function createTask(
     const { rows } = await client.query<{ id: number }>(
       `INSERT INTO task (column_id, title, description, position, assignee_id,
                          agent_id, priority, type, estimate, milestone_id,
-                         sprint_id, due_date, parent_id, epic_id, start_date)
+                         sprint_id, due_date, parent_id, epic_id, start_date,
+                         value, risk)
        VALUES ($1, $2, $3,
                (SELECT COALESCE(MAX(position) + 1, 0) FROM task
                  WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $12),
-               $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+               $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING id`,
       [
         input.columnId,
@@ -529,6 +538,9 @@ export async function createTask(
         // $14, appended for epic_id's reason — $12 must stay parent_id. A start
         // date has no fallback to state: null is the value (032).
         input.startDate ?? null,
+        // $15/$16, the scoring inputs (034). No fallback — null is unscored.
+        input.value ?? null,
+        input.risk ?? null,
       ]
     );
 
@@ -589,6 +601,9 @@ export async function updateTask(
   const setsDueDate = "dueDate" in input;
   // Three-valued (032), dueDate's twin: null clears the start date.
   const setsStartDate = "startDate" in input;
+  // Three-valued (034), estimate's rule: 0 is a value, null is unscored.
+  const setsValue = "value" in input;
+  const setsRisk = "risk" in input;
   // Three-valued like dueDate (022): null clears the estimate, a number sets
   // it, absent leaves it — 0 is an estimate, so no COALESCE sentinel exists.
   const setsEstimate = "estimate" in input;
@@ -685,7 +700,13 @@ export async function updateTask(
                              ELSE epic_id END,
               start_date = CASE WHEN $19::boolean
                                 THEN $20::date
-                                ELSE start_date END
+                                ELSE start_date END,
+              value = CASE WHEN $21::boolean
+                           THEN $22::integer
+                           ELSE value END,
+              risk = CASE WHEN $23::boolean
+                          THEN $24::integer
+                          ELSE risk END
         WHERE id = $1
         RETURNING ${TASK_COLUMNS}`,
       [
@@ -709,6 +730,10 @@ export async function updateTask(
         input.epicId ?? null,
         setsStartDate,
         input.startDate ?? null,
+        setsValue,
+        input.value ?? null,
+        setsRisk,
+        input.risk ?? null,
       ]
     );
     const after = rows[0];

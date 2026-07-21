@@ -115,6 +115,19 @@ function isEstimate(value: unknown): value is number | null | undefined {
   );
 }
 
+/**
+ * A 0–10 score, or null ("unscored"), or absent ("leave it") — value/risk (034).
+ * Bounded, unlike estimate: the CHECK in 034 refuses anything outside 0–10, and
+ * this answers 400 rather than letting it reach the constraint as a 500.
+ */
+function isScore(value: unknown): value is number | null | undefined {
+  return (
+    value === undefined ||
+    value === null ||
+    (Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 10)
+  );
+}
+
 function isDueDate(value: unknown): value is string | null | undefined {
   if (value === undefined || value === null) return true;
   if (typeof value !== "string" || !ISO_DATE.test(value)) return false;
@@ -148,6 +161,8 @@ export async function handleCreateTask(request: Request) {
     milestoneId,
     sprintId,
     epicId,
+    value,
+    risk,
     startDate,
     dueDate,
     labelIds,
@@ -185,6 +200,9 @@ export async function handleCreateTask(request: Request) {
     return badRequest("sprintId must be a sprint id or null");
   if (epicId !== undefined && epicId !== null && !Number.isInteger(epicId))
     return badRequest("epicId must be an epic id or null");
+  if (!isScore(value))
+    return badRequest("value must be an integer 0–10 or null");
+  if (!isScore(risk)) return badRequest("risk must be an integer 0–10 or null");
   // isDueDate validates any YYYY-MM-DD-or-null date (032): the start date is one.
   if (!isDueDate(startDate))
     return badRequest("startDate must be a YYYY-MM-DD date or null");
@@ -209,6 +227,8 @@ export async function handleCreateTask(request: Request) {
       milestoneId: milestoneId as number | null | undefined,
       sprintId: sprintId as number | null | undefined,
       epicId: epicId as number | null | undefined,
+      value: value as number | null | undefined,
+      risk: risk as number | null | undefined,
       startDate: startDate as string | null | undefined,
       dueDate,
       labelIds,
@@ -272,6 +292,8 @@ export async function handleUpdateTask(request: Request, id: number) {
     milestoneId,
     sprintId,
     epicId,
+    value,
+    risk,
     startDate,
     dueDate,
     labelIds,
@@ -290,6 +312,9 @@ export async function handleUpdateTask(request: Request, id: number) {
   const setsDueDate = "dueDate" in body;
   // startDate three-valued (032), dueDate's twin: `{"startDate": null}` clears.
   const setsStartDate = "startDate" in body;
+  // value/risk three-valued (034), estimate's rule: `{"value": null}` unscores.
+  const setsValue = "value" in body;
+  const setsRisk = "risk" in body;
   // estimate is three-valued like dueDate (022): `{"estimate": null}` clears
   // it, so presence must be told apart from a PATCH that never mentions it.
   // type is two-valued like priority — `{"type": null}` is not a request.
@@ -333,6 +358,8 @@ export async function handleUpdateTask(request: Request, id: number) {
       setsMilestone ||
       setsSprint ||
       setsEpic ||
+      setsValue ||
+      setsRisk ||
       setsStartDate ||
       setsDueDate ||
       labelIds !== undefined ||
@@ -356,6 +383,10 @@ export async function handleUpdateTask(request: Request, id: number) {
         return badRequest("sprintId must be a sprint id or null");
       if (epicId !== undefined && epicId !== null && !Number.isInteger(epicId))
         return badRequest("epicId must be an epic id or null");
+      if (!isScore(value))
+        return badRequest("value must be an integer 0–10 or null");
+      if (!isScore(risk))
+        return badRequest("risk must be an integer 0–10 or null");
       if (!isDueDate(startDate))
         return badRequest("startDate must be a YYYY-MM-DD date or null");
       if (!isDueDate(dueDate))
@@ -391,6 +422,9 @@ export async function handleUpdateTask(request: Request, id: number) {
         ...(setsSprint ? { sprintId: sprintId as number | null } : {}),
         // Spread, the same shape (031).
         ...(setsEpic ? { epicId: epicId as number | null } : {}),
+        // Spread, estimate's shape (034): key present only when sent.
+        ...(setsValue ? { value: value as number | null } : {}),
+        ...(setsRisk ? { risk: risk as number | null } : {}),
         // Spread, dueDate's twin (032): the key must exist only when sent, or a
         // stray undefined would clear the start date on every title-only edit.
         ...(setsStartDate ? { startDate: startDate as string | null } : {}),

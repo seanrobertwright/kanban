@@ -112,6 +112,8 @@ tool(
     title: z.string().min(1),
     description: z.string().optional(),
     priority: priority.optional(),
+    value: z.number().int().min(0).max(10).optional(), // business value 0–10 (034)
+    risk: z.number().int().min(0).max(10).optional(), // risk 0–10 (034)
     startDate: z.string().optional(), // YYYY-MM-DD, when work begins (032)
     dueDate: z.string().optional(), // YYYY-MM-DD
     assignee,
@@ -122,7 +124,7 @@ tool(
 
 tool(
   "update_task",
-  "Edit a task's fields. Only the fields you pass change; omit the rest. Pass null to clear dueDate, startDate, assignee, estimate, or milestoneId. type is task|bug|story; estimate is effort in points (0 is valid); milestoneId aims the task at a milestone on its own board (get ids from list_board); startDate/dueDate are YYYY-MM-DD and together draw the task's Timeline bar.",
+  "Edit a task's fields. Only the fields you pass change; omit the rest. Pass null to clear dueDate, startDate, assignee, estimate, milestoneId, value, or risk. type is task|bug|story; estimate is effort in points (0 is valid); milestoneId aims the task at a milestone on its own board (get ids from list_board); startDate/dueDate are YYYY-MM-DD and together draw the task's Timeline bar; value/risk are 0–10 and, with estimate, yield the prioritisation score = value / (estimate × (1 + risk/10)).",
   {
     id: z.number().int(),
     title: z.string().min(1).optional(),
@@ -131,6 +133,8 @@ tool(
     type: taskType.optional(),
     estimate: z.number().int().min(0).nullish(),
     milestoneId: z.number().int().nullish(),
+    value: z.number().int().min(0).max(10).nullish(),
+    risk: z.number().int().min(0).max(10).nullish(),
     startDate: z.string().nullish(),
     dueDate: z.string().nullish(),
     assignee,

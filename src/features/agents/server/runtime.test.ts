@@ -303,6 +303,36 @@ describe("Door 1 runtime", () => {
     expect(task.estimate).toBeNull();
   });
 
+  it("score_task sets value/risk at auto tier and the score is computed", async () => {
+    h.turns = 1;
+    const taskId = (
+      await createTask(owner, { columnId: todo, title: "Triage me", estimate: 2 })
+    ).id;
+    h.script = async (tools) => {
+      await run(tools, "score_task").run({ id: taskId, value: 8, risk: 0 });
+    };
+    const runId = (await enqueue(taskId))!;
+    await executeRun(runId);
+
+    // Auto tier: nothing to review, the run succeeds outright.
+    const status = (await queryOne<{ s: string }>(
+      `SELECT status AS s FROM agent_run WHERE id = $1`,
+      [runId]
+    ))!.s;
+    expect(status).toBe("succeeded");
+
+    const task = (await getTask(owner, taskId))!;
+    expect(task.value).toBe(8);
+    // 8 / (2 × 1) = 4, the derived score the board ranks by.
+    expect(task.priorityScore).toBe(4);
+
+    const act = await queryOne<{ tier: string }>(
+      `SELECT tier FROM agent_action WHERE run_id = $1 AND tool = 'score_task'`,
+      [runId]
+    );
+    expect(act!.tier).toBe("auto");
+  });
+
   it("halts cleanly when the workspace budget cap is exceeded", async () => {
     // Set the cap just above what this workspace has already spent, so the
     // pre-loop check passes and the FIRST turn's usage is what pushes it over —

@@ -31,7 +31,7 @@ export type Tier = "auto" | "changeset" | "block";
  *
  *   auto      — comment, claim/release, the field edits that are internally
  *               reversible and trigger nothing outside the board (priority,
- *               labels, due date, estimate, type, milestone, rename), and
+ *               labels, due date, estimate, type, milestone, score, rename), and
  *               flagging a blocked-by edge
  *               (018's dependency: silent, idempotent, reversible by removal).
  *   changeset — the consequential moves §7.4 names by name: status (move),
@@ -50,6 +50,7 @@ export const DEFAULT_TIER: Record<string, Tier> = {
   set_due_date: "auto",
   set_estimate: "auto",
   set_type: "auto",
+  score_task: "auto",
   aim_at_milestone: "auto",
   rename_task: "auto",
   flag_blocker: "auto",

@@ -230,6 +230,22 @@ export interface Task {
    */
   epicId: number | null;
   /**
+   * Relative business value on a 0–10 scale (034), or null for unscored. Bounded
+   * so a score is comparable; feeds priorityScore's numerator.
+   */
+  value: number | null;
+  /**
+   * Relative risk / uncertainty, 0–10 (034), or null. Feeds priorityScore's
+   * denominator — higher risk discounts the score.
+   */
+  risk: number | null;
+  /**
+   * The derived prioritisation score (034): value / (estimate × (1 + risk/10)),
+   * or null until both value and a non-zero estimate exist. Read-only — computed
+   * in taskColumns from the three inputs, never written, never in a snapshot.
+   */
+  priorityScore: number | null;
+  /**
    * When work begins, 'YYYY-MM-DD', or null for no start date (032). dueDate's
    * string-not-Date discipline exactly — it pairs with dueDate to draw a task's
    * bar on the Timeline, where a lone date is only a point.
@@ -301,6 +317,10 @@ export interface CreateTaskInput {
   sprintId?: number | null;
   /** The epic to file under (031), or null/absent for none. */
   epicId?: number | null;
+  /** Business value 0–10 (034), or null/absent for unscored. */
+  value?: number | null;
+  /** Risk 0–10 (034), or null/absent. */
+  risk?: number | null;
   /** When work begins (032), or null/absent for no start date. dueDate's shape. */
   startDate?: string | null;
   dueDate?: string | null;
@@ -386,6 +406,14 @@ export interface UpdateTaskInput {
    * repository refuses a cross-board epic, assertEpicOnBoard's tenancy check.
    */
   epicId?: number | null;
+  /**
+   * Three-valued, estimate's rule (034): 0 is a real value, so `null` is the
+   * cleared (unscored) state and `undefined` leaves it alone. The score is
+   * derived, so there is nothing to set for it — only its inputs.
+   */
+  value?: number | null;
+  /** Three-valued, value's twin (034). */
+  risk?: number | null;
   /**
    * Three-valued, dueDate's rule (032): no date means "no start date", so `null`
    * is the cleared state and cannot also be the absent one. `undefined` leaves
