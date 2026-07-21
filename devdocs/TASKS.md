@@ -8,8 +8,8 @@ added here is the next session's starting menu.
 Companion docs: `SESSION_HANDOFF.md` (per-session narrative + gotchas),
 `prd.md` (the milestone bet), `features.md` (breadth catalogue),
 `../docs/task_management_feature_summary.md` (the 140-criterion scoreboard,
-64 ✅ / 76 ❌ as of 2026-07-20 — the M4 agile cluster plus the planning +
-collaboration sweep are now scored ✅).
+66 ✅ / 74 ❌ as of 2026-07-21 — the M4 agile cluster, the planning +
+collaboration sweep, and the Gantt + Goals/OKRs sweep are now scored ✅).
 
 Convention: `[x]` done → cite the commit; `[ ]` open → one line on the slice.
 Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
@@ -133,24 +133,47 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
       dynamic export columns. Deliberate cuts (stated in code): no activity/undo
       wiring, values not on cards. → `68b4697`
 
-## Next up — candidates, roughly by value
+## Done — 2026-07-21 planning + OKR sweep
 
-### Planning & Views breadth
-- [ ] **Gantt / critical path** — start_date (032) + dependencies (018) are the
-      groundwork; the Timeline draws bars, a Gantt adds dependency arrows and the
-      schedule-driving path.
-- [ ] **Goals/OKRs** — link tasks/milestones to measurable objectives.
+- [x] **Gantt / critical path** (036) — a sixth lens: the Timeline's bars with
+      the dependency graph (018) drawn on top. Blocked-by edges read board-wide
+      onto BoardData; arrows drawn in measured px (a ResizeObserver) from the same
+      fractions the % bars use, so they stay locked at any width. Critical path is
+      classic CPM longest-weighted-path in a pure, cycle-guarded schedule.ts (12
+      unit tests), shared with the refactored Timeline. → `52fcb19`
+- [x] **Custom-field values on cards / list columns** (035 follow-up) — a
+      customFields subquery in taskColumns (labels' twin), field defs on BoardData;
+      a name:value chip per answered field on cards (checkbox → Yes/No), one column
+      per field in the list. Still absent from TaskSnapshot — 035's undo cut holds.
+      Manager dialog onChanged → refresh. → `c7c0cca`
+- [x] **Custom-field activity/undo** (035 follow-up) — value edits log a
+      `customField.valued` row each, a dedicated CustomFieldValueSnapshot family
+      (not a widened TaskSnapshot) carrying the before/after string + field name.
+      No-op guard skips an unchanged set. Field-definition delete stays out of the
+      log — the larger cut 035 named. → `71bc4c1`
+- [x] **Goals / OKRs** (037) — objectives + N key results (measurable
+      start→target with clamped, decreasing-aware progress); tasks and milestones
+      link via objective_id (epic's SET-NULL twin). Full stack + ObjectivesDialog,
+      task/milestone objective pickers, export column, objective.* activity, board
+      rollup. Agent tools deferred (PRD §7 guardrail). → `17ca057`
+
+## Next up — candidates, roughly by value
 
 ### Collaboration breadth
 - [ ] **Rich text on task descriptions** — 033's `RichText` renders comment
       bodies; task descriptions still edit/show as plain textarea. Needs an
       edit/preview surface (the renderer already exists and is safe).
 
+### OKR follow-ups (037 cuts, if the wedge wants them)
+- [ ] **Objective agent tools** — a `set_objective` / `score_key_result` in both
+      doors so the wedge can move OKRs. Touches agent behaviour, so it goes through
+      `AskUserQuestion` first (PRD §7/§12).
+- [ ] **Key-result activity** — KR nudges are read live, not logged; a
+      `keyResult.*` family would put "moved NPS 40 → 45" in the feed.
+
 ### Custom-fields follow-ups (035 cuts, if the wedge wants them)
-- [ ] **Custom-field activity/undo** — snapshot values into the log so undo can
-      restore them (the fixed-shape TaskSnapshot problem 035 deferred).
-- [ ] **Custom-field values on cards / list columns** — surface answers beyond
-      the dialog + export (would want values on the board read / taskColumns).
+- [ ] **Custom-field values on the Gantt/Timeline** — answers show on cards and
+      list columns now; the schedule lenses do not read them.
 
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
