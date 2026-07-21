@@ -342,6 +342,7 @@ export function buildTools(
         title: z.string().min(1),
         description: z.string().optional(),
         priority: priority.optional(),
+        startDate: z.string().optional(),
         dueDate: z.string().optional(),
         labelIds: z.array(z.number().int()).optional(),
       }),

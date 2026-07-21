@@ -68,6 +68,8 @@ export interface TaskFormValues {
   sprintId: number | null;
   /** The epic to file under (031), or null. null clears, like dueDate. */
   epicId: number | null;
+  /** When work begins (032), or null. null clears, dueDate's shape. */
+  startDate: string | null;
   /** null clears the date. The input always has a value, so never absent. */
   dueDate: string | null;
   /** Ids, not refs — the form picks from a vocabulary the server already knows. */
@@ -215,6 +217,8 @@ export function TaskDialog({
   const [sprintId, setSprintId] = useState<string>("");
   // "" is "no epic" — the <option> stand-in for null (031).
   const [epicId, setEpicId] = useState<string>("");
+  // "" is "no start date" — the empty type="date" input, dueDate's shape (032).
+  const [startDate, setStartDate] = useState<string>(NO_DUE_DATE);
   const [dueDate, setDueDate] = useState<string>(NO_DUE_DATE);
   const [labelIds, setLabelIds] = useState<number[]>([]);
   // "" is "does not recur" — the <option> value standing in for null, since a DOM
@@ -259,6 +263,7 @@ export function TaskDialog({
       setMilestoneId(task?.milestoneId == null ? "" : String(task.milestoneId));
       setSprintId(task?.sprintId == null ? "" : String(task.sprintId));
       setEpicId(task?.epicId == null ? "" : String(task.epicId));
+      setStartDate(task?.startDate ?? NO_DUE_DATE);
       setDueDate(task?.dueDate ?? NO_DUE_DATE);
       // Back to ids: the task carries {id, name} because the log needs the name
       // (LabelRef), but the form's business is which labels, not what they are
@@ -313,6 +318,8 @@ export function TaskDialog({
         sprintId: sprintId === "" ? null : Number(sprintId),
         // "" is the DOM stand-in for "no epic"; the API speaks null.
         epicId: epicId === "" ? null : Number(epicId),
+        // "" is the emptied date input; the API speaks null (032), dueDate below.
+        startDate: startDate === NO_DUE_DATE ? null : startDate,
         // Converted for assigneeId's reason: "" is what an emptied date input
         // reports, and the API would read it as a malformed date rather than as
         // the clear it is.
@@ -463,30 +470,46 @@ export function TaskDialog({
               </select>
             </div>
           )}
-          {/* Side by side because they are one thought — PRD §9 calls these
-              "the fields an agent reasons over when triaging", and a human
-              triaging does the same: how urgent, and by when. */}
+          {/* Priority on its own row: PRD §9 calls it one of "the fields an
+              agent reasons over when triaging", and it now sits above the work's
+              window rather than beside a single date, since the window is two
+              dates (032). */}
+          <div className="grid gap-2">
+            <Label htmlFor="task-priority">Priority</Label>
+            <select
+              id="task-priority"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as TaskPriority)}
+              className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+            >
+              {/* Highest first: the reason to open this menu is almost always
+                  to raise a priority, and 'none' is where you already are. The
+                  stored order is lowest-first (it is a sort order, and DESC
+                  reads better than ASC in a query) — so this reverses a copy
+                  rather than reading PRIORITY_ORDER directly, which would
+                  silently reorder the enum for everyone. */}
+              {[...PRIORITY_ORDER].reverse().map((value) => (
+                <option key={value} value={value}>
+                  {PRIORITY_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          {/* The work's window, side by side because they are one span — when it
+              begins and when it is due, the two dates the Timeline draws as a bar
+              (032). Either may stand alone: a start with no due, or the reverse. */}
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label htmlFor="task-priority">Priority</Label>
-              <select
-                id="task-priority"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-              >
-                {/* Highest first: the reason to open this menu is almost always
-                    to raise a priority, and 'none' is where you already are. The
-                    stored order is lowest-first (it is a sort order, and DESC
-                    reads better than ASC in a query) — so this reverses a copy
-                    rather than reading PRIORITY_ORDER directly, which would
-                    silently reorder the enum for everyone. */}
-                {[...PRIORITY_ORDER].reverse().map((value) => (
-                  <option key={value} value={value}>
-                    {PRIORITY_LABELS[value]}
-                  </option>
-                ))}
-              </select>
+              <Label htmlFor="task-start-date">Start date</Label>
+              {/* type="date", dueDate's reasoning verbatim: its value is already
+                  'YYYY-MM-DD', so no parsing and no Date to drag a zoneless date
+                  through, and it clears to "" on its own. */}
+              <Input
+                id="task-start-date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="task-due-date">Due date</Label>

@@ -112,6 +112,7 @@ tool(
     title: z.string().min(1),
     description: z.string().optional(),
     priority: priority.optional(),
+    startDate: z.string().optional(), // YYYY-MM-DD, when work begins (032)
     dueDate: z.string().optional(), // YYYY-MM-DD
     assignee,
     labelIds: z.array(z.number().int()).optional(),
@@ -121,7 +122,7 @@ tool(
 
 tool(
   "update_task",
-  "Edit a task's fields. Only the fields you pass change; omit the rest. Pass null to clear dueDate, assignee, estimate, or milestoneId. type is task|bug|story; estimate is effort in points (0 is valid); milestoneId aims the task at a milestone on its own board (get ids from list_board).",
+  "Edit a task's fields. Only the fields you pass change; omit the rest. Pass null to clear dueDate, startDate, assignee, estimate, or milestoneId. type is task|bug|story; estimate is effort in points (0 is valid); milestoneId aims the task at a milestone on its own board (get ids from list_board); startDate/dueDate are YYYY-MM-DD and together draw the task's Timeline bar.",
   {
     id: z.number().int(),
     title: z.string().min(1).optional(),
@@ -130,6 +131,7 @@ tool(
     type: taskType.optional(),
     estimate: z.number().int().min(0).nullish(),
     milestoneId: z.number().int().nullish(),
+    startDate: z.string().nullish(),
     dueDate: z.string().nullish(),
     assignee,
     labelIds: z.array(z.number().int()).optional(),

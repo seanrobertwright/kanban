@@ -290,6 +290,12 @@ export interface TaskSnapshot {
    */
   sprintId?: number | null;
   /**
+   * Optional for 003's reason (032): `undefined` means "written before start
+   * dates", `null` means "had no start date". dueDate's 'YYYY-MM-DD'-not-Date
+   * discipline exactly, and JSONB-frozen for the same reason.
+   */
+  startDate?: string | null;
+  /**
    * Optional for the same reason, and three-valued for the same reason as
    * assigneeId: `undefined` means "written before 006", `null` means "had no due
    * date". 'YYYY-MM-DD' when set — never a Date, in the log least of all, where

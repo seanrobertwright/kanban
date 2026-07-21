@@ -184,6 +184,8 @@ describe("activity log", () => {
         sprintId: null,
         // Null (filed under no epic), present for the same reason (031).
         epicId: null,
+        // Null (no start date), present for the same reason (032).
+        startDate: null,
         dueDate: "2026-08-01",
         // Name included: the label is what undo needs to restore, and 007's
         // whole point is that this stays readable after the label is deleted.

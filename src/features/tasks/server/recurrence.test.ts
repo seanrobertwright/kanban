@@ -69,6 +69,7 @@ describe("recurrence", () => {
       columnId: todoId,
       title: "Weekly report",
       priority: "high",
+      startDate: "2026-01-28",
       dueDate: "2026-01-31",
       recurrence: "weekly",
     });
@@ -76,13 +77,15 @@ describe("recurrence", () => {
 
     await moveTask(alice, task.id, { columnId: doneId, position: 0 });
 
-    // The successor lands in the first column, carrying the shape and a date
-    // advanced one week — Jan 31 + 7 days.
+    // The successor lands in the first column, carrying the shape and both dates
+    // advanced one week — the whole window slides, so a Wed→Sat task recurs
+    // Wed→Sat (032): Jan 28 + 7 and Jan 31 + 7.
     const successors = (await tasksIn(todoId)).filter(
       (t) => t.title === "Weekly report" && t.id !== task.id
     );
     expect(successors).toHaveLength(1);
     expect(successors[0].priority).toBe("high");
+    expect(successors[0].startDate).toBe("2026-02-04");
     expect(successors[0].dueDate).toBe("2026-02-07");
     expect(successors[0].recurrence).toBe("weekly");
 

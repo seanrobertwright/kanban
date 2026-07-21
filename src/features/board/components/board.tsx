@@ -20,6 +20,7 @@ import {
   Columns3,
   Download,
   Flag,
+  GanttChartSquare,
   Inbox,
   Layers,
   LayoutTemplate,
@@ -69,6 +70,7 @@ import {
 } from "./board-filter-bar";
 import { BacklogView } from "./backlog-view";
 import { CalendarView } from "./calendar-view";
+import { TimelineView } from "./timeline-view";
 import { ListView } from "./list-view";
 import { SavedViews } from "@/features/views/components/saved-views";
 import type { BoardViewMode, SavedView } from "@/features/views/types";
@@ -548,6 +550,9 @@ export function Board({
             <ToggleGroupItem value="calendar">
               <CalendarDays /> Calendar
             </ToggleGroupItem>
+            <ToggleGroupItem value="timeline">
+              <GanttChartSquare /> Timeline
+            </ToggleGroupItem>
             <ToggleGroupItem value="backlog">
               <Inbox /> Backlog
             </ToggleGroupItem>
@@ -643,6 +648,15 @@ export function Board({
         />
       ) : view === "calendar" ? (
         <CalendarView
+          columns={cols}
+          itemsByColumn={visibleItems}
+          membersById={membersById}
+          agentsById={agentsById}
+          labelsById={labelsById}
+          onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
+        />
+      ) : view === "timeline" ? (
+        <TimelineView
           columns={cols}
           itemsByColumn={visibleItems}
           membersById={membersById}

@@ -58,11 +58,13 @@ const snapshot = taskSnapshot;
  * undo without undoing the others.
  */
 function sameDetails(a: TaskSnapshot, b: TaskSnapshot): boolean {
-  // type, estimate (022) and milestone (026) ride under task.updated rather
-  // than earning actions of their own: none is a changeset unit any milestone
-  // reviews separately, and 006's test — an action exists when its inverse is
-  // something someone would want to apply on its own — has no taker for
-  // "un-retype" apart from "revert the edit".
+  // type, estimate (022), milestone (026) and start date (032) ride under
+  // task.updated rather than earning actions of their own: none is a changeset
+  // unit any milestone reviews separately, and 006's test — an action exists
+  // when its inverse is something someone would want to apply on its own — has
+  // no taker for "un-retype" apart from "revert the edit". A start date rides
+  // here where dueDate earns task.scheduled only because dueDate is a 006-era
+  // field; every field added since travels under task.updated.
   return (
     a.title === b.title &&
     a.description === b.description &&
@@ -70,7 +72,8 @@ function sameDetails(a: TaskSnapshot, b: TaskSnapshot): boolean {
     (a.estimate ?? null) === (b.estimate ?? null) &&
     (a.milestoneId ?? null) === (b.milestoneId ?? null) &&
     (a.sprintId ?? null) === (b.sprintId ?? null) &&
-    (a.epicId ?? null) === (b.epicId ?? null)
+    (a.epicId ?? null) === (b.epicId ?? null) &&
+    (a.startDate ?? null) === (b.startDate ?? null)
   );
 }
 
@@ -301,13 +304,18 @@ async function spawnNextOccurrence(
   const { assigneeId, agentId } = assigneeColumns(before.assignee);
   const { rows } = await client.query<{ id: number }>(
     `INSERT INTO task (column_id, title, description, position, assignee_id,
-                       agent_id, priority, type, estimate, due_date)
+                       agent_id, priority, type, estimate, due_date, start_date)
      VALUES ($1, $2, $3,
              (SELECT COALESCE(MAX(position) + 1, 0) FROM task
                WHERE column_id = $1 AND parent_id IS NULL),
              $4, $5, $6, $7, $8,
              CASE WHEN $9::date IS NULL THEN NULL
-                  ELSE ($9::date + $10::interval)::date END)
+                  ELSE ($9::date + $10::interval)::date END,
+             -- The start date advances by the same interval as the due date, so a
+             -- weekly task that ran Mon→Fri recurs Mon→Fri the next week. $10 (the
+             -- interval) serves both; a null start date stays null.
+             CASE WHEN $11::date IS NULL THEN NULL
+                  ELSE ($11::date + $10::interval)::date END)
      RETURNING id`,
     [
       firstColumnId,
@@ -320,6 +328,7 @@ async function spawnNextOccurrence(
       before.estimate,
       before.dueDate,
       RECURRENCE_INTERVAL[frequency],
+      before.startDate,
     ]
   );
   const newId = rows[0].id;
@@ -491,11 +500,11 @@ export async function createTask(
     const { rows } = await client.query<{ id: number }>(
       `INSERT INTO task (column_id, title, description, position, assignee_id,
                          agent_id, priority, type, estimate, milestone_id,
-                         sprint_id, due_date, parent_id, epic_id)
+                         sprint_id, due_date, parent_id, epic_id, start_date)
        VALUES ($1, $2, $3,
                (SELECT COALESCE(MAX(position) + 1, 0) FROM task
                  WHERE column_id = $1 AND parent_id IS NOT DISTINCT FROM $12),
-               $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+               $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id`,
       [
         input.columnId,
@@ -517,6 +526,9 @@ export async function createTask(
         // subquery above references $12 (parent_id), so renumbering would move a
         // param out from under it. epic has no fallback to state — null is the value.
         input.epicId ?? null,
+        // $14, appended for epic_id's reason — $12 must stay parent_id. A start
+        // date has no fallback to state: null is the value (032).
+        input.startDate ?? null,
       ]
     );
 
@@ -575,6 +587,8 @@ export async function updateTask(
   // setting 'none', so null keeps its ordinary meaning of "absent" there.
   const setsAssignee = "assignee" in input;
   const setsDueDate = "dueDate" in input;
+  // Three-valued (032), dueDate's twin: null clears the start date.
+  const setsStartDate = "startDate" in input;
   // Three-valued like dueDate (022): null clears the estimate, a number sets
   // it, absent leaves it — 0 is an estimate, so no COALESCE sentinel exists.
   const setsEstimate = "estimate" in input;
@@ -668,7 +682,10 @@ export async function updateTask(
                               ELSE due_date END,
               epic_id = CASE WHEN $17::boolean
                              THEN $18::integer
-                             ELSE epic_id END
+                             ELSE epic_id END,
+              start_date = CASE WHEN $19::boolean
+                                THEN $20::date
+                                ELSE start_date END
         WHERE id = $1
         RETURNING ${TASK_COLUMNS}`,
       [
@@ -690,6 +707,8 @@ export async function updateTask(
         input.dueDate ?? null,
         setsEpic,
         input.epicId ?? null,
+        setsStartDate,
+        input.startDate ?? null,
       ]
     );
     const after = rows[0];

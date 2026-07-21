@@ -230,6 +230,12 @@ export interface Task {
    */
   epicId: number | null;
   /**
+   * When work begins, 'YYYY-MM-DD', or null for no start date (032). dueDate's
+   * string-not-Date discipline exactly — it pairs with dueDate to draw a task's
+   * bar on the Timeline, where a lone date is only a point.
+   */
+  startDate: string | null;
+  /**
    * A calendar date as 'YYYY-MM-DD', or null for no due date.
    *
    * A string rather than a Date, deliberately and all the way down: 006 stores
@@ -295,6 +301,8 @@ export interface CreateTaskInput {
   sprintId?: number | null;
   /** The epic to file under (031), or null/absent for none. */
   epicId?: number | null;
+  /** When work begins (032), or null/absent for no start date. dueDate's shape. */
+  startDate?: string | null;
   dueDate?: string | null;
   /** Ids, not refs: the caller says which labels, the database knows their names. */
   labelIds?: number[];
@@ -378,6 +386,12 @@ export interface UpdateTaskInput {
    * repository refuses a cross-board epic, assertEpicOnBoard's tenancy check.
    */
   epicId?: number | null;
+  /**
+   * Three-valued, dueDate's rule (032): no date means "no start date", so `null`
+   * is the cleared state and cannot also be the absent one. `undefined` leaves
+   * it alone; `null` clears it.
+   */
+  startDate?: string | null;
   /**
    * Three-valued, like assigneeId and for the identical reason: there is no date
    * that means "no due date", so `null` is the cleared state and cannot also be

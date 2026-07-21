@@ -89,6 +89,7 @@ function task(over: Partial<Task> = {}): Task {
     milestoneId: null,
     epicId: null,
     sprintId: null,
+    startDate: null,
     recurrence: null,
     attachmentCount: 0,
     checklist: { total: 0, done: 0 },

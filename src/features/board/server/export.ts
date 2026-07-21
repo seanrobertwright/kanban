@@ -41,6 +41,7 @@ interface ExportRow {
   milestone: string | null;
   epic: string | null;
   sprint: string | null;
+  startDate: string | null;
   dueDate: string | null;
   labels: string[];
   parentTask: string | null;
@@ -59,6 +60,7 @@ const CSV_COLUMNS: [header: string, read: (r: ExportRow) => string | number | nu
   ["milestone", (r) => r.milestone],
   ["epic", (r) => r.epic],
   ["sprint", (r) => r.sprint],
+  ["start_date", (r) => r.startDate],
   ["due_date", (r) => r.dueDate],
   // One cell, "; "-joined: a CSV has no list type, and a second file of
   // task-label pairs would be normalization nobody asked a spreadsheet for.
@@ -140,6 +142,7 @@ export async function handleExportBoard(request: Request, id: string) {
         t.epicId === null ? null : (epicName.get(t.epicId) ?? null),
       sprint:
         t.sprintId === null ? null : (sprintName.get(t.sprintId) ?? null),
+      startDate: t.startDate,
       dueDate: t.dueDate,
       labels: t.labels.map((l) => l.name),
       parentTask: t.parentId ? (titleById.get(t.parentId) ?? null) : null,

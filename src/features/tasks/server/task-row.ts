@@ -45,7 +45,8 @@ export function taskColumns(alias = ""): string {
           ${p}position, ${assigneeObject(p)} AS assignee, ${p}priority,
           ${p}type, ${p}estimate, ${p}milestone_id AS "milestoneId",
           ${p}sprint_id AS "sprintId", ${p}epic_id AS "epicId",
-          ${p}due_date AS "dueDate", ${p}parent_id AS "parentId",
+          ${p}start_date AS "startDate", ${p}due_date AS "dueDate",
+          ${p}parent_id AS "parentId",
           ${claimedByObject(p)} AS "claimedBy",
           ${p}claimed_at AS "claimedAt",
           ${p}created_at AS "createdAt",
@@ -295,6 +296,9 @@ export function taskSnapshot(task: Task): TaskSnapshot {
     milestoneId: task.milestoneId,
     sprintId: task.sprintId,
     epicId: task.epicId,
+    // Both dates ride every snapshot for 006's reason: undo restores what the
+    // task *was*, and a date missing here is one undo silently fails to restore.
+    startDate: task.startDate,
     dueDate: task.dueDate,
     labels: task.labels,
     // Never changes, so it is dead weight to every diff and load-bearing to the
