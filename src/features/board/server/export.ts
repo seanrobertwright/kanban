@@ -3,6 +3,7 @@ import { unauthorized } from "@/features/auth/server/session";
 import { listAssignees } from "@/features/agents/server/roster";
 import { taskColumns } from "@/features/tasks/server/repository";
 import type { Task } from "@/features/tasks/types";
+import { listBoardFields } from "@/features/custom-fields/server/repository";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import { query } from "@/shared/db/client";
 import { getBoard } from "./repository";
@@ -49,6 +50,10 @@ interface ExportRow {
   labels: string[];
   parentTask: string | null;
   createdAt: string;
+  /** The task's answers to the board's custom fields (035), keyed by field name.
+   *  Empty when the board defines none. Dynamic, so it rides beside the fixed
+   *  columns rather than in CSV_COLUMNS — toCsv appends one column per field. */
+  customFields: Record<string, string | null>;
 }
 
 const CSV_COLUMNS: [header: string, read: (r: ExportRow) => string | number | null][] = [
@@ -75,10 +80,20 @@ const CSV_COLUMNS: [header: string, read: (r: ExportRow) => string | number | nu
   ["created_at", (r) => r.createdAt],
 ];
 
-function toCsv(rows: ExportRow[]): string {
-  const lines = [CSV_COLUMNS.map(([header]) => header).join(",")];
+function toCsv(rows: ExportRow[], fieldNames: string[]): string {
+  const header = [
+    ...CSV_COLUMNS.map(([h]) => h),
+    // One column per custom field (035), appended after the fixed set so the
+    // stable columns keep their positions whatever a board defines.
+    ...fieldNames.map((n) => csvField(n)),
+  ].join(",");
+  const lines = [header];
   for (const row of rows) {
-    lines.push(CSV_COLUMNS.map(([, read]) => csvField(read(row))).join(","));
+    const cells = [
+      ...CSV_COLUMNS.map(([, read]) => csvField(read(row))),
+      ...fieldNames.map((n) => csvField(row.customFields[n] ?? null)),
+    ];
+    lines.push(cells.join(","));
   }
   // CRLF is RFC-4180's line ending, and the one Excel is happiest with.
   return lines.join("\r\n") + "\r\n";
@@ -127,6 +142,29 @@ export async function handleExportBoard(request: Request, id: string) {
     const epicName = new Map(data.epics.map((e) => [e.id, e.name]));
     const sprintName = new Map(data.sprints.map((s) => [s.id, s.name]));
 
+    // Custom fields (035): the board's definitions in display order, and every
+    // answer, folded into a per-task {name: value} map. One extra query each —
+    // the export already does its own reads, and these join the same way.
+    const customFields = await listBoardFields(principal, boardId);
+    const fieldNames = customFields.map((f) => f.name);
+    const values = await query<{
+      taskId: number;
+      name: string;
+      value: string;
+    }>(
+      `SELECT cfv.task_id AS "taskId", cf.name, cfv.value
+         FROM custom_field_value cfv
+         JOIN custom_field cf ON cf.id = cfv.field_id
+        WHERE cf.board_id = $1`,
+      [boardId]
+    );
+    const valuesByTask = new Map<number, Record<string, string>>();
+    for (const v of values) {
+      const row = valuesByTask.get(v.taskId) ?? {};
+      row[v.name] = v.value;
+      valuesByTask.set(v.taskId, row);
+    }
+
     const rows: ExportRow[] = allTasks.map((t) => ({
       id: t.id,
       title: t.title,
@@ -156,6 +194,7 @@ export async function handleExportBoard(request: Request, id: string) {
       labels: t.labels.map((l) => l.name),
       parentTask: t.parentId ? (titleById.get(t.parentId) ?? null) : null,
       createdAt: t.createdAt,
+      customFields: valuesByTask.get(t.id) ?? {},
     }));
 
     const filename = `board-${boardId}-export.${format}`;
@@ -167,7 +206,7 @@ export async function handleExportBoard(request: Request, id: string) {
         },
       });
     }
-    return new Response(toCsv(rows), {
+    return new Response(toCsv(rows, fieldNames), {
       headers: {
         "content-type": "text/csv; charset=utf-8",
         "content-disposition": `attachment; filename="${filename}"`,

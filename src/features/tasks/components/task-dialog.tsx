@@ -11,6 +11,7 @@ import { AttachmentSection } from "@/features/attachments/components/attachment-
 import { ChecklistSection } from "@/features/checklists/components/checklist-section";
 import { DependencySection } from "@/features/dependencies/components/dependency-section";
 import { CommentThread } from "@/features/comments/components/comment-thread";
+import { CustomFieldsSection } from "@/features/custom-fields/components/custom-fields-section";
 import { TimeSection } from "@/features/time/components/time-section";
 import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
@@ -803,6 +804,13 @@ export function TaskDialog({
                 key={`time-${task.id}`}
                 taskId={task.id}
                 onChanged={() => setActivityVersion((v) => v + 1)}
+              />
+              {/* The board's custom-field answers (035). Renders nothing when the
+                  board defines no fields, so it is inert until opted into. No
+                  onChanged: custom fields are outside the activity log by design. */}
+              <CustomFieldsSection
+                key={`fields-${task.id}`}
+                taskId={task.id}
               />
               {/* An agent run's review sits above the thread: it is what a human
                   came to this task to resolve when the agent has proposed work.

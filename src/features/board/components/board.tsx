@@ -27,6 +27,7 @@ import {
   List,
   Plus,
   Rocket,
+  SlidersHorizontal,
   Tags,
 } from "lucide-react";
 
@@ -55,6 +56,7 @@ import { fetchBoard } from "../client/api";
 import type { Column } from "../types";
 import { BoardColumn } from "./board-column";
 import { InsightsDialog } from "./insights-dialog";
+import { CustomFieldsDialog } from "@/features/custom-fields/components/custom-fields-dialog";
 import { MilestonesDialog } from "@/features/milestones/components/milestones-dialog";
 import type { Milestone } from "@/features/milestones/types";
 import { EpicsDialog } from "@/features/epics/components/epics-dialog";
@@ -204,6 +206,7 @@ export function Board({
   const [epicsOpen, setEpicsOpen] = useState(false);
   const [sprints, setSprints] = useState<Sprint[]>(initialSprints);
   const [sprintsOpen, setSprintsOpen] = useState(false);
+  const [fieldsOpen, setFieldsOpen] = useState(false);
   const [doneColumnId, setDoneColumnId] = useState<number | null>(
     initialDoneColumnId
   );
@@ -601,6 +604,14 @@ export function Board({
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
+            onClick={() => setFieldsOpen(true)}
+          >
+            <SlidersHorizontal /> Fields
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
             onClick={() => setInsightsOpen(true)}
           >
             <ChartNoAxesColumn /> Insights
@@ -857,6 +868,12 @@ export function Board({
         canEdit={canEdit}
         onOpenChange={setEpicsOpen}
         onChanged={refresh}
+      />
+      <CustomFieldsDialog
+        boardId={boardId}
+        open={fieldsOpen}
+        canEdit={canEdit}
+        onOpenChange={setFieldsOpen}
       />
       <InsightsDialog
         boardId={boardId}
