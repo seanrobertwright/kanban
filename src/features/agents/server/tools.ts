@@ -37,6 +37,7 @@ import { gate, type RunContext } from "./gate";
  */
 
 const priority = z.enum(["none", "low", "medium", "high", "urgent"]);
+const taskType = z.enum(["task", "bug", "story"]);
 const assignee = z
   .object({ type: z.enum(["human", "agent"]), id: z.string().min(1) })
   .nullable();
@@ -189,6 +190,69 @@ export function buildTools(
           proposal: dueDate
             ? `set task ${id} due date to ${dueDate}`
             : `clear task ${id} due date`,
+        }),
+    }),
+    betaZodTool({
+      name: "set_estimate",
+      description:
+        "Set a task's effort estimate in points (022), or null to clear it. 0 is a valid estimate (\"free\"); null means unestimated.",
+      inputSchema: z.object({
+        id: z.number().int(),
+        estimate: z.number().int().min(0).nullable(),
+      }),
+      run: ({ id, estimate }) =>
+        gate(ctx, {
+          tool: "set_estimate",
+          input: { id, estimate },
+          taskId: id,
+          execute: () => updateTask(p, id, { estimate }),
+          describe: () =>
+            estimate === null
+              ? `Cleared task ${id} estimate.`
+              : `Set task ${id} estimate to ${estimate} points.`,
+          proposal:
+            estimate === null
+              ? `clear task ${id} estimate`
+              : `set task ${id} estimate to ${estimate} points`,
+        }),
+    }),
+    betaZodTool({
+      name: "set_type",
+      description:
+        "Set what kind of work a task is (task | bug | story) — the triage classification (022).",
+      inputSchema: z.object({ id: z.number().int(), type: taskType }),
+      run: ({ id, type }) =>
+        gate(ctx, {
+          tool: "set_type",
+          input: { id, type },
+          taskId: id,
+          execute: () => updateTask(p, id, { type }),
+          describe: () => `Set task ${id} type to ${type}.`,
+          proposal: `set task ${id} type to ${type}`,
+        }),
+    }),
+    betaZodTool({
+      name: "aim_at_milestone",
+      description:
+        "Aim a task at one of its board's milestones (026), or null to un-aim it. Get the milestone id from list_board or a task already aimed at it; a milestone on another board is refused.",
+      inputSchema: z.object({
+        id: z.number().int(),
+        milestoneId: z.number().int().nullable(),
+      }),
+      run: ({ id, milestoneId }) =>
+        gate(ctx, {
+          tool: "aim_at_milestone",
+          input: { id, milestoneId },
+          taskId: id,
+          execute: () => updateTask(p, id, { milestoneId }),
+          describe: () =>
+            milestoneId === null
+              ? `Un-aimed task ${id} from its milestone.`
+              : `Aimed task ${id} at milestone ${milestoneId}.`,
+          proposal:
+            milestoneId === null
+              ? `un-aim task ${id} from its milestone`
+              : `aim task ${id} at milestone ${milestoneId}`,
         }),
     }),
     betaZodTool({

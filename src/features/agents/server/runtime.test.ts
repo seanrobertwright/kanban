@@ -8,6 +8,7 @@ import {
   getDefaultBoard,
 } from "@/features/workspaces/server/repository";
 import { createTask, getTask } from "@/features/tasks/server/repository";
+import { createMilestone } from "@/features/milestones/server/repository";
 import { pool, query, queryOne } from "@/shared/db/client";
 
 /**
@@ -70,6 +71,7 @@ const run = (tools: { name: string; run: (a: unknown) => unknown }[], name: stri
 describe("Door 1 runtime", () => {
   let owner: string;
   let workspaceId: string;
+  let boardId: number;
   let todo: number;
   let done: number;
   let agentId: string;
@@ -77,7 +79,7 @@ describe("Door 1 runtime", () => {
   beforeAll(async () => {
     owner = await createUser("d1-owner");
     await ensurePersonalWorkspace(owner, "D1");
-    const boardId = (await getDefaultBoard(owner))!.id;
+    boardId = (await getDefaultBoard(owner))!.id;
     const board = (await getBoard(owner, boardId))!;
     todo = board.columns[0].id;
     done = board.columns[board.columns.length - 1].id;
@@ -237,6 +239,68 @@ describe("Door 1 runtime", () => {
     );
     expect(act!.tier).toBe("auto");
     expect(act!.activityId).toBeNull();
+  });
+
+  it("set_estimate / set_type / aim_at_milestone land immediately at auto tier", async () => {
+    h.turns = 1;
+    const taskId = await seedTask();
+    const milestone = await createMilestone(
+      owner,
+      boardId,
+      { name: "v1" },
+      { type: "human", id: owner }
+    );
+
+    h.script = async (tools) => {
+      await run(tools, "set_estimate").run({ id: taskId, estimate: 5 });
+      await run(tools, "set_type").run({ id: taskId, type: "bug" });
+      await run(tools, "aim_at_milestone").run({
+        id: taskId,
+        milestoneId: milestone.id,
+      });
+    };
+    const runId = (await enqueue(taskId))!;
+    await executeRun(runId);
+
+    // No changeset-tier call, so the run succeeds outright — the field edits are
+    // internally reversible and touch nothing outside the board.
+    const status = (await queryOne<{ s: string }>(
+      `SELECT status AS s FROM agent_run WHERE id = $1`,
+      [runId]
+    ))!.s;
+    expect(status).toBe("succeeded");
+
+    // All three landed on the real board, agent-authored.
+    const task = (await getTask(owner, taskId))!;
+    expect(task.estimate).toBe(5);
+    expect(task.type).toBe("bug");
+    expect(task.milestoneId).toBe(milestone.id);
+
+    // Recorded in the agent-action trail, each at the auto tier.
+    const acts = await query<{ tool: string; tier: string }>(
+      `SELECT tool, tier FROM agent_action WHERE run_id = $1 ORDER BY created_at`,
+      [runId]
+    );
+    expect(acts).toEqual([
+      { tool: "set_estimate", tier: "auto" },
+      { tool: "set_type", tier: "auto" },
+      { tool: "aim_at_milestone", tier: "auto" },
+    ]);
+  });
+
+  it("set_estimate with null clears the estimate", async () => {
+    h.turns = 1;
+    const taskId = (
+      await createTask(owner, { columnId: todo, title: "Estimated", estimate: 8 })
+    ).id;
+    h.script = async (tools) => {
+      await run(tools, "set_estimate").run({ id: taskId, estimate: null });
+    };
+    const runId = (await enqueue(taskId))!;
+    await executeRun(runId);
+
+    const task = (await getTask(owner, taskId))!;
+    expect(task.estimate).toBeNull();
   });
 
   it("halts cleanly when the workspace budget cap is exceeded", async () => {

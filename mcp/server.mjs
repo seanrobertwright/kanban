@@ -74,6 +74,7 @@ function tool(name, description, inputSchema, run) {
 }
 
 const priority = z.enum(["none", "low", "medium", "high", "urgent"]);
+const taskType = z.enum(["task", "bug", "story"]);
 
 // An assignee is a principal (011): a person or an agent. {type,id} rather than a
 // bare id so one field carries both — pass null to unassign. Get a human's id
@@ -120,12 +121,15 @@ tool(
 
 tool(
   "update_task",
-  "Edit a task's fields. Only the fields you pass change; omit the rest. Pass null to clear dueDate or assignee.",
+  "Edit a task's fields. Only the fields you pass change; omit the rest. Pass null to clear dueDate, assignee, estimate, or milestoneId. type is task|bug|story; estimate is effort in points (0 is valid); milestoneId aims the task at a milestone on its own board (get ids from list_board).",
   {
     id: z.number().int(),
     title: z.string().min(1).optional(),
     description: z.string().optional(),
     priority: priority.optional(),
+    type: taskType.optional(),
+    estimate: z.number().int().min(0).nullish(),
+    milestoneId: z.number().int().nullish(),
     dueDate: z.string().nullish(),
     assignee,
     labelIds: z.array(z.number().int()).optional(),
