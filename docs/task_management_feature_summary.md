@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-19):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals).
+**Implementation status (2026-07-20):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **60 ✅ / 80 ❌**.
 
 ## Scoring Scale
 
@@ -81,15 +81,15 @@ These features are most important for software, product, and agile delivery team
 
 | Feature | Summary |
 |---|---|
-| ❌ Backlog management | Prioritized queue of future work. |
-| ❌ Epics | Larger bodies of work composed of stories, tasks, or issues. |
+| ✅ Backlog management | Prioritized queue of future work. |
+| ✅ Epics | Larger bodies of work composed of stories, tasks, or issues. |
 | ✅ User stories | Product-delivery work item framed around user value. |
-| ❌ Sprints/iterations | Timeboxed delivery cycles. |
-| ❌ Scrum support | Native support for Scrum planning, execution, and review patterns. |
+| ✅ Sprints/iterations | Timeboxed delivery cycles. |
+| ✅ Scrum support | Native support for Scrum planning, execution, and review patterns. |
 | ✅ Kanban WIP limits | Limits on work in progress per board column or stage. |
 | ✅ Story points | Relative effort or complexity estimates. |
-| ❌ Velocity | Tracking completed work per sprint or iteration. |
-| ❌ Burndown chart | Sprint progress chart showing remaining work over time. |
+| ✅ Velocity | Tracking completed work per sprint or iteration. |
+| ✅ Burndown chart | Sprint progress chart showing remaining work over time. |
 | ✅ Release planning | Grouping work into versions, releases, or launch plans. |
 | ❌ Product discovery | Support for ideas, research, feedback, validation, or discovery work. |
 | ❌ Feedback intake/portal | Dedicated intake channel for customer or stakeholder feedback. |

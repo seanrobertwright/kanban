@@ -8,7 +8,7 @@ added here is the next session's starting menu.
 Companion docs: `SESSION_HANDOFF.md` (per-session narrative + gotchas),
 `prd.md` (the milestone bet), `features.md` (breadth catalogue),
 `../docs/task_management_feature_summary.md` (the 140-criterion scoreboard,
-55 ✅ / 85 ❌).
+60 ✅ / 80 ❌ as of 2026-07-20 — the M4 agile cluster is now scored ✅).
 
 Convention: `[x]` done → cite the commit; `[ ]` open → one line on the slice.
 Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
@@ -95,8 +95,18 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
       native agents landed in M2, pointing at `gate.ts`. → `7774f39`
 
 ### Agent tools for the new fields (let the wedge use what this sweep built)
-- [ ] **set_estimate / set_type / aim_at_milestone / log_time** in both doors
-      (runtime `tools.ts` + `mcp/server.mjs`), gated like the existing tools.
+- [x] **set_estimate / set_type / aim_at_milestone** in both doors — Door 1 gets
+      three narrow tools (`tools.ts`), each auto tier in `DEFAULT_TIER` (field
+      edits: internally reversible, silent, trigger nothing off-board); Door 2
+      extends the coarse `update_task` schema with `type` / `estimate` /
+      `milestoneId` (the PATCH route already accepts them). All ride `updateTask`,
+      so the three-valued clears (estimate/milestone null) work as-is. → `26798e5`
+- [ ] ~~**log_time** as an agent tool~~ — dropped by design. 027 and
+      `time/server/handlers.ts` both state it: a time entry is a *human's* minute
+      ledger, and an agent's spend is metered in dollars by the run's cost
+      telemetry, not in minutes — and the write path only accepts a human session.
+      Logging agent minutes would overturn that documented invariant, so the tool
+      is intentionally not built.
 
 ### Planning & Views breadth
 - [ ] **Timeline view** — needs a task start-date field; estimate/milestone
