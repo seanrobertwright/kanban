@@ -281,6 +281,22 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–042.
       No activity log (pre-commitment plumbing, forms' cut). 5 DB tests + 8 pure.
       **Flips two scoreboard rows.**
 
+- [x] **Teams + Scaled Agile / SAFe** (044) — the layer this app was missing to
+      express scaled agile end to end. Three of SAFe's four layers already
+      existed (the workspace Portfolio view, the Program/ART grouping 040, the
+      Board=project); 044 adds the Team layer (`team` workspace-scoped +
+      `team_member` join + `board.team_id` SET NULL) and a pure `buildScaledAgile`
+      that *composes* the whole cake — Portfolio(totals) → ART(program) →
+      Team → Board — by reusing `summarizePortfolio` and mirroring
+      `buildProgramsOverview`'s grouping, boards carrying their owning team. Reads
+      viewer+; team create/rename/delete, roster, and board→team ownership are
+      admin (workspace-structure, §7.4). Roster guarded to workspace members
+      (capacity's guard); board→team same-workspace guarded (setBoardProgram's
+      twin); team delete SET-NULLs boards. ScaledAgileButton in the header beside
+      Programs/Portfolio, self-fetching, with per-board team pickers + roster
+      management. No activity log (workspace-level, portfolio/programs precedent).
+      3 DB tests + 3 pure. **Closes the Agile & Product area (14/14 ✅).**
+
 ## Rocks sweep — outcome
 
 Both target capability areas are now fully native: **Core Work Items 14/14 ✅**

@@ -11,6 +11,7 @@ import { listLabels } from "@/features/labels/server/repository";
 import { BoardSwitcher } from "@/features/workspaces/components/board-switcher";
 import { PortfolioButton } from "@/features/workspaces/components/portfolio-dialog";
 import { ProgramsButton } from "@/features/programs/components/programs-dialog";
+import { ScaledAgileButton } from "@/features/teams/components/scaled-agile-dialog";
 import { AuthzError } from "@/features/workspaces/server/authz";
 import {
   listMembers,
@@ -112,6 +113,10 @@ export default async function Home({
         </div>
         <div className="flex items-center gap-2">
           <ProgramsButton
+            workspaceId={data.board.workspaceId}
+            canManage={canDeleteColumns}
+          />
+          <ScaledAgileButton
             workspaceId={data.board.workspaceId}
             canManage={canDeleteColumns}
           />
