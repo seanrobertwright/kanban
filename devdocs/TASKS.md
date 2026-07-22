@@ -487,5 +487,19 @@ the last three Agile rocks — Product discovery, Feedback intake, Scaled
 Agile/SAFe). Scoreboard 79 ✅ / 61 ❌. Full suite 541 tests / 61 files green;
 tsc/eslint/build clean per feature.
 
+## Phase 2 — Developer & DevOps / Git (building, per devdocs/SPEC.md)
+
+- [x] **Secret encryption at rest** (6.5, pulled forward) — the enabler Phase 2's
+      git-host credential rides. `shared/crypto/secret-box.ts`: an app-side
+      AES-256-GCM box keyed by `ENCRYPTION_KEY` (falling back to
+      `BETTER_AUTH_SECRET`, so it works in every deployment that already runs),
+      minting self-describing `v1.<iv>.<tag>.<ct>` tokens. AEAD means tampering is
+      a hard decryption failure, not silent corruption; the version prefix is the
+      seam for later key rotation. Does not retrofit 025's plaintext webhook key
+      (that signs outbound only — its own commit). Pure, 8 unit tests (round-trip,
+      IV uniqueness, tamper→throw, malformed→throw). **Flips the Encryption
+      scoreboard row** (92 ✅ / 40 ❌). SPEC's build sequence: 6.5 lands before
+      Phase 2/7 store any third-party token.
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).

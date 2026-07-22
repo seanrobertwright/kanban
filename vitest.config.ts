@@ -24,6 +24,10 @@ export default defineConfig({
     fileParallelism: false,
     env: {
       DATABASE_URL: process.env.DATABASE_URL ?? "",
+      // The secret box (6.5) derives its key from ENCRYPTION_KEY, else
+      // BETTER_AUTH_SECRET — forward both so crypto/git tests can encrypt.
+      ENCRYPTION_KEY: process.env.ENCRYPTION_KEY ?? "",
+      BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "",
     },
   },
 });

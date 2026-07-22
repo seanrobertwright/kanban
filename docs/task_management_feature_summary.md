@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **91 ✅ / 41 ❌ / 8 ⛔** — the **Workflow & Automation** area
+**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **92 ✅ / 40 ❌ / 8 ⛔** — the **Workflow & Automation** area
 (15/15) is now fully ✅, closed by the Phase 1 build on the automation engine
 (045): the trigger→conditions→actions rule engine and its twelve rocks
 (no-code + conditional branching, state transitions, recurring/scheduled, SLAs,
@@ -180,7 +180,7 @@ These features matter most for large organizations, regulated environments, and 
 | ⛔ SOC 2 | SOC 2 compliance or attestation. *(A third-party audit, not application code.)* |
 | ⛔ ISO 27001 | ISO 27001 certification or alignment. *(A third-party certification, not application code.)* |
 | ⛔ HIPAA/regulated support | Support for healthcare or other regulated compliance needs. *(A compliance program + BAA, not application code.)* |
-| ❌ Encryption | Encryption in transit and at rest. |
+| ✅ Encryption | Encryption in transit and at rest. App-level AES-256-GCM secret box (6.5, `shared/crypto/secret-box.ts`) encrypts third-party credentials at rest — pulled forward ahead of Phase 2's git-host secret; transport TLS is deployment-terminated (documented). |
 | ❌ Admin console | Centralized administration controls. |
 | ❌ Retention/legal hold | Retention policies, legal hold, or compliance preservation. |
 | ❌ eDiscovery | Search/export for legal or compliance discovery. |
