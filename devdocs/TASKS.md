@@ -186,6 +186,17 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
 - [ ] **Key-result activity** — KR nudges are read live, not logged; a
       `keyResult.*` family would put "moved NPS 40 → 45" in the feed.
 
+### Portfolio breadth
+- [x] **Portfolio view + rollups** — a workspace-level glance at every board:
+      a Portfolio dialog in the header (beside the switcher) listing each board's
+      completion, milestones and overdue work, with the workspace totals across
+      them (the "rollup"). Read-only — no migration, no activity; a pure
+      `summarizePortfolio`/`donePercent` (6 unit tests), one workspace-scoped
+      rollup query (correlated subqueries per board, top-level tasks, done keyed
+      on each board's done column), viewer+. Rows link to the board where the
+      work is done. Flips two scoreboard rows (Portfolio view + Portfolio
+      rollups). → `d2fe742`
+
 ### Reporting breadth
 - [x] **Timesheets** — the time_entry ledger (027) rolled up per contributor per
       day over a week, in a Timesheet dialog beside Insights. No migration —

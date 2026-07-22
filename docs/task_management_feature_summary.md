@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-21):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **69 ✅ / 71 ❌**.
+**Implementation status (2026-07-21):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **71 ✅ / 69 ❌**.
 
 ## Scoring Scale
 
@@ -70,7 +70,7 @@ These features measure whether teams can see work through different operating le
 | ❌ Resource planning | Planning work against people, teams, or roles. |
 | ❌ Capacity planning | Comparing planned demand to available capacity. |
 | ✅ Workload view | Visibility into how work is distributed across people or teams. |
-| ❌ Portfolio view | Cross-project or cross-program view for multiple work streams. |
+| ✅ Portfolio view | Cross-project or cross-program view for multiple work streams. |
 | ❌ Program/initiative hierarchy | Higher-order grouping above projects, epics, or teams. |
 | ✅ Goals/OKRs | Linking tasks and projects to measurable goals or objectives. |
 | ❌ Budget/financial planning | Cost, budget, investment, or financial planning tied to projects or portfolios. |
@@ -155,7 +155,7 @@ These features determine whether leaders and teams can understand progress, bott
 | ✅ Lead time | Time from request or creation to completion. |
 | ✅ Cumulative flow | Flow metric showing work distribution across states over time. |
 | ✅ Workload reports | Reporting on team or individual load. |
-| ❌ Portfolio rollups | Aggregated reporting across projects, programs, or portfolios. |
+| ✅ Portfolio rollups | Aggregated reporting across projects, programs, or portfolios. |
 | ❌ Financial reports | Budget, spend, billing, profitability, or cost reporting. |
 | ✅ Export | CSV, spreadsheet, BI, or data export capability. |
 | ✅ Saved filters | Reusable filtered views and query definitions. |
