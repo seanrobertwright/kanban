@@ -186,6 +186,15 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
 - [ ] **Key-result activity** — KR nudges are read live, not logged; a
       `keyResult.*` family would put "moved NPS 40 → 45" in the feed.
 
+### Reporting breadth
+- [x] **Timesheets** — the time_entry ledger (027) rolled up per contributor per
+      day over a week, in a Timesheet dialog beside Insights. No migration —
+      pure `buildTimesheetGrid` (rows by total desc, day totals, inclusive day
+      list) with 9 unit tests, a board-scoped rollup query (join to board, group
+      by user×day, viewer+), a clamped/defaulted window (week ending today, span
+      ≤ 31d), and a week-navigating grid. Humans-only holds by construction —
+      time_entry only records a human session. → `9e0ddfd`
+
 ### Custom-fields follow-ups (035 cuts, if the wedge wants them)
 - [ ] **Custom-field values on the Gantt/Timeline** — answers show on cards and
       list columns now; the schedule lenses do not read them.

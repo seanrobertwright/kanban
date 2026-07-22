@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-21):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **68 ✅ / 72 ❌**.
+**Implementation status (2026-07-21):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **69 ✅ / 71 ❌**.
 
 ## Scoring Scale
 
@@ -149,7 +149,7 @@ These features determine whether leaders and teams can understand progress, bott
 | ❌ Custom reports | User-defined reports across projects, teams, or fields. |
 | ✅ Charts | Native visual charts. |
 | ✅ Time tracking | Capturing time spent on work. |
-| ❌ Timesheets | Timesheet entry, review, or approval. |
+| ✅ Timesheets | Timesheet entry, review, or approval. |
 | ✅ Estimates | Effort or duration estimates. |
 | ✅ Cycle time | Time from work start to completion. |
 | ✅ Lead time | Time from request or creation to completion. |
