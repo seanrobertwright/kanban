@@ -248,6 +248,23 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
       agents are metered in dollars, not points (the log_time cut's reasoning).
       Unassigned demand + a rollup footer. No activity (planning config). 3 DB
       tests + 5 pure. **Flips two scoreboard rows.** → `c1af7f3`
+- [x] **Budget / financial planning** (042) — a project's money on the board:
+      `board.budget_amount` (nullable, three-valued), `hourly_rate`, `currency`.
+      Spend is derived, never stored — the time_entry ledger (027) rolled up ×
+      the rate (priority_score's derive-don't-store rule), with a per-contributor
+      breakdown, so the financial picture moves only as real work is logged and no
+      per-task cost column was needed. Pure `costOf` / `remainingOf` /
+      `budgetUtilization` (4 unit tests). Reads viewer+, budget/rate edits admin
+      (three-valued clear). Budget dialog with spend/remaining figures, an
+      over-budget flag, and a utilization bar. No activity (planning config). 2 DB
+      tests + 4 pure. **Closes the Planning & Views area (16/16 ✅) — both rocks
+      done.** → `a689bd6`
+
+## Rocks sweep — outcome
+
+Both target capability areas are now fully native: **Core Work Items 14/14 ✅**
+and **Planning & Views 16/16 ✅**. Scoreboard 76 ✅ / 64 ❌. Full suite 523
+tests / 57 files green; tsc/eslint/build clean per feature.
 
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
