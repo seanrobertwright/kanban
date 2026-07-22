@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-21):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **67 ✅ / 73 ❌**.
+**Implementation status (2026-07-21):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **68 ✅ / 72 ❌**.
 
 ## Scoring Scale
 
@@ -63,7 +63,7 @@ These features measure whether teams can see work through different operating le
 | ✅ Calendar view | Date-oriented view of deadlines, schedules, or planned work. |
 | ✅ Timeline view | Time-based view for projects, initiatives, or work streams. |
 | ✅ Gantt chart | Dependency-aware schedule view with bars over time. |
-| ❌ Roadmap view | Higher-level product, project, or initiative planning view. |
+| ✅ Roadmap view | Higher-level product, project, or initiative planning view. |
 | ✅ Milestones | Major checkpoints, releases, or target dates. |
 | ✅ Dependencies | Explicit relationships such as blocked by, depends on, or predecessor/successor. |
 | ✅ Critical path | Schedule analysis identifying tasks that drive completion date. |

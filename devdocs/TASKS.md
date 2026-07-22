@@ -169,6 +169,16 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
       stays the renderer's job (React elements, never HTML). Toggle resets to Write
       on open. → `82cb2c1`
 
+### Planning breadth
+- [x] **Roadmap view** (038) — a seventh lens, the level above the task board:
+      each epic (031) is a swimlane and the milestones (026) filed under it are
+      dated markers on one shared time track, each with its own done/total fill.
+      Pure `buildRoadmap` (lanes in board order, Unfiled last, window padded like
+      the Timeline) with 7 unit tests; RoadmapView reuses schedule.ts's
+      percentage-positioning + today line. No new data — only the view_mode CHECK
+      widened (038 migration). Clicking a milestone opens the Milestones dialog
+      (the roadmap reads; CRUD stays put). → `6e738f7`
+
 ### OKR follow-ups (037 cuts, if the wedge wants them)
 - [ ] **Objective agent tools** — a `set_objective` / `score_key_result` in both
       doors so the wedge can move OKRs. Touches agent behaviour, so it goes through
