@@ -225,6 +225,17 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
       shape — not on BoardData) with a builder + a fill panel. Member manages +
       submits; CRUD stays out of the activity log (035's custom-field-def cut). 6
       DB tests + 2 pure. **Closes the Core Work Items area (14/14 ✅).** → `a4f8ca4`
+- [x] **Program / initiative hierarchy** (040) — the workspace grouping above a
+      board: `program` (workspace-scoped) + `board.program_id` SET NULL. A program
+      gathers projects (boards) into an initiative and rolls their portfolio
+      numbers up — the view is the portfolio grouped by initiative, so
+      `PortfolioBoard` + `summarizePortfolio` are reused and the grouping is a pure
+      `buildProgramsOverview` (programs by name, empty programs still shown,
+      Unassigned last; 3 unit tests). Reads viewer+; create/rename/delete + filing
+      a board are admin (structural, blast-radius rule) — delete SET-NULLs, never
+      removing a board. Cross-workspace filing refused (not_found). ProgramsButton
+      in the header beside Portfolio. No activity (workspace-level, portfolio's
+      read-only precedent). 5 DB tests + 3 pure. → `27aad54`
 
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).

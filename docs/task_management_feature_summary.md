@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **72 ✅ / 68 ❌** — the **Core Work Items** area is now fully ✅ (Forms/intake landed, 039).
+**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **73 ✅ / 67 ❌** — the **Core Work Items** area is now fully ✅ (Forms/intake, 039), and the **Planning & Views** area is closing out (Program/initiative hierarchy landed, 040).
 
 ## Scoring Scale
 
@@ -71,7 +71,7 @@ These features measure whether teams can see work through different operating le
 | ❌ Capacity planning | Comparing planned demand to available capacity. |
 | ✅ Workload view | Visibility into how work is distributed across people or teams. |
 | ✅ Portfolio view | Cross-project or cross-program view for multiple work streams. |
-| ❌ Program/initiative hierarchy | Higher-order grouping above projects, epics, or teams. |
+| ✅ Program/initiative hierarchy | Higher-order grouping above projects, epics, or teams. |
 | ✅ Goals/OKRs | Linking tasks and projects to measurable goals or objectives. |
 | ❌ Budget/financial planning | Cost, budget, investment, or financial planning tied to projects or portfolios. |
 
