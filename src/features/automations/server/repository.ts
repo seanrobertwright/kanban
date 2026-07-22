@@ -61,10 +61,15 @@ export async function createAutomationRule(
 ): Promise<AutomationRule> {
   await requireBoardRole(userId, boardId, "admin");
   return withTransaction(async (client) => {
+    // A schedule.tick rule is due immediately on creation; an event rule has no
+    // schedule (NULL). now() is stated in SQL rather than passed as a param.
+    const scheduled = input.trigger.event === "schedule.tick";
     const { rows } = await client.query<{ id: number }>(
       `INSERT INTO automation_rule
-         (board_id, name, is_enabled, trigger, conditions, actions, created_by)
-       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7)
+         (board_id, name, is_enabled, trigger, conditions, actions, created_by,
+          next_run_at)
+       VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7,
+               ${scheduled ? "now()" : "NULL"})
        RETURNING id`,
       [
         boardId,
@@ -108,13 +113,20 @@ export async function updateAutomationRule(
     const setsTrigger = input.trigger !== undefined;
     const setsConditions = input.conditions !== undefined;
     const setsActions = input.actions !== undefined;
+    // When the trigger changes: a schedule.tick rule gains a due time (keep the
+    // existing one if it already had one, else now()); any other event clears it.
     await client.query(
       `UPDATE automation_rule
           SET name = COALESCE($2, name),
               is_enabled = COALESCE($3, is_enabled),
               trigger = CASE WHEN $4::boolean THEN $5::jsonb ELSE trigger END,
               conditions = CASE WHEN $6::boolean THEN $7::jsonb ELSE conditions END,
-              actions = CASE WHEN $8::boolean THEN $9::jsonb ELSE actions END
+              actions = CASE WHEN $8::boolean THEN $9::jsonb ELSE actions END,
+              next_run_at = CASE
+                WHEN $4::boolean AND $5::jsonb->>'event' = 'schedule.tick'
+                  THEN COALESCE(next_run_at, now())
+                WHEN $4::boolean THEN NULL
+                ELSE next_run_at END
         WHERE id = $1`,
       [
         id,
@@ -224,5 +236,58 @@ export async function finishRun(
     `UPDATE automation_run SET status = $3, detail = $4::jsonb
       WHERE rule_id = $1 AND activity_id = $2`,
     [ruleId, activityId, status, JSON.stringify(detail ?? {})]
+  );
+}
+
+// ─── scheduled rules (1.4), also runner-only ───
+
+export interface DueRule extends DispatchRow {
+  every: string | null;
+}
+
+/** Enabled schedule.tick rules whose next_run_at has passed. */
+export async function dueScheduledRules(): Promise<DueRule[]> {
+  return query<DueRule>(
+    `SELECT id, board_id AS "boardId", conditions, actions,
+            created_by AS "createdBy", trigger->>'every' AS "every"
+       FROM automation_rule
+      WHERE is_enabled AND next_run_at IS NOT NULL AND next_run_at <= now()
+        AND trigger->>'event' = 'schedule.tick'
+      ORDER BY next_run_at`
+  );
+}
+
+/**
+ * Advances a scheduled rule to its next due time. now()-based, not
+ * next_run_at-based: a rule that fell behind (the process was down) catches up to
+ * the next slot from now rather than replaying every missed tick.
+ */
+export async function advanceSchedule(
+  ruleId: number,
+  every: string | null
+): Promise<void> {
+  const step =
+    every === "hourly"
+      ? "1 hour"
+      : every === "weekly"
+        ? "7 days"
+        : "1 day"; // daily default
+  await query(
+    `UPDATE automation_rule SET next_run_at = now() + interval '${step}'
+      WHERE id = $1`,
+    [ruleId]
+  );
+}
+
+/** Records a scheduled fire — no activity_id (a timer, not an event). */
+export async function recordScheduledRun(
+  ruleId: number,
+  status: AutomationRunStatus,
+  detail: unknown
+): Promise<void> {
+  await query(
+    `INSERT INTO automation_run (rule_id, activity_id, status, detail)
+     VALUES ($1, NULL, $2, $3::jsonb)`,
+    [ruleId, status, JSON.stringify(detail ?? {})]
   );
 }

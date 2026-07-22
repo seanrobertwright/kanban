@@ -4,12 +4,7 @@ import { query } from "@/shared/db/client";
 import type { UpdateTaskInput } from "@/features/tasks/types";
 import type { Effect, Snapshot } from "../lib/engine";
 import { evaluate, planActions } from "../lib/engine";
-import {
-  claimRun,
-  finishRun,
-  rulesForDispatch,
-  type DispatchRow,
-} from "./repository";
+import { claimRun, finishRun, rulesForDispatch } from "./repository";
 
 /**
  * The runner — the automation engine's execution arm (045). It is a *second
@@ -100,7 +95,7 @@ export async function runAutomationsForActivity(
     const effects = planActions(rule.actions, snapshot);
     try {
       await cascadeDepth.run(depth, () =>
-        applyEffects(rule, entry.taskId!, effects, snapshot)
+        applyEffects(rule.createdBy, entry.taskId!, effects, snapshot)
       );
       await finishRun(rule.id, activityId, "matched", { effects });
     } catch (error) {
@@ -119,13 +114,12 @@ export async function runAutomationsForActivity(
  * and role checks, a set_field runs updateTask's, so an automation can do
  * exactly what its (admin) author could do by hand and no more.
  */
-async function applyEffects(
-  rule: DispatchRow,
+export async function applyEffects(
+  by: string,
   taskId: number,
   effects: Effect[],
   snapshot: Snapshot
 ): Promise<void> {
-  const by = rule.createdBy;
   // Dynamically imported so the static graph stays acyclic: these repositories
   // import the activity log, which imports this runner (queueAutomations). The
   // cycle is only a problem at module-eval time — deferring the import to first

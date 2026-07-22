@@ -100,6 +100,20 @@ export async function drainOnce(): Promise<number> {
     for (const id of ids) {
       await executeRun(id);
     }
+
+    // Recurring automation rules (047, rock 1.4) ride this same sweep — the
+    // scheduler fires any schedule.tick rule whose next_run_at has passed.
+    // Dynamically imported so the agent drainer does not statically pull in the
+    // automation engine's graph; its own errors are swallowed inside the tick.
+    try {
+      const { tickScheduledAutomations } = await import(
+        "@/features/automations/server/scheduler"
+      );
+      await tickScheduledAutomations();
+    } catch (error) {
+      console.error("automation scheduler tick failed", error);
+    }
+
     return ids.size;
   } catch (error) {
     console.error("run drainer tick failed", error);

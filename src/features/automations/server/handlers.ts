@@ -9,6 +9,7 @@ import {
   AUTOMATION_MAX_CONDITION_DEPTH,
   AUTOMATION_NAME_MAX,
   isOperator,
+  isScheduleInterval,
   isSettableField,
   isTriggerEvent,
   type Action,
@@ -40,13 +41,20 @@ function notFound(what = "Automation") {
   return Response.json({ error: `${what} not found` }, { status: 404 });
 }
 
-/** Validates a trigger — an object naming one of the known events. */
+/** Validates a trigger — an object naming one of the known events, plus an
+ *  interval for the scheduled event. */
 function readTrigger(v: unknown): Trigger | { error: string } {
   if (!v || typeof v !== "object") return { error: "trigger must be an object" };
-  const event = (v as Record<string, unknown>).event;
-  if (!isTriggerEvent(event))
+  const o = v as Record<string, unknown>;
+  if (!isTriggerEvent(o.event))
     return { error: "trigger.event must be a known event" };
-  return { event };
+  if (o.event === "schedule.tick") {
+    const every = o.every ?? "daily";
+    if (!isScheduleInterval(every))
+      return { error: "schedule.tick needs a valid interval (hourly/daily/weekly)" };
+    return { event: "schedule.tick", every };
+  }
+  return { event: o.event };
 }
 
 /**

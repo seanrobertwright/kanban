@@ -357,6 +357,20 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       the guard automatically). 2 DB tests (refused edge, guard, clear). **Flips
       one scoreboard row** (82 ✅ / 50 ❌).
 
+- [x] **Recurring automation rules** (047, rock 1.4) — scheduled rules that fire
+      on a timer, not an event. A synthetic `schedule.tick` trigger with an
+      interval (hourly/daily/weekly) + a `next_run_at` column; a due rule *scans*
+      the board (a Task's fields ARE a snapshot for the evaluator) and applies its
+      actions to every matching task, then advances `next_run_at` to the next slot
+      **from now** (catch up, don't replay missed ticks). Reuses the durable
+      run-queue drainer (030): the same sweep that recovers stranded agent runs
+      calls `tickScheduledAutomations`, so no second worker is introduced. Runs
+      recorded with a null `activity_id` (a timer, not an event — the NOT NULL was
+      relaxed; the UNIQUE idempotency key still guards event runs, and
+      `next_run_at` guards scheduled ones). Builder gains the "on a schedule"
+      trigger + interval picker. 1 DB test (scans + acts on matches only, advances,
+      no re-fire on the same tick). **Flips one scoreboard row** (83 ✅ / 49 ❌).
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,

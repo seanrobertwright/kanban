@@ -15,6 +15,7 @@ import { Label } from "@/shared/ui/label";
 import * as api from "../client/api";
 import {
   OPERATORS,
+  SCHEDULE_INTERVALS,
   SETTABLE_FIELDS,
   TRIGGER_EVENTS,
   type Action,
@@ -23,6 +24,7 @@ import {
   type Condition,
   type Operator,
   type Predicate,
+  type ScheduleInterval,
   type SettableField,
   type TriggerEvent,
 } from "../types";
@@ -168,6 +170,7 @@ const EVENT_LABELS: Record<TriggerEvent, string> = {
   "task.prioritized": "a task's priority changes",
   "task.scheduled": "a task's dates change",
   "task.labeled": "a task's labels change",
+  "schedule.tick": "on a schedule",
 };
 
 function summarizeAction(a: Action, columns: AutomationsColumn[], labels: AutomationsLabel[]): string {
@@ -494,6 +497,7 @@ function CreateRule({
 }) {
   const [name, setName] = useState("");
   const [event, setEvent] = useState<TriggerEvent>("task.moved");
+  const [every, setEvery] = useState<ScheduleInterval>("daily");
   const [combinator, setCombinator] = useState<"all" | "any">("all");
   const [predicates, setPredicates] = useState<PredicateRow[]>([]);
   const [actions, setActions] = useState<ActionDraft[]>([
@@ -552,7 +556,7 @@ function CreateRule({
       () =>
         api.createAutomation(boardId, {
           name: name.trim(),
-          trigger: { event },
+          trigger: event === "schedule.tick" ? { event, every } : { event },
           conditions: buildConditions(),
           actions: buildActions(),
         }),
@@ -590,6 +594,20 @@ function CreateRule({
             </option>
           ))}
         </select>
+        {event === "schedule.tick" && (
+          <select
+            aria-label="Schedule interval"
+            className="h-8 rounded-md border bg-transparent px-2 text-sm text-foreground"
+            value={every}
+            onChange={(e) => setEvery(e.target.value as ScheduleInterval)}
+          >
+            {SCHEDULE_INTERVALS.map((iv) => (
+              <option key={iv} value={iv}>
+                {iv}
+              </option>
+            ))}
+          </select>
+        )}
       </label>
 
       {/* If — the predicate tree (1.2 conditional branching) */}

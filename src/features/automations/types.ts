@@ -33,12 +33,26 @@ export const TRIGGER_EVENTS = [
   "task.prioritized",
   "task.scheduled",
   "task.labeled",
+  // Synthetic, not an activity_log action: the scheduler emits it on a timer
+  // (1.4). A schedule.tick rule scans the board's tasks each tick and applies its
+  // actions to the ones its conditions match, rather than reacting to one event.
+  "schedule.tick",
 ] as const;
 
 export type TriggerEvent = (typeof TRIGGER_EVENTS)[number];
 
+/** How often a schedule.tick rule fires (1.4). */
+export const SCHEDULE_INTERVALS = ["hourly", "daily", "weekly"] as const;
+export type ScheduleInterval = (typeof SCHEDULE_INTERVALS)[number];
+
 export interface Trigger {
   event: TriggerEvent;
+  /** Only for schedule.tick — the recurrence cadence. */
+  every?: ScheduleInterval;
+}
+
+export function isScheduleInterval(v: unknown): v is ScheduleInterval {
+  return typeof v === "string" && (SCHEDULE_INTERVALS as readonly string[]).includes(v);
 }
 
 /**
