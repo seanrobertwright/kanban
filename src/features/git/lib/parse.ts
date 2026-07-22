@@ -44,11 +44,15 @@ export function parseIssueRefs(text: string | undefined | null): number[] {
 }
 
 /**
- * The full set of candidate task ids a normalized event references — its branch's
- * encoded id (if any) plus every `#123` in its messages. Deduped; order is not
- * significant (the ingress resolves each independently).
+ * The full set of candidate task ids an event references — its branch's encoded id
+ * (if any) plus every `#123` in its messages. Deduped; order is not significant
+ * (the ingress resolves each independently). Typed on just the two fields it reads
+ * so both a NormalizedGitEvent (2.0) and a NormalizedCiEvent (2.7) resolve through
+ * one function.
  */
-export function resolveTaskRefs(event: NormalizedGitEvent): number[] {
+export function resolveTaskRefs(
+  event: Pick<NormalizedGitEvent, "branch" | "messages">
+): number[] {
   const ids = new Set<number>();
   const branchId = parseBranchRef(event.branch);
   if (branchId !== null) ids.add(branchId);

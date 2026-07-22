@@ -16,8 +16,10 @@ import type { Task } from "@/features/tasks/types";
 import { resolveTaskRefs } from "../lib/parse";
 import {
   isGitProvider,
+  type NormalizedCiEvent,
   type NormalizedGitEvent,
   type RepoConnection,
+  type TaskCiStatus,
   type TaskGitLink,
 } from "../types";
 
@@ -41,6 +43,10 @@ const CONNECTION_COLUMNS = `id, workspace_id AS "workspaceId", provider,
 
 const LINK_COLUMNS = `id, task_id AS "taskId", connection_id AS "connectionId",
   provider, kind, external_id AS "externalId", url, state, title,
+  updated_at AS "updatedAt"`;
+
+const CI_COLUMNS = `id, task_id AS "taskId", connection_id AS "connectionId",
+  provider, external_id AS "externalId", ref, status, conclusion, url, title,
   updated_at AS "updatedAt"`;
 
 export async function listConnections(
@@ -145,6 +151,18 @@ export async function listTaskGitLinks(
   );
 }
 
+export async function listTaskCiStatuses(
+  principal: string | Principal,
+  taskId: number
+): Promise<TaskCiStatus[]> {
+  await requireTaskRole(principal, taskId, "viewer");
+  return query<TaskCiStatus>(
+    `SELECT ${CI_COLUMNS} FROM task_ci_status
+      WHERE task_id = $1 ORDER BY updated_at DESC, id`,
+    [taskId]
+  );
+}
+
 /**
  * The ingress core — provider-agnostic. Resolves the tasks a normalized event
  * references, upserts a link for each, and logs a git.* activity on any that
@@ -176,6 +194,132 @@ export async function ingestEvent(
     );
   }
   return { linkedTaskIds: linked };
+}
+
+/**
+ * The CI ingress core (2.7) — the check/pipeline twin of ingestEvent. Resolves the
+ * tasks the run's ref names, upserts a task_ci_status per task, and logs
+ * git.ci_passed / git.ci_failed on the transition to a terminal conclusion (so a
+ * rule fires exactly once, when the build finishes). Same tenancy guard: a run
+ * touches a task only if it lives in the connection's workspace.
+ */
+export async function ingestCiEvent(
+  connection: RepoConnection,
+  event: NormalizedCiEvent
+): Promise<{ linkedTaskIds: number[] }> {
+  const candidates = resolveTaskRefs(event);
+  if (candidates.length === 0) return { linkedTaskIds: [] };
+
+  const linked: number[] = [];
+  for (const taskId of candidates) {
+    const changed = await withTransaction((client) =>
+      upsertCiStatus(client, connection, taskId, event)
+    );
+    if (changed) linked.push(taskId);
+  }
+  if (linked.length > 0) {
+    await query(
+      `UPDATE repo_connection SET last_event_at = now() WHERE id = $1`,
+      [connection.id]
+    );
+  }
+  return { linkedTaskIds: linked };
+}
+
+/**
+ * Upserts one task's CI run and logs git.ci_passed/git.ci_failed iff the run just
+ * reached a terminal conclusion it had not logged before. The status/conclusion/url
+ * comparison is the idempotency story: a redelivery of the same completed run
+ * carries the same triple, so nothing re-logs. A run still in_progress upserts the
+ * row (so the chip updates) but logs nothing — only a finished build fires a rule.
+ * A `neutral` conclusion (skipped/cancelled) updates the row without firing, since
+ * it is neither a pass nor a failure. Returns whether it logged.
+ */
+async function upsertCiStatus(
+  client: PoolClient,
+  connection: RepoConnection,
+  taskId: number,
+  event: NormalizedCiEvent
+): Promise<boolean> {
+  const { rows } = await client.query<
+    Task & { boardId: number; workspaceId: string }
+  >(
+    `SELECT ${taskColumns("t")},
+            b.id AS "boardId", b.workspace_id AS "workspaceId"
+       FROM task t
+       JOIN board_column bc ON bc.id = t.column_id
+       JOIN board b ON b.id = bc.board_id
+      WHERE t.id = $1 AND b.workspace_id = $2`,
+    [taskId, connection.workspaceId]
+  );
+  const task = rows[0];
+  if (!task) return false;
+
+  const prev = await client.query<{
+    status: string;
+    conclusion: string | null;
+    url: string;
+  }>(
+    `SELECT status, conclusion, url FROM task_ci_status
+      WHERE task_id = $1 AND provider = $2 AND external_id = $3`,
+    [taskId, event.provider, event.externalId]
+  );
+  const before = prev.rows[0];
+  const unchanged =
+    before &&
+    before.status === event.status &&
+    before.conclusion === event.conclusion &&
+    before.url === event.url;
+
+  await client.query(
+    `INSERT INTO task_ci_status
+       (task_id, connection_id, provider, external_id, ref, status, conclusion, url, title, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+     ON CONFLICT (task_id, provider, external_id)
+     DO UPDATE SET connection_id = EXCLUDED.connection_id, ref = EXCLUDED.ref,
+                   status = EXCLUDED.status, conclusion = EXCLUDED.conclusion,
+                   url = EXCLUDED.url, title = EXCLUDED.title, updated_at = now()`,
+    [
+      taskId,
+      connection.id,
+      event.provider,
+      event.externalId,
+      event.ref,
+      event.status,
+      event.conclusion,
+      event.url,
+      event.title,
+    ]
+  );
+
+  // Fire only on a real transition into a pass/fail terminal state. A redelivery
+  // (unchanged) or a non-firing conclusion (in-flight, or neutral) upserts silently.
+  const fires =
+    !unchanged &&
+    event.status === "completed" &&
+    (event.conclusion === "success" || event.conclusion === "failure");
+  if (!fires) return false;
+
+  await logActivity(client, {
+    workspaceId: task.workspaceId,
+    boardId: task.boardId,
+    taskId,
+    actor: { type: "human", id: connection.createdBy },
+    action: event.conclusion === "success" ? "git.ci_passed" : "git.ci_failed",
+    before: null,
+    after: {
+      ...taskSnapshot(task),
+      git: {
+        provider: event.provider,
+        kind: "ci",
+        externalId: event.externalId,
+        url: event.url,
+        state: event.conclusion,
+        title: event.title,
+      },
+    },
+  });
+  return true;
 }
 
 /**

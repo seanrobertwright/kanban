@@ -1,4 +1,9 @@
-import type { GitProvider, RepoConnection, TaskGitLink } from "../types";
+import type {
+  GitProvider,
+  RepoConnection,
+  TaskCiStatus,
+  TaskGitLink,
+} from "../types";
 
 /**
  * Git connection + link client (2.0). Connection management is admin-gated
@@ -38,5 +43,13 @@ export async function deleteConnection(id: number): Promise<void> {
 export async function fetchTaskGitLinks(taskId: number): Promise<TaskGitLink[]> {
   const res = await fetch(`/api/tasks/${taskId}/git-links`);
   if (!res.ok) throw new Error("Failed to load development links");
+  return res.json();
+}
+
+export async function fetchTaskCiStatuses(
+  taskId: number
+): Promise<TaskCiStatus[]> {
+  const res = await fetch(`/api/tasks/${taskId}/ci-status`);
+  if (!res.ok) throw new Error("Failed to load CI status");
   return res.json();
 }

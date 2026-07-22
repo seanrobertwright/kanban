@@ -1,7 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
 
 import type { GitAction } from "@/features/activity/types";
-import type { GitLinkState, NormalizedGitEvent } from "../types";
+import type {
+  CiConclusion,
+  CiStatus,
+  GitLinkState,
+  NormalizedCiEvent,
+  NormalizedGitEvent,
+} from "../types";
 
 /**
  * GitLab adapter (2.2) — the second vendor half of the git spine (2.0), the twin
@@ -47,7 +53,7 @@ interface GitlabPayload {
   object_kind?: string;
   ref?: string;
   before?: string;
-  project?: { web_url?: string };
+  project?: { web_url?: string; name?: string };
   commits?: Array<{ id?: string; url?: string; message?: string }>;
   object_attributes?: {
     iid?: number;
@@ -56,7 +62,36 @@ interface GitlabPayload {
     description?: string;
     state?: string;
     source_branch?: string;
+    // pipeline events
+    id?: number;
+    ref?: string;
+    status?: string;
   };
+}
+
+/**
+ * Folds a GitLab pipeline status onto the normalized (status, conclusion) pair.
+ * GitLab reports one field; success/failed are terminal, canceled/skipped are a
+ * terminal non-failure, running is in-flight, and the rest are still queued.
+ */
+function gitlabPipelineStatus(raw: string | undefined): {
+  status: CiStatus;
+  conclusion: CiConclusion | null;
+} {
+  switch (raw) {
+    case "success":
+      return { status: "completed", conclusion: "success" };
+    case "failed":
+      return { status: "completed", conclusion: "failure" };
+    case "canceled":
+    case "skipped":
+      return { status: "completed", conclusion: "neutral" };
+    case "running":
+    case "manual":
+      return { status: "in_progress", conclusion: null };
+    default:
+      return { status: "queued", conclusion: null };
+  }
 }
 
 // A new branch/tag push carries an all-zero "before" SHA — the same sentinel
@@ -77,6 +112,32 @@ export function normalizeGitlabEvent(
   if (payload.object_kind === "merge_request") return mergeRequestEvent(payload);
   if (payload.object_kind === "push") return pushEvents(payload);
   return [];
+}
+
+/**
+ * Maps a GitLab `pipeline` webhook to a normalized CI event (2.7), or null for one
+ * with no ref to resolve. The pipeline is tied to a task by its `ref` branch
+ * (`feature/123-slug`), reusing 2.0's smart-commit parsing.
+ */
+export function normalizeGitlabCiEvent(
+  payload: GitlabPayload
+): NormalizedCiEvent | null {
+  if (payload.object_kind !== "pipeline") return null;
+  const p = payload.object_attributes;
+  if (!p || typeof p.id !== "number" || !p.ref) return null;
+
+  const { status, conclusion } = gitlabPipelineStatus(p.status);
+  const webUrl = payload.project?.web_url;
+  return {
+    provider: "gitlab",
+    externalId: String(p.id),
+    ref: p.ref,
+    status,
+    conclusion,
+    url: p.url ?? (webUrl ? `${webUrl}/-/pipelines/${p.id}` : ""),
+    title: payload.project?.name ?? null,
+    branch: p.ref,
+  };
 }
 
 function mergeRequestEvent(payload: GitlabPayload): NormalizedGitEvent[] {

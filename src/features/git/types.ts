@@ -77,3 +77,44 @@ export interface NormalizedGitEvent {
   /** Free text to scan for `#123` references (PR title+body, commit messages). */
   messages?: string[];
 }
+
+/**
+ * A CI run's lifecycle (2.7). `status` is where the run is; `conclusion` is how it
+ * ended, set only once `status` is `completed`. Both are provider-normalized —
+ * GitHub check_suite and GitLab pipeline statuses fold onto this shared vocabulary.
+ */
+export type CiStatus = "queued" | "in_progress" | "completed";
+export type CiConclusion = "success" | "failure" | "neutral";
+
+/** A build/deploy/pipeline run tied to a task, as the Development section shows it. */
+export interface TaskCiStatus {
+  id: number;
+  taskId: number;
+  connectionId: number | null;
+  provider: GitProvider;
+  externalId: string;
+  ref: string | null;
+  status: CiStatus;
+  conclusion: CiConclusion | null;
+  url: string;
+  title: string | null;
+  updatedAt: string;
+}
+
+/**
+ * The provider-agnostic CI event the ingress consumes (2.7) — the check/pipeline
+ * twin of NormalizedGitEvent. It carries the run's normalized status/conclusion
+ * plus the `branch`/`messages` the shared resolver reads to find the task the run
+ * is for (a `feature/123-slug` head branch resolves to task 123).
+ */
+export interface NormalizedCiEvent {
+  provider: GitProvider;
+  externalId: string;
+  ref: string | null;
+  status: CiStatus;
+  conclusion: CiConclusion | null;
+  url: string;
+  title: string | null;
+  branch?: string;
+  messages?: string[];
+}

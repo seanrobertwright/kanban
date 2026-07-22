@@ -256,7 +256,11 @@ export type GitAction =
   | "git.pr_opened"
   | "git.pr_merged"
   | "git.pr_closed"
-  | "git.commit_linked";
+  | "git.commit_linked"
+  // CI/CD runs (2.7): fired on a run's transition to a terminal conclusion, so
+  // "when CI fails, notify the assignee" is an ordinary Phase-1 rule.
+  | "git.ci_passed"
+  | "git.ci_failed";
 
 export type ActivityAction =
   | TaskAction

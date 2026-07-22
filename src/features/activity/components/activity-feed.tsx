@@ -264,6 +264,13 @@ function describe(
     }
     case "git.commit_linked":
       return "linked a commit";
+    case "git.ci_passed":
+    case "git.ci_failed": {
+      const name =
+        entry.after && "git" in entry.after ? entry.after.git.title : null;
+      const outcome = entry.action === "git.ci_passed" ? "passed" : "failed";
+      return `CI ${outcome}${name ? ` (${name})` : ""}`;
+    }
     default:
       // `action` is TEXT in Postgres and this union grows every milestone, so a
       // row written by newer code can reach older code. Say something true

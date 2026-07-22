@@ -197,6 +197,8 @@ const EVENT_LABELS: Record<TriggerEvent, string> = {
   "git.pr_merged": "a pull request is merged",
   "git.pr_closed": "a pull request is closed",
   "git.commit_linked": "a commit is linked",
+  "git.ci_passed": "CI passes",
+  "git.ci_failed": "CI fails",
 };
 
 function summarizeAction(a: Action, columns: AutomationsColumn[], labels: AutomationsLabel[]): string {

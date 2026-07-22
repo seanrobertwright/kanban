@@ -1,7 +1,13 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import type { GitAction } from "@/features/activity/types";
-import type { GitLinkState, NormalizedGitEvent } from "../types";
+import type {
+  CiConclusion,
+  CiStatus,
+  GitLinkState,
+  NormalizedCiEvent,
+  NormalizedGitEvent,
+} from "../types";
 
 /**
  * GitHub App adapter (2.1) — the vendor-specific half of the git spine (2.0). It
@@ -57,6 +63,27 @@ interface GithubPayload {
     head?: { ref?: string };
   };
   commits?: Array<{ id?: string; url?: string; message?: string }>;
+  check_suite?: {
+    id?: number;
+    head_branch?: string;
+    head_sha?: string;
+    status?: string;
+    conclusion?: string | null;
+    app?: { name?: string };
+  };
+}
+
+/**
+ * Folds a GitHub check_suite conclusion onto the normalized vocabulary. GitHub has
+ * many terminal conclusions; only `success` is a pass, `neutral`/`skipped` are a
+ * non-failure that fires no rule, and everything else (failure, cancelled,
+ * timed_out, action_required, stale) is a failure.
+ */
+function githubConclusion(raw: string | null | undefined): CiConclusion | null {
+  if (!raw) return null;
+  if (raw === "success") return "success";
+  if (raw === "neutral" || raw === "skipped") return "neutral";
+  return "failure";
 }
 
 /**
@@ -131,6 +158,40 @@ function pushEvents(payload: GithubPayload): NormalizedGitEvent[] {
     });
   }
   return events;
+}
+
+/**
+ * Maps a GitHub `check_suite` webhook to a normalized CI event (2.7), or null for
+ * one we cannot tie to a task (no head branch). The run is resolved to a task by
+ * its head branch (`feature/123-slug`), reusing 2.0's smart-commit parsing.
+ */
+export function normalizeGithubCiEvent(
+  eventType: string,
+  payload: GithubPayload
+): NormalizedCiEvent | null {
+  if (eventType !== "check_suite") return null;
+  const cs = payload.check_suite;
+  if (!cs || typeof cs.id !== "number" || !cs.head_branch) return null;
+
+  const status: CiStatus =
+    cs.status === "completed"
+      ? "completed"
+      : cs.status === "in_progress"
+        ? "in_progress"
+        : "queued";
+  const conclusion = status === "completed" ? githubConclusion(cs.conclusion) : null;
+  const repo = payload.repository?.full_name;
+
+  return {
+    provider: "github",
+    externalId: String(cs.id),
+    ref: cs.head_branch,
+    status,
+    conclusion,
+    url: repo && cs.head_sha ? `https://github.com/${repo}/commit/${cs.head_sha}/checks` : "",
+    title: cs.app?.name ?? null,
+    branch: cs.head_branch,
+  };
 }
 
 function branchCreateEvent(payload: GithubPayload): NormalizedGitEvent[] {

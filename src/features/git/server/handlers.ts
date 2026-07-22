@@ -8,12 +8,22 @@ import {
   connectionForIngress,
   createConnection,
   deleteConnection,
+  ingestCiEvent,
   ingestEvent,
   listConnections,
+  listTaskCiStatuses,
   listTaskGitLinks,
 } from "./repository";
-import { normalizeGithubEvent, verifyGithubSignature } from "./github";
-import { normalizeGitlabEvent, verifyGitlabToken } from "./gitlab";
+import {
+  normalizeGithubCiEvent,
+  normalizeGithubEvent,
+  verifyGithubSignature,
+} from "./github";
+import {
+  normalizeGitlabCiEvent,
+  normalizeGitlabEvent,
+  verifyGitlabToken,
+} from "./gitlab";
 import {
   normalizeBitbucketEvent,
   verifyBitbucketSignature,
@@ -89,6 +99,18 @@ export async function handleListTaskGitLinks(request: Request, id: string) {
   }
 }
 
+export async function handleListTaskCiStatuses(request: Request, id: string) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  const taskId = Number(id);
+  if (!Number.isInteger(taskId)) return badRequest("Invalid task id");
+  try {
+    return Response.json(await listTaskCiStatuses(principal, taskId));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
 /**
  * The GitHub webhook ingress (2.1). No session — the signature is the credential
  * (boardForTriggerToken's shape). The connection id is in the URL, so a bad id, a
@@ -126,6 +148,9 @@ export async function handleGithubWebhook(request: Request, id: string) {
     const result = await ingestEvent(resolved.connection, event);
     linked += result.linkedTaskIds.length;
   }
+  // check_suite events feed the CI path (2.7), not the link path.
+  const ci = normalizeGithubCiEvent(eventType, payload as Record<string, never>);
+  if (ci) linked += (await ingestCiEvent(resolved.connection, ci)).linkedTaskIds.length;
   return Response.json({ ok: true, linked });
 }
 
@@ -161,6 +186,9 @@ export async function handleGitlabWebhook(request: Request, id: string) {
     const result = await ingestEvent(resolved.connection, event);
     linked += result.linkedTaskIds.length;
   }
+  // pipeline events feed the CI path (2.7).
+  const ci = normalizeGitlabCiEvent(payload as Record<string, never>);
+  if (ci) linked += (await ingestCiEvent(resolved.connection, ci)).linkedTaskIds.length;
   return Response.json({ ok: true, linked });
 }
 

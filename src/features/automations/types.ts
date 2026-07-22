@@ -49,6 +49,9 @@ export const TRIGGER_EVENTS = [
   "git.pr_merged",
   "git.pr_closed",
   "git.commit_linked",
+  // CI/CD run outcomes (2.7) — a passing/failing build fires a rule the same way.
+  "git.ci_passed",
+  "git.ci_failed",
 ] as const;
 
 export type TriggerEvent = (typeof TRIGGER_EVENTS)[number];

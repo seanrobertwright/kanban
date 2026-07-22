@@ -61,6 +61,8 @@ const ACTION_VERB: Record<string, string> = {
   "git.pr_merged": "merged a pull request for",
   "git.pr_closed": "closed a pull request for",
   "git.commit_linked": "linked a commit to",
+  "git.ci_passed": "CI passed for",
+  "git.ci_failed": "CI failed for",
 };
 
 const POLL_MS = 60_000;

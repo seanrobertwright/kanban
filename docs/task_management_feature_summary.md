@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **97 ✅ / 35 ❌ / 8 ⛔** — the **Workflow & Automation** area
+**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **98 ✅ / 34 ❌ / 8 ⛔** — the **Workflow & Automation** area
 (15/15) is now fully ✅, closed by the Phase 1 build on the automation engine
 (045): the trigger→conditions→actions rule engine and its twelve rocks
 (no-code + conditional branching, state transitions, recurring/scheduled, SLAs,
@@ -200,7 +200,7 @@ These features show whether the task system is close to code, releases, pull req
 | ✅ Pull request links | Linking work items to pull requests. Smart-commit resolution (2.0) links a PR to the task it references; the task dialog's Development section (2.4) lists them with open/merged/closed state chips and a link out. |
 | ✅ Commit links | Linking work items to commits. A push webhook links each commit referencing a task; the Development section (2.5) surfaces them by subject/short-sha. |
 | ❌ Branch linking/automation | Creating or tracking branches from work items. |
-| ❌ CI/CD integration | Linking work to builds, deployments, or pipeline results. |
+| ✅ CI/CD integration | Linking work to builds, deployments, or pipeline results. CI status (2.7, migration 054): GitHub `check_suite` and GitLab `pipeline` webhooks normalize onto a shared (status, conclusion) vocabulary and upsert a `task_ci_status` row resolved to the task by the run's head branch. A completed run fires `git.ci_passed`/`git.ci_failed` on the transition to a terminal conclusion — so "when CI fails, notify the assignee" is an ordinary Phase-1 rule — and the task dialog's Development section shows a pass/fail/running chip. |
 | ❌ Release management | Managing releases, versions, or deployment milestones. |
 | ✅ REST API | Programmatic API using REST. |
 | ❌ GraphQL API | Programmatic API using GraphQL. |

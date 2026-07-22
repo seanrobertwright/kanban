@@ -593,5 +593,28 @@ tsc/eslint/build clean per feature.
       unknown-conn→404). tsc/eslint/build clean. **Flips the Bitbucket integration
       scoreboard row** (97 ✅ / 35 ❌) — **all three git hosts now drive the board.**
 
+- [x] **CI/CD integration** (054, rock 2.7) — build/deploy/pipeline status on the
+      task. A CI run is not a link (a branch/PR/commit): it is *about* a ref, has a
+      two-part lifecycle (a `status` running queued→in_progress→completed, then a
+      `conclusion`), and re-reports as it runs — so it gets its own `task_ci_status`
+      table rather than overloading `task_git_link.state`. GitHub `check_suite` and
+      GitLab `pipeline` webhooks fold onto a shared normalized vocabulary
+      (`normalizeGithubCiEvent` / `normalizeGitlabCiEvent`) and resolve to the task
+      by the run's head branch — 2.0's smart-commit parsing, reused (`resolveTaskRefs`
+      re-typed to the `branch`/`messages` it reads so both event kinds share it). The
+      ingest (`ingestCiEvent`, the twin of `ingestEvent`) upserts per task and logs
+      `git.ci_passed`/`git.ci_failed` **only on the transition to a terminal pass/fail
+      conclusion** — an in-flight or redelivered or `neutral` (skipped/cancelled) run
+      upserts silently — so a build fires a Phase-1 rule exactly once ("when CI fails,
+      notify the assignee"). New `git.ci_*` activity family (feed narration + bell
+      verbs + trigger events + builder labels). `GET /api/tasks/[id]/ci-status`
+      (viewer+); the Development section gains a pass/fail/running chip (green
+      check / red x / dashed) beside the PR/commit rows. 17 tests (pure: GH check_suite
+      + GL pipeline status folding, unresolvable/wrong-kind → null; DB: in_progress
+      upserts-no-fire, completed failure fires ci_failed once + idempotent redelivery,
+      success fires ci_passed, neutral records-no-fire, cross-workspace tenancy;
+      component: failed + running chips). tsc/eslint/build clean. **Flips the CI/CD
+      integration scoreboard row** (98 ✅ / 34 ❌).
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
