@@ -13,6 +13,8 @@ import {
   setTaskLabels,
 } from "@/features/labels/server/repository";
 import { dispatchRun, enqueueRun } from "@/features/agents/server/runtime";
+import { evaluate, type Snapshot } from "@/features/automations/lib/engine";
+import { edgeKey, type BoardWorkflow } from "@/features/automations/types";
 import { assertEpicOnBoard } from "@/features/epics/server/repository";
 import { assertObjectiveOnBoard } from "@/features/objectives/server/repository";
 import {
@@ -882,11 +884,38 @@ export async function moveTask(
     // The board's completion column (020), or null if none is designated —
     // recurrence is inert until an admin names one. Read here so the spawn below
     // can tell whether this move crosses into Done.
-    const { rows: boardRows } = await client.query<{ doneColumnId: number | null }>(
-      `SELECT done_column_id AS "doneColumnId" FROM board WHERE id = $1`,
+    const { rows: boardRows } = await client.query<{
+      doneColumnId: number | null;
+      workflow: BoardWorkflow | null;
+    }>(
+      `SELECT done_column_id AS "doneColumnId", workflow FROM board WHERE id = $1`,
       [boardId]
     );
     const doneColumnId = boardRows[0]?.doneColumnId ?? null;
+
+    // State transition rules (046, rock 1.3): if the board defines a transition
+    // map, a move that changes column must be an allowed edge, and any guard on
+    // that edge must hold. A disallowed edge or a failed guard is a 409 (an
+    // invariant refusing an allowed-by-rank action — AuthzError('conflict'), the
+    // move-to-another-board line right below). Reorders within a column (same
+    // from/to) are never constrained.
+    const workflow = boardRows[0]?.workflow ?? null;
+    if (workflow && before.columnId !== input.columnId) {
+      const allowedTo = workflow.allowed?.[String(before.columnId)];
+      if (allowedTo && !allowedTo.includes(input.columnId)) {
+        throw new AuthzError(
+          "conflict",
+          "That column transition is not allowed by this board's workflow"
+        );
+      }
+      const guard = workflow.guards?.[edgeKey(before.columnId, input.columnId)];
+      if (guard && !evaluate(guard, snapshot(before) as unknown as Snapshot)) {
+        throw new AuthzError(
+          "conflict",
+          "This task does not meet the conditions to make that transition"
+        );
+      }
+    }
 
     // Every position query below is scoped to the moving task's siblings — the
     // rows sharing its column AND its parent (008). The parent is not read from

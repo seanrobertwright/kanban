@@ -1,0 +1,14 @@
+-- State transition rules (046, rock 1.3) — an allowed-transition map on the
+-- board, the Jira-workflow shape: which columns a task may move *to* from a given
+-- column, with optional per-edge guards (a predicate that must hold to cross).
+--
+-- One nullable JSONB column, not a table: the whole map is a small, read-together
+-- shape moveTask consults on every move (the board.workflow the SPEC names), and
+-- it reuses the automation engine's condition evaluator for its guards — a
+-- transition guard is a rule condition by another name. Absent (NULL) = today's
+-- behavior: any column → any column, unconstrained. Shape:
+--   { "allowed": { "<fromColumnId>": [<toColumnId>, ...] },
+--     "guards":  { "<fromColumnId>>​<toColumnId>": <condition tree> } }
+-- A from-column with no `allowed` entry is unconstrained (permissive per-column),
+-- so naming one column's transitions does not silently lock every other.
+ALTER TABLE board ADD COLUMN IF NOT EXISTS workflow JSONB;

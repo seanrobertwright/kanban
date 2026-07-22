@@ -150,6 +150,10 @@ export function AutomationsDialog({
             onCreated={onChanged}
           />
         )}
+
+        {canManage && (
+          <WorkflowMatrix boardId={boardId} columns={columns} open={open} />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -305,6 +309,141 @@ function RuleCard({
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * State transition rules (046, rock 1.3): a columns×columns matrix of the moves
+ * a task is allowed to make. Enforcing is opt-in — off means today's any→any;
+ * on with a from-column's row all-unchecked would lock that column, so the empty
+ * matrix (nothing checked) is a valid "only the moves you tick". Guards on edges
+ * are supported by the engine but edited elsewhere; this grid is the allowed map.
+ */
+function WorkflowMatrix({
+  boardId,
+  columns,
+  open,
+}: {
+  boardId: number;
+  columns: AutomationsColumn[];
+  open: boolean;
+}) {
+  const [enforced, setEnforced] = useState(false);
+  const [allowed, setAllowed] = useState<Record<string, number[]>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const wf = await api.fetchWorkflow(boardId);
+        if (cancelled) return;
+        setEnforced(wf !== null);
+        setAllowed(wf?.allowed ?? {});
+      } catch {
+        /* the rule list already surfaces load errors */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, boardId]);
+
+  function isAllowed(from: number, to: number): boolean {
+    return allowed[String(from)]?.includes(to) ?? false;
+  }
+  function toggle(from: number, to: number) {
+    setSaved(false);
+    setAllowed((prev) => {
+      const key = String(from);
+      const set = new Set(prev[key] ?? []);
+      if (set.has(to)) set.delete(to);
+      else set.add(to);
+      return { ...prev, [key]: [...set] };
+    });
+  }
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.saveWorkflow(boardId, enforced ? { allowed } : null);
+      setSaved(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save transitions");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-2 border-t pt-3">
+      <label className="flex items-center gap-2 text-sm font-medium">
+        <input
+          type="checkbox"
+          checked={enforced}
+          onChange={(e) => {
+            setEnforced(e.target.checked);
+            setSaved(false);
+          }}
+        />
+        Enforce allowed column transitions
+      </label>
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      {enforced && (
+        <div className="overflow-x-auto">
+          <table className="text-xs">
+            <thead>
+              <tr>
+                <th className="p-1 text-left font-normal text-muted-foreground">from ↓ / to →</th>
+                {columns.map((c) => (
+                  <th key={c.id} className="max-w-16 truncate p-1 font-normal text-muted-foreground">
+                    {c.title}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {columns.map((from) => (
+                <tr key={from.id}>
+                  <td className="max-w-24 truncate p-1 text-muted-foreground">{from.title}</td>
+                  {columns.map((to) => (
+                    <td key={to.id} className="p-1 text-center">
+                      {from.id === to.id ? (
+                        <span className="text-muted-foreground">·</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          aria-label={`allow ${from.title} to ${to.title}`}
+                          checked={isAllowed(from.id, to.id)}
+                          onChange={() => toggle(from.id, to.id)}
+                        />
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <Button
+        type="button"
+        size="sm"
+        className="w-fit"
+        disabled={busy}
+        onClick={save}
+      >
+        {saved ? "Saved" : "Save transitions"}
+      </Button>
+    </div>
   );
 }
 

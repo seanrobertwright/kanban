@@ -1,6 +1,7 @@
 import type {
   AutomationRule,
   AutomationRun,
+  BoardWorkflow,
   CreateAutomationRuleInput,
   UpdateAutomationRuleInput,
 } from "../types";
@@ -57,4 +58,23 @@ export async function fetchAutomationRuns(
 ): Promise<AutomationRun[]> {
   const res = await fetch(`/api/automations/${id}/runs`, { cache: "no-store" });
   return jsonOrThrow<AutomationRun[]>(res);
+}
+
+export async function fetchWorkflow(boardId: number): Promise<BoardWorkflow | null> {
+  const res = await fetch(`/api/board/${boardId}/workflow`, { cache: "no-store" });
+  const { workflow } = await jsonOrThrow<{ workflow: BoardWorkflow | null }>(res);
+  return workflow;
+}
+
+export async function saveWorkflow(
+  boardId: number,
+  workflow: BoardWorkflow | null
+): Promise<BoardWorkflow | null> {
+  const res = await fetch(`/api/board/${boardId}/workflow`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workflow }),
+  });
+  const body = await jsonOrThrow<{ workflow: BoardWorkflow | null }>(res);
+  return body.workflow;
 }

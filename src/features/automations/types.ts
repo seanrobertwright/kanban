@@ -160,6 +160,23 @@ export interface UpdateAutomationRuleInput {
   isEnabled?: boolean;
 }
 
+/**
+ * State transition rules (046, rock 1.3) — the board's allowed-transition map,
+ * consulted by moveTask. `allowed` whitelists the columns a task may move *to*
+ * from a given column (a from-column absent from the map is unconstrained);
+ * `guards` attaches a condition to an edge that must hold to cross it, reusing
+ * the same evaluator rules fire on. Edge keys are "fromColumnId>toColumnId".
+ */
+export interface BoardWorkflow {
+  allowed: Record<string, number[]>;
+  guards?: Record<string, Condition>;
+}
+
+/** The edge key moveTask and the matrix editor agree on. */
+export function edgeKey(from: number, to: number): string {
+  return `${from}>${to}`;
+}
+
 export type AutomationRunStatus = "matched" | "skipped" | "error" | "capped";
 
 /** One logged fire — the audit arm, read by the run-log tab (1.1). */

@@ -10,6 +10,7 @@ import type { Sprint } from "@/features/sprints/types";
 import { taskColumns } from "@/features/tasks/server/task-row";
 import type { Task } from "@/features/tasks/types";
 import type { Board } from "@/features/workspaces/types";
+import type { BoardWorkflow } from "@/features/automations/types";
 import type { BoardData, Column } from "../types";
 
 /**
@@ -214,5 +215,58 @@ export async function setBoardDoneColumn(
   await query(`UPDATE board SET done_column_id = $2 WHERE id = $1`, [
     boardId,
     columnId,
+  ]);
+}
+
+/**
+ * The board's state-transition map (046, rock 1.3), or null when unset (any
+ * column → any column). Readable by any board viewer — knowing the allowed
+ * transitions is part of seeing how the board behaves.
+ */
+export async function getBoardWorkflow(
+  actor: string | Principal,
+  boardId: number
+): Promise<BoardWorkflow | null> {
+  await requireBoardRole(actor, boardId, "viewer");
+  const row = await queryOne<{ workflow: BoardWorkflow | null }>(
+    `SELECT workflow FROM board WHERE id = $1`,
+    [boardId]
+  );
+  return row?.workflow ?? null;
+}
+
+/**
+ * Sets (or clears, with null) the transition map. Admin — it constrains everyone
+ * else's moves, the §7.4 blast-radius rule. Every column id named in the map is
+ * checked to belong to this board, so a map cannot reference another board's
+ * columns (setBoardDoneColumn's tenancy guard, generalized to the whole map).
+ */
+export async function setBoardWorkflow(
+  actor: string | Principal,
+  boardId: number,
+  workflow: BoardWorkflow | null
+): Promise<void> {
+  await requireBoardRole(actor, boardId, "admin");
+  if (workflow) {
+    const referenced = new Set<number>();
+    for (const [from, tos] of Object.entries(workflow.allowed)) {
+      referenced.add(Number(from));
+      for (const to of tos) referenced.add(to);
+    }
+    if (referenced.size > 0) {
+      const rows = await query<{ id: number }>(
+        `SELECT id FROM board_column WHERE board_id = $1 AND id = ANY($2)`,
+        [boardId, [...referenced]]
+      );
+      const onBoard = new Set(rows.map((r) => r.id));
+      for (const id of referenced) {
+        if (!onBoard.has(id))
+          throw new AuthzError("not_found", "That column is not on this board");
+      }
+    }
+  }
+  await query(`UPDATE board SET workflow = $2::jsonb WHERE id = $1`, [
+    boardId,
+    workflow ? JSON.stringify(workflow) : null,
   ]);
 }

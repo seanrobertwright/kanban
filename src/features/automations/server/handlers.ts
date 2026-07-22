@@ -24,6 +24,11 @@ import {
   listAutomationRules,
   updateAutomationRule,
 } from "./repository";
+import {
+  getBoardWorkflow,
+  setBoardWorkflow,
+} from "@/features/board/server/repository";
+import type { BoardWorkflow } from "../types";
 
 // Reads take a principal (an agent that can read a board can read its rules);
 // authoring takes a session and the repository gates it to admin.
@@ -239,6 +244,64 @@ export async function handleDeleteAutomation(request: Request, id: string) {
     return (await deleteAutomationRule(session.user.id, ruleId))
       ? new Response(null, { status: 204 })
       : notFound();
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/** Validates the transition map: allowed is {colId: [colId]}, guards optional. */
+function readWorkflow(v: unknown): BoardWorkflow | null | { error: string } {
+  if (v === null) return null;
+  if (!v || typeof v !== "object") return { error: "workflow must be an object or null" };
+  const o = v as Record<string, unknown>;
+  if (!o.allowed || typeof o.allowed !== "object")
+    return { error: "workflow.allowed must be an object" };
+  const allowed: Record<string, number[]> = {};
+  for (const [from, tos] of Object.entries(o.allowed as Record<string, unknown>)) {
+    if (!/^\d+$/.test(from)) return { error: "allowed keys must be column ids" };
+    if (!Array.isArray(tos) || tos.some((t) => !Number.isInteger(t)))
+      return { error: "each allowed entry must be an array of column ids" };
+    allowed[from] = tos as number[];
+  }
+  const workflow: BoardWorkflow = { allowed };
+  if (o.guards !== undefined) {
+    if (!o.guards || typeof o.guards !== "object")
+      return { error: "workflow.guards must be an object" };
+    const guards: Record<string, import("../types").Condition> = {};
+    for (const [edge, cond] of Object.entries(o.guards as Record<string, unknown>)) {
+      const c = readCondition(cond);
+      if ("error" in c) return { error: `guard ${edge}: ${c.error}` };
+      guards[edge] = c;
+    }
+    workflow.guards = guards;
+  }
+  return workflow;
+}
+
+export async function handleGetWorkflow(request: Request, id: string) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+  try {
+    return Response.json({ workflow: await getBoardWorkflow(principal, boardId) });
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleSetWorkflow(request: Request, id: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+  const payload = await request.json().catch(() => null);
+  if (!payload || typeof payload !== "object") return badRequest("Invalid JSON body");
+  const workflow = readWorkflow((payload as Record<string, unknown>).workflow);
+  if (workflow && "error" in workflow) return badRequest(workflow.error);
+  try {
+    await setBoardWorkflow(session.user.id, boardId, workflow);
+    return Response.json({ workflow });
   } catch (error) {
     return authzErrorResponse(error);
   }

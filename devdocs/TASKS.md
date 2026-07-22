@@ -342,6 +342,21 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       the board toolbar. tsc/eslint/build clean; the engine's 21 tests cover the
       evaluator the builder emits. **Flips two scoreboard rows** (81 ✅ / 51 ❌).
 
+- [x] **State transition rules** (046, rock 1.3) — a Jira-style allowed-transition
+      map on the board (`board.workflow JSONB`, nullable = today's any→any). A
+      move that changes column now consults the map in `moveTask`: an unlisted
+      edge is a 409 (`AuthzError('conflict')`, the move-to-another-board line's
+      twin), and an edge carrying a guard evaluates it through the *automation
+      engine's own evaluator* (a transition guard is a rule condition by another
+      name) against the task snapshot — fail → 409. A from-column absent from the
+      map is unconstrained, so naming one column's transitions doesn't silently
+      lock the rest; reorders within a column are never gated. `get/setBoardWorkflow`
+      (viewer read / admin write, every referenced column tenancy-checked),
+      `GET/PUT /api/board/[id]/workflow`, and a columns×columns matrix editor in
+      the Automations dialog (opt-in toggle; `move_task` — human or agent — inherits
+      the guard automatically). 2 DB tests (refused edge, guard, clear). **Flips
+      one scoreboard row** (82 ✅ / 50 ❌).
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,
