@@ -8,14 +8,16 @@ added here is the next session's starting menu.
 Companion docs: `SESSION_HANDOFF.md` (per-session narrative + gotchas),
 `prd.md` (the milestone bet), `features.md` (breadth catalogue),
 `../docs/task_management_feature_summary.md` (the 140-criterion scoreboard,
-76 ✅ / 64 ❌ as of 2026-07-22 — the M4 agile cluster, the planning +
+79 ✅ / 61 ❌ as of 2026-07-22 — the M4 agile cluster, the planning +
 collaboration sweep, the Gantt + Goals/OKRs sweep, and Portfolio/Timesheets are
-scored ✅; the 2026-07-22 rocks sweep closed the **Core Work Items** (14/14) and
-**Planning & Views** (16/16) capability areas outright — Forms/intake,
-Program/initiative hierarchy, Resource + Capacity planning, Budget (039–042)).
+scored ✅; the 2026-07-22 rocks sweep closed the **Core Work Items** (14/14),
+**Planning & Views** (16/16), and **Agile & Product** (14/14) capability areas
+outright — Forms/intake, Program/initiative hierarchy, Resource + Capacity
+planning, Budget, Product discovery + Feedback intake, Teams + Scaled Agile
+(039–044)).
 
 Convention: `[x]` done → cite the commit; `[ ]` open → one line on the slice.
-Migrations are numbered in `src/shared/db/migrations/` and applied 001–042.
+Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
 
 ---
 
@@ -299,9 +301,11 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–042.
 
 ## Rocks sweep — outcome
 
-Both target capability areas are now fully native: **Core Work Items 14/14 ✅**
-and **Planning & Views 16/16 ✅**. Scoreboard 76 ✅ / 64 ❌. Full suite 523
-tests / 57 files green; tsc/eslint/build clean per feature.
+Three capability areas are now fully native: **Core Work Items 14/14 ✅**,
+**Planning & Views 16/16 ✅**, and **Agile & Product 14/14 ✅** (043–044 closed
+the last three Agile rocks — Product discovery, Feedback intake, Scaled
+Agile/SAFe). Scoreboard 79 ✅ / 61 ❌. Full suite 541 tests / 61 files green;
+tsc/eslint/build clean per feature.
 
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).

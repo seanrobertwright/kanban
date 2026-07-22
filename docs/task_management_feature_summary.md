@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **76 ✅ / 64 ❌** — the **Core Work Items** area (14/14) and the **Planning & Views** area (16/16) are now both fully ✅, closed by the 2026-07-22 rocks sweep (Forms/intake 039; Program/initiative hierarchy 040; Resource + Capacity planning 041; Budget/financial planning 042).
+**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **79 ✅ / 61 ❌** — the **Core Work Items** area (14/14), the **Planning & Views** area (16/16), and now the **Agile & Product** area (14/14) are all fully ✅, closed by the 2026-07-22 rocks sweep (Forms/intake 039; Program/initiative hierarchy 040; Resource + Capacity planning 041; Budget/financial planning 042; Product discovery + Feedback intake 043; Teams + Scaled Agile/SAFe 044).
 
 ## Scoring Scale
 
