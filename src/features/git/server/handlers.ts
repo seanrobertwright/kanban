@@ -13,6 +13,7 @@ import {
   listTaskGitLinks,
 } from "./repository";
 import { normalizeGithubEvent, verifyGithubSignature } from "./github";
+import { normalizeGitlabEvent, verifyGitlabToken } from "./gitlab";
 
 /**
  * Git connection management (2.0). Reads of a task's links take a principal (an
@@ -116,6 +117,41 @@ export async function handleGithubWebhook(request: Request, id: string) {
 
   const eventType = request.headers.get("x-github-event") ?? "";
   const events = normalizeGithubEvent(eventType, payload as Record<string, never>);
+  let linked = 0;
+  for (const event of events) {
+    const result = await ingestEvent(resolved.connection, event);
+    linked += result.linkedTaskIds.length;
+  }
+  return Response.json({ ok: true, linked });
+}
+
+/**
+ * The GitLab webhook ingress (2.2) — the twin of handleGithubWebhook. GitLab
+ * carries a plain secret in `X-Gitlab-Token` rather than an HMAC, so verification
+ * is a constant-time token compare and the body may be read after it. A bad id, a
+ * non-GitLab connection, or a failed token all answer the flat 404/401 an external
+ * caller should see, leaking nothing about which repo or whether it exists.
+ */
+export async function handleGitlabWebhook(request: Request, id: string) {
+  const connectionId = Number(id);
+  if (!Number.isInteger(connectionId)) return notFound();
+
+  const resolved = await connectionForIngress(connectionId);
+  if (!resolved || resolved.connection.provider !== "gitlab") return notFound();
+
+  const token = request.headers.get("x-gitlab-token");
+  if (!verifyGitlabToken(resolved.secret, token)) {
+    return new Response(null, { status: 401 });
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(await request.text());
+  } catch {
+    return badRequest("Invalid JSON body");
+  }
+
+  const events = normalizeGitlabEvent(payload as Record<string, never>);
   let linked = 0;
   for (const event of events) {
     const result = await ingestEvent(resolved.connection, event);

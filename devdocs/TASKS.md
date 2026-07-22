@@ -553,5 +553,27 @@ tsc/eslint/build clean per feature.
       Pull request links + Commit links scoreboard rows** (95 ✅ / 37 ❌). Branch
       *creation* (2.6) stays ❌ — tracking is done, the API-create half is live-only.
 
+- [x] **GitLab integration** (rock 2.2) — the second vendor adapter on the 2.0
+      spine, the twin of 2.1. `gitlab.ts` differs from GitHub in exactly two
+      provider-specific spots: GitLab carries a *plain* secret in `X-Gitlab-Token`
+      (no HMAC), so `verifyGitlabToken` is a constant-time equality against the
+      connection's decrypted secret (length-checked, fail-closed), and the body may
+      be read after verifying (no raw-body-before-parse constraint); and payloads
+      are keyed off the in-body `object_kind` — `merge_request` (`object_attributes`
+      iid/url/title/description/state/source_branch → the right `git.*` action, MR
+      states opened/locked/reopened→open, merged, closed) and `push` (one commit
+      link per commit, plus a branch link when the push creates the branch — the
+      all-zero `before` SHA, GitLab's equivalent of GitHub's `create` event). Route
+      `POST /api/git/webhook/gitlab/[id]` (no session — the token is the credential;
+      a bad id, a non-GitLab connection, or a wrong token all answer a flat
+      404/401). Everything downstream (task resolution, link upsert, idempotency,
+      rule firing) is 2.0's, shared. No migration — `createConnection` already
+      validates any provider. 9 tests (pure: token valid/wrong/missing, MR
+      open/merged/closed normalization, push commits, new-branch link, unmodeled
+      events; DB: a token-authed merge_request webhook links its `#ref` task,
+      bad-token→401, unknown-conn→404, a GitLab token on a GitHub connection→404).
+      tsc/eslint/build clean. **Flips the GitLab integration scoreboard row**
+      (96 ✅ / 36 ❌).
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
