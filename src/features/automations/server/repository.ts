@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 import type { PoolClient } from "pg";
 
 import type { Principal } from "@/features/auth/server/principal";
@@ -10,6 +12,7 @@ import type {
   AutomationRule,
   AutomationRun,
   AutomationRunStatus,
+  AutomationTrigger,
   CreateAutomationRuleInput,
   UpdateAutomationRuleInput,
 } from "../types";
@@ -277,6 +280,92 @@ export async function advanceSchedule(
       WHERE id = $1`,
     [ruleId]
   );
+}
+
+// ─── inbound trigger tokens (1.12) ───
+
+const TRIGGER_COLUMNS = `id, board_id AS "boardId", name, token,
+                         is_active AS "isActive", created_at AS "createdAt"`;
+
+/** A board's inbound trigger tokens. Admin — a token can drive the board. */
+export async function listTriggers(
+  actor: string | Principal,
+  boardId: number
+): Promise<AutomationTrigger[]> {
+  await requireBoardRole(actor, boardId, "admin");
+  return query<AutomationTrigger>(
+    `SELECT ${TRIGGER_COLUMNS} FROM automation_trigger WHERE board_id = $1
+      ORDER BY id`,
+    [boardId]
+  );
+}
+
+/** Mints a new inbound trigger token for a board (admin). */
+export async function createTrigger(
+  userId: string,
+  boardId: number,
+  name: string
+): Promise<AutomationTrigger> {
+  await requireBoardRole(userId, boardId, "admin");
+  const token = randomBytes(24).toString("base64url");
+  const rows = await query<AutomationTrigger>(
+    `INSERT INTO automation_trigger (board_id, name, token, created_by)
+     VALUES ($1, $2, $3, $4)
+     RETURNING ${TRIGGER_COLUMNS}`,
+    [boardId, name.trim(), token, userId]
+  );
+  return rows[0];
+}
+
+/** Enable/disable or delete a trigger (admin), scoped through its board. */
+export async function setTriggerActive(
+  userId: string,
+  triggerId: number,
+  isActive: boolean
+): Promise<boolean> {
+  const row = await queryOne<{ boardId: number }>(
+    `SELECT board_id AS "boardId" FROM automation_trigger WHERE id = $1`,
+    [triggerId]
+  );
+  if (!row) return false;
+  await requireBoardRole(userId, row.boardId, "admin");
+  await query(`UPDATE automation_trigger SET is_active = $2 WHERE id = $1`, [
+    triggerId,
+    isActive,
+  ]);
+  return true;
+}
+
+export async function deleteTrigger(
+  userId: string,
+  triggerId: number
+): Promise<boolean> {
+  const row = await queryOne<{ boardId: number }>(
+    `SELECT board_id AS "boardId" FROM automation_trigger WHERE id = $1`,
+    [triggerId]
+  );
+  if (!row) return false;
+  await requireBoardRole(userId, row.boardId, "admin");
+  await query(`DELETE FROM automation_trigger WHERE id = $1`, [triggerId]);
+  return true;
+}
+
+/**
+ * Resolves an active trigger token to its board, or null. No principal: the
+ * token IS the credential (025's webhook shape), so a match authorizes the fire
+ * and a miss/inactive token is simply unauthorized. Board and token are both
+ * checked so a token minted for one board cannot fire another.
+ */
+export async function boardForTriggerToken(
+  boardId: number,
+  token: string
+): Promise<number | null> {
+  const row = await queryOne<{ boardId: number }>(
+    `SELECT board_id AS "boardId" FROM automation_trigger
+      WHERE board_id = $1 AND token = $2 AND is_active`,
+    [boardId, token]
+  );
+  return row?.boardId ?? null;
 }
 
 /** Records a scheduled fire — no activity_id (a timer, not an event). */

@@ -1,6 +1,7 @@
 import type {
   AutomationRule,
   AutomationRun,
+  AutomationTrigger,
   BoardWorkflow,
   CreateAutomationRuleInput,
   UpdateAutomationRuleInput,
@@ -77,4 +78,33 @@ export async function saveWorkflow(
   });
   const body = await jsonOrThrow<{ workflow: BoardWorkflow | null }>(res);
   return body.workflow;
+}
+
+export async function fetchTriggers(boardId: number): Promise<AutomationTrigger[]> {
+  const res = await fetch(`/api/board/${boardId}/triggers`, { cache: "no-store" });
+  return jsonOrThrow<AutomationTrigger[]>(res);
+}
+
+export function createTrigger(
+  boardId: number,
+  name: string
+): Promise<AutomationTrigger> {
+  return fetch(`/api/board/${boardId}/triggers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  }).then((res) => jsonOrThrow<AutomationTrigger>(res));
+}
+
+export function setTriggerActive(id: number, isActive: boolean): Promise<unknown> {
+  return fetch(`/api/triggers/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ isActive }),
+  }).then((res) => jsonOrThrow<unknown>(res));
+}
+
+export async function deleteTrigger(id: number): Promise<void> {
+  const res = await fetch(`/api/triggers/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Delete failed (${res.status})`);
 }

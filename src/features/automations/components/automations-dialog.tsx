@@ -21,6 +21,7 @@ import {
   type Action,
   type AutomationRule,
   type AutomationRun,
+  type AutomationTrigger,
   type Condition,
   type Operator,
   type Predicate,
@@ -156,6 +157,8 @@ export function AutomationsDialog({
         {canManage && (
           <WorkflowMatrix boardId={boardId} columns={columns} open={open} />
         )}
+
+        {canManage && <InboundTriggers boardId={boardId} open={open} />}
       </DialogContent>
     </Dialog>
   );
@@ -171,6 +174,7 @@ const EVENT_LABELS: Record<TriggerEvent, string> = {
   "task.scheduled": "a task's dates change",
   "task.labeled": "a task's labels change",
   "schedule.tick": "on a schedule",
+  "external.trigger": "an external tool fires it",
 };
 
 function summarizeAction(a: Action, columns: AutomationsColumn[], labels: AutomationsLabel[]): string {
@@ -448,6 +452,121 @@ function WorkflowMatrix({
       >
         {saved ? "Saved" : "Save transitions"}
       </Button>
+    </div>
+  );
+}
+
+/**
+ * Inbound trigger tokens (1.12): mint a per-board token an external tool POSTs to
+ * (POST /api/board/:id/triggers/:token) to fire the board's "external tool fires
+ * it" rules. Admin-only. The token is the credential, so the row shows the full
+ * fire URL to copy once; revoke or delete disables it.
+ */
+function InboundTriggers({ boardId, open }: { boardId: number; open: boolean }) {
+  const [triggers, setTriggers] = useState<AutomationTrigger[]>([]);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await api.fetchTriggers(boardId);
+        if (!cancelled) setTriggers(list);
+      } catch {
+        /* the rule list surfaces load errors */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, boardId]);
+
+  async function reload() {
+    setTriggers(await api.fetchTriggers(boardId));
+  }
+  async function act(fn: () => Promise<unknown>) {
+    setBusy(true);
+    try {
+      await fn();
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+  return (
+    <div className="grid gap-2 border-t pt-3">
+      <p className="text-sm font-medium">Inbound triggers</p>
+      <p className="text-xs text-muted-foreground">
+        POST a token URL from n8n / Make / a script to fire this board&apos;s
+        &ldquo;external tool fires it&rdquo; rules.
+      </p>
+      {triggers.length > 0 && (
+        <ul className="grid gap-1.5">
+          {triggers.map((t) => (
+            <li key={t.id} className="grid gap-0.5 rounded-md border px-2 py-1.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium">
+                  {t.name || "trigger"}
+                  {!t.isActive && (
+                    <span className="ml-2 rounded bg-muted px-1 text-muted-foreground">revoked</span>
+                  )}
+                </span>
+                <span className="flex gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1.5 text-xs text-muted-foreground"
+                    disabled={busy}
+                    onClick={() => act(() => api.setTriggerActive(t.id, !t.isActive))}
+                  >
+                    {t.isActive ? "Revoke" : "Reactivate"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
+                    disabled={busy}
+                    onClick={() => act(() => api.deleteTrigger(t.id))}
+                  >
+                    Delete
+                  </Button>
+                </span>
+              </div>
+              <code className="block truncate text-muted-foreground">
+                POST {origin}/api/board/{boardId}/triggers/{t.token}
+              </code>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex items-center gap-2">
+        <Input
+          aria-label="Trigger name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name (e.g. n8n)"
+          className="h-7 text-xs"
+        />
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          disabled={busy}
+          onClick={async () => {
+            await act(() => api.createTrigger(boardId, name.trim()));
+            setName("");
+          }}
+        >
+          Mint token
+        </Button>
+      </div>
     </div>
   );
 }

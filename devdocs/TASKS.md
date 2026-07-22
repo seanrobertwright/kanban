@@ -393,6 +393,21 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       resolveRouting + a DB submit routed vs default). **Flips one scoreboard row**
       (85 ✅ / 47 ❌).
 
+- [x] **External automation connectors** (049, rock 1.12) — the inbound arm.
+      Outbound was already done (the engine's webhook action + 025's HMAC stream
+      make the app callable from n8n/Make/Power Automate); this is the mirror: a
+      scoped, revocable `automation_trigger` token per board that an external tool
+      POSTs to (`POST /api/board/[id]/triggers/[token]`, no session — the token IS
+      the credential, 025's shape), raising a synthetic `external.trigger` event.
+      Like schedule.tick it scans the board and applies matching rules — the
+      difference is what wakes it — reusing the extracted `scanBoardWithRule`. Token
+      mint/list/revoke/delete is admin; a token minted for one board can't fire
+      another (board+token both checked); a bad/inactive token is a flat 404. UI
+      section in the Automations dialog mints tokens and shows the fire URL. 1 DB
+      test (active token fires + acts, wrong board / revoked → null). Native
+      Zapier/Make *listings* stay ⛔ — this makes the app connectable from them.
+      **Flips one scoreboard row** (86 ✅ / 46 ❌).
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,

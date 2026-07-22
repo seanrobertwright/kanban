@@ -37,6 +37,9 @@ export const TRIGGER_EVENTS = [
   // (1.4). A schedule.tick rule scans the board's tasks each tick and applies its
   // actions to the ones its conditions match, rather than reacting to one event.
   "schedule.tick",
+  // Synthetic, raised by an external tool POSTing a board's trigger token (1.12).
+  // Like schedule.tick it scans the board — the difference is what wakes it.
+  "external.trigger",
 ] as const;
 
 export type TriggerEvent = (typeof TRIGGER_EVENTS)[number];
@@ -199,6 +202,17 @@ export interface BoardWorkflow {
 /** The edge key moveTask and the matrix editor agree on. */
 export function edgeKey(from: number, to: number): string {
   return `${from}>${to}`;
+}
+
+/** A minted inbound trigger token (1.12). The token itself is only returned
+ *  from create — thereafter the list shows a masked tail. */
+export interface AutomationTrigger {
+  id: number;
+  boardId: number;
+  name: string;
+  token: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export type AutomationRunStatus = "matched" | "skipped" | "error" | "capped";

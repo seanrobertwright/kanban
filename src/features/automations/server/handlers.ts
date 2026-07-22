@@ -19,12 +19,18 @@ import {
   type UpdateAutomationRuleInput,
 } from "../types";
 import {
+  boardForTriggerToken,
   createAutomationRule,
+  createTrigger,
   deleteAutomationRule,
+  deleteTrigger,
   listAutomationRuns,
   listAutomationRules,
+  listTriggers,
+  setTriggerActive,
   updateAutomationRule,
 } from "./repository";
+import { fireExternalTrigger } from "./scheduler";
 import {
   getBoardWorkflow,
   setBoardWorkflow,
@@ -338,4 +344,86 @@ export async function handleListAutomationRuns(request: Request, id: string) {
   } catch (error) {
     return authzErrorResponse(error);
   }
+}
+
+// ─── inbound trigger tokens (1.12) ───
+
+export async function handleListTriggers(request: Request, id: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+  try {
+    return Response.json(await listTriggers(session.user.id, boardId));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleCreateTrigger(request: Request, id: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+  const payload = await request.json().catch(() => ({}));
+  const name = typeof (payload as Record<string, unknown>)?.name === "string"
+    ? ((payload as Record<string, unknown>).name as string)
+    : "";
+  try {
+    return Response.json(await createTrigger(session.user.id, boardId, name), {
+      status: 201,
+    });
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleUpdateTrigger(request: Request, id: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  const triggerId = Number(id);
+  if (!Number.isInteger(triggerId)) return badRequest("Invalid trigger id");
+  const payload = await request.json().catch(() => null);
+  const isActive = (payload as Record<string, unknown> | null)?.isActive;
+  if (typeof isActive !== "boolean") return badRequest("isActive must be a boolean");
+  try {
+    return (await setTriggerActive(session.user.id, triggerId, isActive))
+      ? Response.json({ ok: true })
+      : notFound("Trigger");
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleDeleteTrigger(request: Request, id: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  const triggerId = Number(id);
+  if (!Number.isInteger(triggerId)) return badRequest("Invalid trigger id");
+  try {
+    return (await deleteTrigger(session.user.id, triggerId))
+      ? new Response(null, { status: 204 })
+      : notFound("Trigger");
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/**
+ * The inbound fire (1.12) — no session, the token is the credential. An external
+ * tool POSTs here to drive the board's external.trigger rules. A bad or inactive
+ * token is a flat 404 (anti-enumeration, the not_found discipline), not a hint
+ * that the board or token half-exists.
+ */
+export async function handleFireTrigger(
+  _request: Request,
+  id: string,
+  token: string
+) {
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return notFound("Trigger");
+  const resolved = await boardForTriggerToken(boardId, token);
+  if (resolved === null) return notFound("Trigger");
+  const fired = await fireExternalTrigger(resolved);
+  return Response.json({ fired });
 }
