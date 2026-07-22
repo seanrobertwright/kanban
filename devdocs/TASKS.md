@@ -8,13 +8,14 @@ added here is the next session's starting menu.
 Companion docs: `SESSION_HANDOFF.md` (per-session narrative + gotchas),
 `prd.md` (the milestone bet), `features.md` (breadth catalogue),
 `../docs/task_management_feature_summary.md` (the 140-criterion scoreboard,
-72 ✅ / 68 ❌ as of 2026-07-22 — the M4 agile cluster, the planning +
+76 ✅ / 64 ❌ as of 2026-07-22 — the M4 agile cluster, the planning +
 collaboration sweep, the Gantt + Goals/OKRs sweep, and Portfolio/Timesheets are
-scored ✅; the 2026-07-22 rocks sweep is closing out the **Core Work Items** and
-**Planning & Views** capability areas row by row — Forms/intake landed first).
+scored ✅; the 2026-07-22 rocks sweep closed the **Core Work Items** (14/14) and
+**Planning & Views** (16/16) capability areas outright — Forms/intake,
+Program/initiative hierarchy, Resource + Capacity planning, Budget (039–042)).
 
 Convention: `[x]` done → cite the commit; `[ ]` open → one line on the slice.
-Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
+Migrations are numbered in `src/shared/db/migrations/` and applied 001–042.
 
 ---
 
