@@ -114,6 +114,15 @@ export async function drainOnce(): Promise<number> {
       console.error("automation scheduler tick failed", error);
     }
 
+    // SLA timers (050, rock 1.6) ride the same sweep — start new timers for
+    // matching tasks, breach the overdue, and fire their escalation actions.
+    try {
+      const { sweepSlas } = await import("@/features/sla/server/sweep");
+      await sweepSlas();
+    } catch (error) {
+      console.error("sla sweep tick failed", error);
+    }
+
     return ids.size;
   } catch (error) {
     console.error("run drainer tick failed", error);

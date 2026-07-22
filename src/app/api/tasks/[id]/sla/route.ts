@@ -1,0 +1,9 @@
+import { handleTaskSla } from "@/features/sla/server/handlers";
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  return handleTaskSla(request, id);
+}

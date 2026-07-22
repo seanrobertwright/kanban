@@ -408,6 +408,21 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       Zapier/Make *listings* stay ⛔ — this makes the app connectable from them.
       **Flips one scoreboard row** (86 ✅ / 46 ❌).
 
+- [x] **SLA management** (050, rock 1.6) — service timers with breach +
+      escalation, on the engine. `sla_policy` (board-scoped: `applies_when`
+      condition, `target_mins`, `action_on_breach` = engine actions) + `task_sla`
+      (per task: started/due/breached timestamps, one live timer per (task,
+      policy)). Elapsed + remaining are **derived** (now() vs due_at), never
+      stored. A sweep rides the durable drainer's tick: pass 1 starts a timer
+      (due target_mins out) for each task a policy matches without one; pass 2
+      stamps `breached_at` on every open timer past due (claimed in the same
+      UPDATE so two sweeps can't double-fire) and runs its escalation action —
+      each breach guarded so one bad action can't abort the sweep. Policy CRUD
+      admin, reads viewer+; `GET /api/tasks/[id]/sla` exposes the derived status.
+      Compact policy editor in the Automations dialog. 3 tests (pure remaining +
+      breach math, DB start→force-overdue→breach+escalate, no re-breach). **Flips
+      one scoreboard row** (87 ✅ / 45 ❌).
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,

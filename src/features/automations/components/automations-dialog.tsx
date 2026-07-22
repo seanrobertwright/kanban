@@ -13,6 +13,8 @@ import {
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import * as api from "../client/api";
+import * as slaApi from "@/features/sla/client/api";
+import type { SlaPolicy } from "@/features/sla/types";
 import {
   OPERATORS,
   SCHEDULE_INTERVALS,
@@ -159,6 +161,8 @@ export function AutomationsDialog({
         )}
 
         {canManage && <InboundTriggers boardId={boardId} open={open} />}
+
+        {canManage && <SlaPolicies boardId={boardId} open={open} />}
       </DialogContent>
     </Dialog>
   );
@@ -566,6 +570,167 @@ function InboundTriggers({ boardId, open }: { boardId: number; open: boolean }) 
         >
           Mint token
         </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * SLA policies (050, rock 1.6): a target time for tasks matching one condition,
+ * with a breach comment. The timers themselves start and breach on the drainer
+ * sweep; this is the policy editor. Kept compact — one applies-when predicate and
+ * a comment on breach — over the full action list the API accepts.
+ */
+function SlaPolicies({ boardId, open }: { boardId: number; open: boolean }) {
+  const [policies, setPolicies] = useState<SlaPolicy[]>([]);
+  const [name, setName] = useState("");
+  const [targetMins, setTargetMins] = useState("60");
+  const [field, setField] = useState("priority");
+  const [op, setOp] = useState<Operator>("eq");
+  const [value, setValue] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await slaApi.fetchSlaPolicies(boardId);
+        if (!cancelled) setPolicies(list);
+      } catch {
+        /* the rule list surfaces load errors */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, boardId]);
+
+  async function reload() {
+    setPolicies(await slaApi.fetchSlaPolicies(boardId));
+  }
+  async function act(fn: () => Promise<unknown>) {
+    setBusy(true);
+    try {
+      await fn();
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canAdd = name.trim() !== "" && Number(targetMins) > 0;
+
+  return (
+    <div className="grid gap-2 border-t pt-3">
+      <p className="text-sm font-medium">SLA policies</p>
+      {policies.length > 0 && (
+        <ul className="grid gap-1">
+          {policies.map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
+              <span>
+                {p.name} — {p.targetMins}m{!p.isEnabled && " (off)"}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
+                disabled={busy}
+                onClick={() => act(() => slaApi.deleteSlaPolicy(p.id))}
+              >
+                Delete
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="grid gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <Input
+            aria-label="SLA name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Urgent within 1h"
+            className="h-7 text-xs"
+          />
+          <Input
+            aria-label="SLA target minutes"
+            type="number"
+            value={targetMins}
+            onChange={(e) => setTargetMins(e.target.value)}
+            className="h-7 w-20 text-xs"
+          />
+          <span className="text-xs text-muted-foreground">min</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground">for</span>
+          <select
+            aria-label="SLA field"
+            className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+            value={field}
+            onChange={(e) => setField(e.target.value)}
+          >
+            {CONDITION_FIELDS.map((f) => (
+              <option key={f.field} value={f.field}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="SLA operator"
+            className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+            value={op}
+            onChange={(e) => setOp(e.target.value as Operator)}
+          >
+            {OPERATORS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+          <Input
+            aria-label="SLA value"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="value"
+            className="h-7 text-xs"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Input
+            aria-label="SLA breach message"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="On breach, comment… (optional)"
+            className="h-7 text-xs"
+          />
+          <Button
+            type="button"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            disabled={busy || !canAdd}
+            onClick={async () => {
+              const numeric = CONDITION_FIELDS.find((f) => f.field === field)?.numeric;
+              await act(() =>
+                slaApi.createSlaPolicy(boardId, {
+                  name: name.trim(),
+                  targetMins: Number(targetMins),
+                  appliesWhen: { field, op, value: numeric ? Number(value) : value },
+                  actionOnBreach: message.trim()
+                    ? [{ type: "comment", body: message.trim() }]
+                    : [],
+                })
+              );
+              setName("");
+              setValue("");
+              setMessage("");
+            }}
+          >
+            Add policy
+          </Button>
+        </div>
       </div>
     </div>
   );
