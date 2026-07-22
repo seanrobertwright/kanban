@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { fetchTaskCiStatuses, fetchTaskGitLinks } from "../client/api";
+import { suggestBranchName } from "../lib/branch";
 import type { GitLinkState, TaskCiStatus, TaskGitLink } from "../types";
 
 /**
@@ -74,7 +75,14 @@ function ciVisual(ci: TaskCiStatus): {
   return { Icon: CircleDashed, chip: "bg-muted text-muted-foreground", label: "skipped" };
 }
 
-export function DevelopmentSection({ taskId }: { taskId: number }) {
+export function DevelopmentSection({
+  taskId,
+  taskTitle = "",
+}: {
+  taskId: number;
+  /** The task's title — the slug half of the branch name suggested for it (2.6). */
+  taskTitle?: string;
+}) {
   const [links, setLinks] = useState<TaskGitLink[] | null>(null);
   const [ci, setCi] = useState<TaskCiStatus[] | null>(null);
 
@@ -100,6 +108,12 @@ export function DevelopmentSection({ taskId }: { taskId: number }) {
   const hasLinks = links && links.length > 0;
   const hasCi = ci && ci.length > 0;
   if (!hasLinks && !hasCi) return null;
+
+  // The branch name to create for further work on this task (2.6). Shown only
+  // once the section is live (a repo already references the task), so it stays
+  // inert on a task no repo touches — and it resolves back here when pushed,
+  // since suggestBranchName is parseBranchRef's inverse.
+  const branchName = suggestBranchName(taskId, taskTitle);
 
   return (
     <div className="grid gap-2">
@@ -162,6 +176,16 @@ export function DevelopmentSection({ taskId }: { taskId: number }) {
           })}
         </ul>
       )}
+      {/* The branch to cut for more work on this task (2.6). The provider-API
+          "create" is live-only; this is the canonical name to use, and it links
+          back here once pushed. */}
+      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+        <GitBranch className="size-4 shrink-0" aria-hidden />
+        <span>Branch:</span>
+        <code className="min-w-0 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+          {branchName}
+        </code>
+      </p>
     </div>
   );
 }

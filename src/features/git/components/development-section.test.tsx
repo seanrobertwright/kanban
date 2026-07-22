@@ -47,14 +47,16 @@ function ciRun(over: Partial<TaskCiStatus>): TaskCiStatus {
 }
 
 describe("DevelopmentSection", () => {
-  it("renders a PR by title with its state chip and a link out", async () => {
+  it("renders a PR by title with its state chip, a link out, and a branch suggestion", async () => {
     mockFetch.mockResolvedValue([link({})]);
     mockCi.mockResolvedValue([]);
-    render(<DevelopmentSection taskId={5} />);
+    render(<DevelopmentSection taskId={5} taskTitle="Fix the login bug" />);
 
     const anchor = await screen.findByRole("link", { name: "Fix the login bug" });
     expect(anchor.getAttribute("href")).toBe("https://github.com/o/r/pull/42");
     expect(screen.getByText("merged")).toBeTruthy();
+    // The suggested branch name (2.6) resolves back to this task via its id.
+    expect(screen.getByText("feature/5-fix-the-login-bug")).toBeTruthy();
   });
 
   it("falls back to a short sha for a titleless commit", async () => {

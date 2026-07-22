@@ -904,6 +904,7 @@ export function TaskDialog({
               <DevelopmentSection
                 key={`dev-${task.id}`}
                 taskId={task.id}
+                taskTitle={task.title}
               />
               {/* An agent run's review sits above the thread: it is what a human
                   came to this task to resolve when the agent has proposed work.

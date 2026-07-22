@@ -641,5 +641,21 @@ tsc/eslint/build clean per feature.
       cross-workspace tag refused). tsc/eslint/build clean. **Flips the Release
       management scoreboard row** (99 ✅ / 33 ❌).
 
+- [x] **Branch linking/automation** (rock 2.6) — two halves, mostly already
+      standing. *Tracking* was delivered by 2.0 (a `feature/123-slug` branch links
+      to task 123 via `parseBranchRef`) and *automation* by Phase 1 + the 2.0 runner
+      relaxation: `git.branch_linked` is a trigger event, so "branch created → move
+      to In Progress" is an ordinary no-code rule today. This rock adds the missing
+      *create* primitive's pure core: `suggestBranchName(taskId, title)` —
+      `feature/<id>-<slug>`, the **exact inverse of `parseBranchRef`**, pinned by a
+      round-trip test (`parseBranchRef(suggestBranchName(id, t)) === id`) so a name
+      we suggest always re-links. Surfaced as a copyable branch name in the task
+      dialog's Development section (shown once a repo references the task, the
+      inert-until-git rule). The provider-API call that opens the branch on the
+      remote stays live-only (needs an installation token), the 2.5 branch-creation
+      note's honest boundary. 4 pure tests (slug build, empty-title fallback, length
+      cap, round-trip). tsc/eslint/build clean. **Flips the Branch linking/automation
+      scoreboard row** (100 ✅ / 32 ❌).
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
