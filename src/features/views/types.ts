@@ -6,7 +6,8 @@ import type { BoardFilter } from "@/features/board/components/board-filter-bar";
  * the CHECK constraint in 015, widened by 029 to admit 'backlog' — the
  * sprint_id IS NULL queue as its own drag-to-sprint planning surface (028/M4),
  * by 036 to admit 'gantt' (the timeline with dependency arrows + critical path),
- * and by 032 to admit 'timeline', the start_date→due_date span view.
+ * by 032 to admit 'timeline', the start_date→due_date span view, and by 038 to
+ * admit 'roadmap', the epic-swimlane lens over milestone due dates.
  */
 export const BOARD_VIEW_MODES = [
   "board",
@@ -15,6 +16,7 @@ export const BOARD_VIEW_MODES = [
   "backlog",
   "timeline",
   "gantt",
+  "roadmap",
 ] as const;
 export type BoardViewMode = (typeof BOARD_VIEW_MODES)[number];
 

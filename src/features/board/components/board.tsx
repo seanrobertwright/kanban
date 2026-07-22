@@ -25,6 +25,7 @@ import {
   Layers,
   LayoutTemplate,
   List,
+  Map as MapIcon,
   Plus,
   Rocket,
   SlidersHorizontal,
@@ -80,6 +81,7 @@ import { BacklogView } from "./backlog-view";
 import { CalendarView } from "./calendar-view";
 import { GanttView } from "./gantt-view";
 import { TimelineView } from "./timeline-view";
+import { RoadmapView } from "./roadmap-view";
 import { ListView } from "./list-view";
 import { SavedViews } from "@/features/views/components/saved-views";
 import type { BoardViewMode, SavedView } from "@/features/views/types";
@@ -597,6 +599,9 @@ export function Board({
             <ToggleGroupItem value="backlog">
               <Inbox /> Backlog
             </ToggleGroupItem>
+            <ToggleGroupItem value="roadmap">
+              <MapIcon /> Roadmap
+            </ToggleGroupItem>
           </ToggleGroup>
           <Button
             variant="ghost"
@@ -742,6 +747,12 @@ export function Board({
           canEdit={canEdit}
           onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
           onAssignSprint={handleAssignSprint}
+        />
+      ) : view === "roadmap" ? (
+        <RoadmapView
+          milestones={milestones}
+          epics={epics}
+          onOpenMilestones={() => setMilestonesOpen(true)}
         />
       ) : (
         <DndContext
