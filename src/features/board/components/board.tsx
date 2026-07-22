@@ -25,6 +25,7 @@ import {
   GanttChartSquare,
   Gauge,
   Inbox,
+  Landmark,
   Layers,
   LayoutTemplate,
   List,
@@ -66,6 +67,7 @@ import { InsightsDialog } from "./insights-dialog";
 import { TimesheetDialog } from "@/features/time/components/timesheet-dialog";
 import { FormsDialog } from "@/features/forms/components/forms-dialog";
 import { CapacityDialog } from "@/features/capacity/components/capacity-dialog";
+import { BudgetDialog } from "@/features/budget/components/budget-dialog";
 import { CustomFieldsDialog } from "@/features/custom-fields/components/custom-fields-dialog";
 import type { CustomField } from "@/features/custom-fields/types";
 import { MilestonesDialog } from "@/features/milestones/components/milestones-dialog";
@@ -232,6 +234,7 @@ export function Board({
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [formsOpen, setFormsOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
+  const [budgetOpen, setBudgetOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
   const [milestonesOpen, setMilestonesOpen] = useState(false);
   const [epics, setEpics] = useState<Epic[]>(initialEpics);
@@ -700,6 +703,14 @@ export function Board({
           >
             <Gauge /> Capacity
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setBudgetOpen(true)}
+          >
+            <Landmark /> Budget
+          </Button>
           {/* Export is a GET the browser can follow — plain anchors, so the
               download rides the session cookie with no fetch-and-blob dance.
               Viewer+: an export is a read of what the board already shows. */}
@@ -1015,6 +1026,12 @@ export function Board({
         open={capacityOpen}
         canManage={canDeleteColumns}
         onOpenChange={setCapacityOpen}
+      />
+      <BudgetDialog
+        boardId={boardId}
+        open={budgetOpen}
+        canManage={canDeleteColumns}
+        onOpenChange={setBudgetOpen}
       />
       <TemplatesDialog
         open={templatesOpen}
