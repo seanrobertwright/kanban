@@ -1,8 +1,10 @@
+import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
 import {
   getSessionFromRequest,
   unauthorized,
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "./authz";
+import { getWorkspacePortfolio } from "./portfolio";
 import {
   inviteMember,
   isWorkspaceRole,
@@ -74,6 +76,18 @@ export async function handleListMembers(request: Request, workspaceId: string) {
       listInvitations(session.user.id, workspaceId).catch(() => []),
     ]);
     return Response.json({ members, invitations });
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handlePortfolio(request: Request, workspaceId: string) {
+  // A read (viewer+), so a principal — an agent reasoning across a workspace may
+  // read where its boards stand, the analytics/timesheet read rule.
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  try {
+    return Response.json(await getWorkspacePortfolio(principal, workspaceId));
   } catch (error) {
     return authzErrorResponse(error);
   }

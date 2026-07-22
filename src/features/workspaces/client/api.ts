@@ -3,6 +3,7 @@ import type {
   Invitation,
   Member,
   NewWorkspace,
+  Portfolio,
   WorkspaceRole,
 } from "../types";
 
@@ -19,6 +20,15 @@ async function unwrap<T>(res: Response): Promise<T> {
     throw new Error(body?.error ?? `Request failed (${res.status})`);
   }
   return res.status === 204 ? (undefined as T) : res.json();
+}
+
+/** Every board in the workspace rolled up into one glance (040). */
+export async function fetchPortfolio(workspaceId: string): Promise<Portfolio> {
+  return unwrap(
+    await fetch(`/api/workspaces/${workspaceId}/portfolio`, {
+      cache: "no-store",
+    })
+  );
 }
 
 export async function createWorkspace(name: string): Promise<NewWorkspace> {
