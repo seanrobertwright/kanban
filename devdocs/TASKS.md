@@ -371,6 +371,17 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       trigger + interval picker. 1 DB test (scans + acts on matches only, advances,
       no re-fire on the same tick). **Flips one scoreboard row** (83 ✅ / 49 ❌).
 
+- [x] **Notification rules** (rock 1.5) — a `notify` action, "who gets pinged on
+      what". The bell has no notification table — it derives from the activity log
+      + comment mentions (016/024) — so a notify *posts a comment that @-mentions
+      the target*, which surfaces as "mentioned you on" in their bell, no new
+      storage. Target is `"assignee"` (resolved to the task's current human
+      assignee from the event snapshot) or an explicit member; the whole feature
+      is `When task.assigned If assignee=… Then notify`. Builder gains a "notify
+      assignee" action with a message. 1 DB test (a move fires the rule → a
+      mentioning comment lands for the assignee). **Flips one scoreboard row**
+      (84 ✅ / 48 ❌).
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,

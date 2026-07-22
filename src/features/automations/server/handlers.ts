@@ -128,6 +128,19 @@ function readAction(v: unknown): Action | { error: string } {
       if (typeof o.body !== "string" || o.body.trim() === "")
         return { error: "comment needs a non-empty body" };
       return v as Action;
+    case "notify": {
+      const t = o.target;
+      const ok =
+        t === "assignee" ||
+        (!!t &&
+          typeof t === "object" &&
+          (t as Record<string, unknown>).type === "human" &&
+          typeof (t as Record<string, unknown>).id === "string");
+      if (!ok) return { error: "notify needs target 'assignee' or {type:'human', id}" };
+      if (o.message !== undefined && typeof o.message !== "string")
+        return { error: "notify message must be a string" };
+      return v as Action;
+    }
     default:
       return { error: `unknown action type: ${String(o.type)}` };
   }

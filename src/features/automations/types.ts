@@ -113,7 +113,17 @@ export type Action =
   | ({ type: "assign"; assignee: Actor | null } & ActionBase)
   | ({ type: "set_field"; field: SettableField; value: SettableValue } & ActionBase)
   | ({ type: "add_label"; labelId: number } & ActionBase)
-  | ({ type: "comment"; body: string } & ActionBase);
+  | ({ type: "comment"; body: string } & ActionBase)
+  | ({ type: "notify"; target: NotifyTarget; message?: string } & ActionBase);
+
+/**
+ * Who a notify action pings (1.5). "assignee" resolves to the task's current
+ * human assignee at fire time; an explicit human target names a member. The
+ * bell has no notification table — it derives from the activity log + comment
+ * mentions (016/024) — so a notify posts a comment that @-mentions the target,
+ * which is exactly the "mentioned you on" the bell already surfaces.
+ */
+export type NotifyTarget = "assignee" | { type: "human"; id: string };
 
 interface ActionBase {
   onlyIf?: Condition;

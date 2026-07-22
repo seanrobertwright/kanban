@@ -16,6 +16,7 @@ import type {
   Action,
   Actor,
   Condition,
+  NotifyTarget,
   Operator,
   Predicate,
   SettableField,
@@ -34,7 +35,8 @@ export type Effect =
   | { type: "assign"; assignee: Actor | null }
   | { type: "set_field"; field: SettableField; value: SettableValue }
   | { type: "add_label"; labelId: number }
-  | { type: "comment"; body: string };
+  | { type: "comment"; body: string }
+  | { type: "notify"; target: NotifyTarget; message?: string };
 
 /**
  * Resolves a possibly-dotted field path against the snapshot ("assignee.id"

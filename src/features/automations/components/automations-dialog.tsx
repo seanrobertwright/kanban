@@ -185,6 +185,8 @@ function summarizeAction(a: Action, columns: AutomationsColumn[], labels: Automa
       return `comment "${a.body}"`;
     case "assign":
       return a.assignee ? `assign to ${a.assignee.id}` : "unassign";
+    case "notify":
+      return `notify ${a.target === "assignee" ? "assignee" : a.target.id}`;
   }
 }
 
@@ -478,7 +480,8 @@ type ActionDraft =
   | { type: "move"; columnId: string }
   | { type: "set_field"; field: SettableField; value: string }
   | { type: "add_label"; labelId: string }
-  | { type: "comment"; body: string };
+  | { type: "comment"; body: string }
+  | { type: "notify"; message: string };
 
 function CreateRule({
   boardId,
@@ -546,6 +549,8 @@ function CreateRule({
           return { type: "add_label", labelId: Number(a.labelId) };
         case "comment":
           return { type: "comment", body: a.body.trim() };
+        case "notify":
+          return { type: "notify", target: "assignee", message: a.message.trim() || undefined };
       }
     });
   }
@@ -706,7 +711,9 @@ function CreateRule({
                       ? { type: "set_field", field: "priority", value: "" }
                       : t === "add_label"
                         ? { type: "add_label", labelId: String(labels[0]?.id ?? "") }
-                        : { type: "comment", body: "" }
+                        : t === "notify"
+                          ? { type: "notify", message: "" }
+                          : { type: "comment", body: "" }
                 );
               }}
             >
@@ -714,6 +721,7 @@ function CreateRule({
               <option value="set_field">set field</option>
               <option value="add_label">add label</option>
               <option value="comment">comment</option>
+              <option value="notify">notify assignee</option>
             </select>
 
             {a.type === "move" && (
@@ -775,6 +783,15 @@ function CreateRule({
                 value={a.body}
                 onChange={(e) => setAction(i, { type: "comment", body: e.target.value })}
                 placeholder="Comment text"
+                className="h-7 text-xs"
+              />
+            )}
+            {a.type === "notify" && (
+              <Input
+                aria-label={`Action ${i + 1} message`}
+                value={a.message}
+                onChange={(e) => setAction(i, { type: "notify", message: e.target.value })}
+                placeholder="Message (optional) — pings the assignee"
                 className="h-7 text-xs"
               />
             )}

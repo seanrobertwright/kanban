@@ -165,6 +165,35 @@ export async function applyEffects(
       case "comment":
         await createComment(by, { taskId, body: effect.body });
         break;
+      case "notify": {
+        // The bell has no notification table (016) — it derives from the activity
+        // log + comment mentions (024). So a notify posts a comment that
+        // @-mentions the target, which surfaces as "mentioned you on" in their
+        // bell. Resolve the target user: "assignee" reads the event snapshot's
+        // current human assignee; an explicit target names a member.
+        const targetId =
+          effect.target === "assignee"
+            ? assigneeHumanId(snapshot)
+            : effect.target.id;
+        if (!targetId) break; // no human to notify (unassigned / agent) — no-op
+        const named = await query<{ name: string }>(
+          `SELECT name FROM "user" WHERE id = $1`,
+          [targetId]
+        );
+        const name = named[0]?.name;
+        if (!name) break;
+        const message = effect.message?.trim() || "Automated notification";
+        await createComment(by, { taskId, body: `@${name} ${message}` });
+        break;
+      }
     }
   }
+}
+
+/** The task's current human assignee id from the event snapshot, or null. */
+function assigneeHumanId(snapshot: Snapshot): string | null {
+  const assignee = snapshot.assignee as { type?: string; id?: string } | null | undefined;
+  return assignee && assignee.type === "human" && typeof assignee.id === "string"
+    ? assignee.id
+    : null;
 }
