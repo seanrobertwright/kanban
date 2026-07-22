@@ -30,6 +30,7 @@ import {
   type ScheduleInterval,
   type SettableField,
   type TriggerEvent,
+  type WorkflowTemplate,
 } from "../types";
 
 interface AutomationsColumn {
@@ -43,6 +44,7 @@ interface AutomationsLabel {
 
 interface AutomationsDialogProps {
   boardId: number;
+  workspaceId: string;
   open: boolean;
   columns: AutomationsColumn[];
   labels: AutomationsLabel[];
@@ -62,6 +64,7 @@ interface AutomationsDialogProps {
  */
 export function AutomationsDialog({
   boardId,
+  workspaceId,
   open,
   columns,
   labels,
@@ -163,6 +166,15 @@ export function AutomationsDialog({
         {canManage && <InboundTriggers boardId={boardId} open={open} />}
 
         {canManage && <SlaPolicies boardId={boardId} open={open} />}
+
+        {canManage && (
+          <WorkflowTemplates
+            boardId={boardId}
+            workspaceId={workspaceId}
+            open={open}
+            onApplied={onChanged}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -732,6 +744,95 @@ function SlaPolicies({ boardId, open }: { boardId: number; open: boolean }) {
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Workflow templates (051, rock 1.9): apply a reusable bundle (columns + rules +
+ * SLA policies) to this board in one move. Lists the workspace's saved templates
+ * and the built-in presets (Kanban / Scrum / Incident, rock 1.10).
+ */
+function WorkflowTemplates({
+  boardId,
+  workspaceId,
+  open,
+  onApplied,
+}: {
+  boardId: number;
+  workspaceId: string;
+  open: boolean;
+  onApplied: () => void;
+}) {
+  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await api.fetchWorkflowTemplates(workspaceId);
+        if (!cancelled) setTemplates(list);
+      } catch {
+        /* the rule list surfaces load errors */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, workspaceId]);
+
+  async function apply(t: WorkflowTemplate) {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await api.applyWorkflowTemplate(boardId, t.id);
+      setNote(
+        `Applied "${t.name}": +${r.columns} columns, +${r.rules} rules, +${r.slaPolicies} SLAs`
+      );
+      onApplied();
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : "Could not apply template");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-2 border-t pt-3">
+      <p className="text-sm font-medium">Workflow templates</p>
+      {note && <p className="text-xs text-muted-foreground">{note}</p>}
+      <ul className="grid gap-1.5">
+        {templates.map((t) => (
+          <li key={String(t.id)} className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium">
+                {t.name}
+                {t.isBuiltin && (
+                  <span className="ml-2 rounded bg-muted px-1 text-[10px] text-muted-foreground">
+                    built-in
+                  </span>
+                )}
+              </p>
+              {t.description && (
+                <p className="truncate text-[11px] text-muted-foreground">{t.description}</p>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-6 shrink-0 px-2 text-xs"
+              disabled={busy}
+              onClick={() => apply(t)}
+            >
+              Apply
+            </Button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

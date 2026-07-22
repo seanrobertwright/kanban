@@ -423,6 +423,20 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       breach math, DB start→force-overdue→breach+escalate, no re-breach). **Flips
       one scoreboard row** (87 ✅ / 45 ❌).
 
+- [x] **Workflow templates** (051, rock 1.9) — a reusable process bundle (column
+      set + automation rules + SLA policies) applied to a board in one move; the
+      task-templates pattern (019) one level up. `workflow_template` (workspace-
+      scoped, three JSONB bundles) holds a workspace's saved templates; built-in
+      presets (Kanban / Scrum / Incident) live in code and apply the same way.
+      Apply replays the ordinary create-* repositories as the applying admin —
+      appends missing columns by title (existing left alone), then creates the
+      rules and SLA policies — so an applied template can do nothing a human admin
+      couldn't, and every object is logged like a hand-made one. `list` (viewer, +
+      built-ins) / `create` / `delete` (admin) + `POST /api/board/[id]/apply-template`.
+      Templates section in the Automations dialog. 2 tests (built-ins listed;
+      Incident apply adds columns+rules+SLA, idempotent on columns). **Flips one
+      scoreboard row** (88 ✅ / 44 ❌).
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,

@@ -1044,6 +1044,7 @@ export function Board({
       />
       <AutomationsDialog
         boardId={boardId}
+        workspaceId={workspaceId}
         open={automationsOpen}
         columns={cols}
         labels={labels}

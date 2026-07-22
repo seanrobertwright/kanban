@@ -215,6 +215,47 @@ export interface AutomationTrigger {
   createdAt: string;
 }
 
+/**
+ * Workflow templates (051, rock 1.9) — a reusable bundle of columns + rules + SLA
+ * policies, applied to a board in one move. The rule/SLA shapes mirror the create
+ * inputs the respective repositories validate on apply.
+ */
+export interface WorkflowTemplateRule {
+  name: string;
+  trigger: Trigger;
+  conditions?: Condition;
+  actions?: Action[];
+}
+
+export interface WorkflowTemplateSla {
+  name: string;
+  appliesWhen?: Condition;
+  targetMins: number;
+  actionOnBreach?: Action[];
+}
+
+export interface WorkflowTemplateBody {
+  columns: string[];
+  rules: WorkflowTemplateRule[];
+  slaPolicies: WorkflowTemplateSla[];
+}
+
+export interface WorkflowTemplate extends WorkflowTemplateBody {
+  /** Numeric id for a saved template; a "builtin:<key>" string for a code preset. */
+  id: number | string;
+  name: string;
+  description: string;
+  isBuiltin: boolean;
+}
+
+export interface CreateWorkflowTemplateInput {
+  name: string;
+  description?: string;
+  columns?: string[];
+  rules?: WorkflowTemplateRule[];
+  slaPolicies?: WorkflowTemplateSla[];
+}
+
 export type AutomationRunStatus = "matched" | "skipped" | "error" | "capped";
 
 /** One logged fire — the audit arm, read by the run-log tab (1.1). */

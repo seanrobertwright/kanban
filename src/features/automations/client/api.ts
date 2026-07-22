@@ -5,6 +5,7 @@ import type {
   BoardWorkflow,
   CreateAutomationRuleInput,
   UpdateAutomationRuleInput,
+  WorkflowTemplate,
 } from "../types";
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -107,4 +108,26 @@ export function setTriggerActive(id: number, isActive: boolean): Promise<unknown
 export async function deleteTrigger(id: number): Promise<void> {
   const res = await fetch(`/api/triggers/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+}
+
+export async function fetchWorkflowTemplates(
+  workspaceId: string
+): Promise<WorkflowTemplate[]> {
+  const res = await fetch(`/api/workspaces/${workspaceId}/workflow-templates`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow<WorkflowTemplate[]>(res);
+}
+
+export function applyWorkflowTemplate(
+  boardId: number,
+  templateRef: string | number
+): Promise<{ columns: number; rules: number; slaPolicies: number }> {
+  return fetch(`/api/board/${boardId}/apply-template`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ templateRef: String(templateRef) }),
+  }).then((res) =>
+    jsonOrThrow<{ columns: number; rules: number; slaPolicies: number }>(res)
+  );
 }

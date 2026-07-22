@@ -32,6 +32,12 @@ import {
 } from "./repository";
 import { fireExternalTrigger } from "./scheduler";
 import {
+  applyWorkflowTemplate,
+  createWorkflowTemplate,
+  deleteWorkflowTemplate,
+  listWorkflowTemplates,
+} from "./workflow-templates";
+import {
   getBoardWorkflow,
   setBoardWorkflow,
 } from "@/features/board/server/repository";
@@ -404,6 +410,69 @@ export async function handleDeleteTrigger(request: Request, id: string) {
     return (await deleteTrigger(session.user.id, triggerId))
       ? new Response(null, { status: 204 })
       : notFound("Trigger");
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+// ─── workflow templates (1.9) ───
+
+export async function handleListWorkflowTemplates(request: Request, id: string) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  try {
+    return Response.json(await listWorkflowTemplates(principal, id));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleCreateWorkflowTemplate(request: Request, id: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  const p = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!p || typeof p.name !== "string" || p.name.trim() === "")
+    return badRequest("name is required");
+  try {
+    return Response.json(
+      await createWorkflowTemplate(session.user.id, id, {
+        name: p.name.trim(),
+        description: p.description as string | undefined,
+        columns: p.columns as string[] | undefined,
+        rules: p.rules as import("../types").WorkflowTemplateRule[] | undefined,
+        slaPolicies: p.slaPolicies as import("../types").WorkflowTemplateSla[] | undefined,
+      }),
+      { status: 201 }
+    );
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleDeleteWorkflowTemplate(request: Request, id: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  const templateId = Number(id);
+  if (!Number.isInteger(templateId)) return badRequest("Invalid template id");
+  try {
+    return (await deleteWorkflowTemplate(session.user.id, templateId))
+      ? new Response(null, { status: 204 })
+      : notFound("Template");
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleApplyTemplate(request: Request, id: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+  const p = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const ref = p?.templateRef;
+  if (typeof ref !== "string" || ref === "") return badRequest("templateRef is required");
+  try {
+    return Response.json(await applyWorkflowTemplate(session.user.id, boardId, ref));
   } catch (error) {
     return authzErrorResponse(error);
   }

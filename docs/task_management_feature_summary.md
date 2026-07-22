@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **87 ✅ / 45 ❌ / 8 ⛔** — the **Core Work Items** area (14/14), the **Planning & Views** area (16/16), and the **Agile & Product** area (14/14) are all fully ✅, closed by the 2026-07-22 rocks sweep (Forms/intake 039; Program/initiative hierarchy 040; Resource + Capacity planning 041; Budget/financial planning 042; Product discovery + Feedback intake 043; Teams + Scaled Agile/SAFe 044). **Phase 1 (Workflow & Automation)** is now building on the automation engine (045): No-code automations + Conditional branching are ✅ (the recipe builder + AND/OR predicate tree in the board Automations dialog).
+**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **88 ✅ / 44 ❌ / 8 ⛔** — the **Core Work Items** area (14/14), the **Planning & Views** area (16/16), and the **Agile & Product** area (14/14) are all fully ✅, closed by the 2026-07-22 rocks sweep (Forms/intake 039; Program/initiative hierarchy 040; Resource + Capacity planning 041; Budget/financial planning 042; Product discovery + Feedback intake 043; Teams + Scaled Agile/SAFe 044). **Phase 1 (Workflow & Automation)** is now building on the automation engine (045): No-code automations + Conditional branching are ✅ (the recipe builder + AND/OR predicate tree in the board Automations dialog).
 
 ## Scoring Scale
 
@@ -115,7 +115,7 @@ These features determine how well a platform can model process, enforce rules, r
 | ✅ Webhook triggers | Event-driven outbound automation hooks. |
 | ❌ Custom scripts/functions | Advanced scripted behavior or custom workflow functions. |
 | ✅ External automation connectors | Zapier, Make, n8n, Power Automate, or similar connectors. |
-| ❌ Workflow templates | Reusable process templates. |
+| ✅ Workflow templates | Reusable process templates. |
 | ❌ Incident/service workflows | Native workflows for incidents, service requests, escalations, or operational processes. |
 
 ## 5. Collaboration & Knowledge
