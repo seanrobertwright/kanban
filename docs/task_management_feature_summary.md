@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **79 ✅ / 61 ❌** — the **Core Work Items** area (14/14), the **Planning & Views** area (16/16), and now the **Agile & Product** area (14/14) are all fully ✅, closed by the 2026-07-22 rocks sweep (Forms/intake 039; Program/initiative hierarchy 040; Resource + Capacity planning 041; Budget/financial planning 042; Product discovery + Feedback intake 043; Teams + Scaled Agile/SAFe 044).
+**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **79 ✅ / 53 ❌ / 8 ⛔** — the **Core Work Items** area (14/14), the **Planning & Views** area (16/16), and now the **Agile & Product** area (14/14) are all fully ✅, closed by the 2026-07-22 rocks sweep (Forms/intake 039; Program/initiative hierarchy 040; Resource + Capacity planning 041; Budget/financial planning 042; Product discovery + Feedback intake 043; Teams + Scaled Agile/SAFe 044).
 
 ## Scoring Scale
 
@@ -171,17 +171,17 @@ These features matter most for large organizations, regulated environments, and 
 | ✅ RBAC | Role-based access control. |
 | ❌ Granular permissions | Fine-grained permissions at workspace, project, object, field, or action level. |
 | ✅ Audit logs | Administrative and security event logging. |
-| ❌ Data residency | Control over where data is stored or processed. |
-| ❌ SOC 2 | SOC 2 compliance or attestation. |
-| ❌ ISO 27001 | ISO 27001 certification or alignment. |
-| ❌ HIPAA/regulated support | Support for healthcare or other regulated compliance needs. |
+| ⛔ Data residency | Control over where data is stored or processed. *(Inherent to self-hosting — a deployment choice, not application code.)* |
+| ⛔ SOC 2 | SOC 2 compliance or attestation. *(A third-party audit, not application code.)* |
+| ⛔ ISO 27001 | ISO 27001 certification or alignment. *(A third-party certification, not application code.)* |
+| ⛔ HIPAA/regulated support | Support for healthcare or other regulated compliance needs. *(A compliance program + BAA, not application code.)* |
 | ❌ Encryption | Encryption in transit and at rest. |
 | ❌ Admin console | Centralized administration controls. |
 | ❌ Retention/legal hold | Retention policies, legal hold, or compliance preservation. |
 | ❌ eDiscovery | Search/export for legal or compliance discovery. |
 | ❌ IP allowlisting | Network access restriction by IP range. |
 | ✅ On-prem/self-hosted option | Ability to run outside the vendor's SaaS cloud. |
-| ❌ Published uptime/SLA | Public service availability commitment or SLA. |
+| ⛔ Published uptime/SLA | Public service availability commitment or SLA. *(An operational commitment by whoever hosts the deployment, not application code.)* |
 
 ## 8. Developer & DevOps
 
@@ -214,10 +214,10 @@ These features capture whether the platform can connect to the broader operating
 | ❌ Email integration | Email notifications, task creation, or conversation linking. |
 | ❌ Google Workspace | Integration with Google Drive, Calendar, Gmail, or Workspace identity/content. |
 | ❌ Microsoft 365 | Integration with Outlook, Teams, SharePoint, OneDrive, Planner, or Microsoft identity/content. |
-| ❌ Zapier | Zapier connector support. |
-| ❌ Make | Make connector support. |
+| ⛔ Zapier | Zapier connector support. *(A native connector lives in Zapier's hosted catalog; our generic webhooks + n8n-compatible API already make us usable from it.)* |
+| ⛔ Make | Make connector support. *(A native connector lives in Make's hosted catalog; covered in practice by our generic webhooks + REST API.)* |
 | ✅ n8n | n8n connector support or practical API/webhook compatibility. |
-| ❌ Marketplace/apps | Vendor or ecosystem app marketplace. |
+| ⛔ Marketplace/apps | Vendor or ecosystem app marketplace. *(Requires a central hosted app catalog; N/A for a single-tenant self-hosted product.)* |
 | ❌ Plugin/extensions | Extension model, power-ups, packs, plugins, or add-ons. |
 | ✅ BI/data export | Data export or BI integration for analytics. |
 
