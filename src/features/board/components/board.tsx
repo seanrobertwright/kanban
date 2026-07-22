@@ -17,6 +17,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import {
   CalendarDays,
   ChartNoAxesColumn,
+  ClipboardList,
   Clock,
   Columns3,
   Download,
@@ -62,6 +63,7 @@ import type { Column } from "../types";
 import { BoardColumn } from "./board-column";
 import { InsightsDialog } from "./insights-dialog";
 import { TimesheetDialog } from "@/features/time/components/timesheet-dialog";
+import { FormsDialog } from "@/features/forms/components/forms-dialog";
 import { CustomFieldsDialog } from "@/features/custom-fields/components/custom-fields-dialog";
 import type { CustomField } from "@/features/custom-fields/types";
 import { MilestonesDialog } from "@/features/milestones/components/milestones-dialog";
@@ -226,6 +228,7 @@ export function Board({
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [timesheetOpen, setTimesheetOpen] = useState(false);
+  const [formsOpen, setFormsOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
   const [milestonesOpen, setMilestonesOpen] = useState(false);
   const [epics, setEpics] = useState<Epic[]>(initialEpics);
@@ -678,6 +681,14 @@ export function Board({
           >
             <Clock /> Timesheet
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setFormsOpen(true)}
+          >
+            <ClipboardList /> Forms
+          </Button>
           {/* Export is a GET the browser can follow — plain anchors, so the
               download rides the session cookie with no fetch-and-blob dance.
               Viewer+: an export is a read of what the board already shows. */}
@@ -978,6 +989,14 @@ export function Board({
         boardId={boardId}
         open={timesheetOpen}
         onOpenChange={setTimesheetOpen}
+      />
+      <FormsDialog
+        boardId={boardId}
+        open={formsOpen}
+        columns={cols}
+        canEdit={canEdit}
+        onOpenChange={setFormsOpen}
+        onSubmitted={refresh}
       />
       <TemplatesDialog
         open={templatesOpen}
