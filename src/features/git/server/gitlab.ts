@@ -7,6 +7,7 @@ import type {
   GitLinkState,
   NormalizedCiEvent,
   NormalizedGitEvent,
+  NormalizedReleaseEvent,
 } from "../types";
 
 /**
@@ -55,6 +56,12 @@ interface GitlabPayload {
   before?: string;
   project?: { web_url?: string; name?: string };
   commits?: Array<{ id?: string; url?: string; message?: string }>;
+  // Release hook (2.8) — top-level fields, not object_attributes.
+  action?: string;
+  tag?: string;
+  name?: string;
+  description?: string;
+  url?: string;
   object_attributes?: {
     iid?: number;
     url?: string;
@@ -137,6 +144,25 @@ export function normalizeGitlabCiEvent(
     url: p.url ?? (webUrl ? `${webUrl}/-/pipelines/${p.id}` : ""),
     title: payload.project?.name ?? null,
     branch: p.ref,
+  };
+}
+
+/**
+ * Maps a GitLab `release` webhook to a normalized release event (2.8), or null. A
+ * `create` action ships the version; an `update` (e.g. editing notes) does not
+ * re-flip a planned release.
+ */
+export function normalizeGitlabReleaseEvent(
+  payload: GitlabPayload
+): NormalizedReleaseEvent | null {
+  if (payload.object_kind !== "release" || !payload.tag) return null;
+  return {
+    provider: "gitlab",
+    tag: payload.tag,
+    name: payload.name ?? null,
+    url: payload.url ?? "",
+    notes: payload.description ?? null,
+    published: payload.action === "create",
   };
 }
 

@@ -186,6 +186,18 @@ export type MilestoneAction =
   | "milestone.deleted";
 
 /**
+ * Release lifecycle (2.8) — milestone-shaped (taskId null, boardId set). `released`
+ * is the one that carries weight: it is logged when a release ships, whether a
+ * human cut it or a git tag published it, so it rides the automation sink like any
+ * other event ("when a release ships, comment on its tasks" is a possible rule).
+ */
+export type ReleaseAction =
+  | "release.created"
+  | "release.updated"
+  | "release.released"
+  | "release.deleted";
+
+/**
  * Epic lifecycle (031) — column-shaped entries (taskId null, boardId locates),
  * milestone's three verbs for milestone's reasons.
  */
@@ -268,6 +280,7 @@ export type ActivityAction =
   | ColumnAction
   | LabelAction
   | MilestoneAction
+  | ReleaseAction
   | EpicAction
   | ObjectiveAction
   | TimeAction
@@ -499,6 +512,14 @@ export interface MilestoneSnapshot {
   dueDate: string | null;
 }
 
+/** What a release looked like at one instant (2.8) — name + where it is in its
+ *  planned→released lifecycle. */
+export interface ReleaseSnapshot {
+  releaseId: number;
+  name: string;
+  state: string;
+}
+
 /** What an epic looked like at one instant (031). Name only — an epic has no
  *  date, so the snapshot mirrors the table's one mutable field. */
 export interface EpicSnapshot {
@@ -582,6 +603,7 @@ export type Snapshot =
   | ColumnSnapshot
   | LabelSnapshot
   | MilestoneSnapshot
+  | ReleaseSnapshot
   | EpicSnapshot
   | ObjectiveSnapshot
   | TimeSnapshot
@@ -640,6 +662,12 @@ export interface MilestoneActivity extends ActivityBase {
   after: MilestoneSnapshot | null;
 }
 
+export interface ReleaseActivity extends ActivityBase {
+  action: ReleaseAction;
+  before: ReleaseSnapshot | null;
+  after: ReleaseSnapshot | null;
+}
+
 export interface EpicActivity extends ActivityBase {
   action: EpicAction;
   before: EpicSnapshot | null;
@@ -682,6 +710,7 @@ export type Activity =
   | ColumnActivity
   | LabelActivity
   | MilestoneActivity
+  | ReleaseActivity
   | EpicActivity
   | ObjectiveActivity
   | TimeActivity

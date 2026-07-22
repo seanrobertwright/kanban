@@ -7,6 +7,7 @@ import type {
   GitLinkState,
   NormalizedCiEvent,
   NormalizedGitEvent,
+  NormalizedReleaseEvent,
 } from "../types";
 
 /**
@@ -70,6 +71,13 @@ interface GithubPayload {
     status?: string;
     conclusion?: string | null;
     app?: { name?: string };
+  };
+  release?: {
+    tag_name?: string;
+    name?: string | null;
+    html_url?: string;
+    body?: string | null;
+    draft?: boolean;
   };
 }
 
@@ -191,6 +199,30 @@ export function normalizeGithubCiEvent(
     url: repo && cs.head_sha ? `https://github.com/${repo}/commit/${cs.head_sha}/checks` : "",
     title: cs.app?.name ?? null,
     branch: cs.head_branch,
+  };
+}
+
+/**
+ * Maps a GitHub `release` webhook to a normalized release event (2.8), or null.
+ * Only a `published`/`released` action on a non-draft release ships a version —
+ * a `created` draft or a `deleted` does not flip a planned release.
+ */
+export function normalizeGithubReleaseEvent(
+  eventType: string,
+  payload: GithubPayload
+): NormalizedReleaseEvent | null {
+  if (eventType !== "release") return null;
+  const r = payload.release;
+  if (!r || !r.tag_name) return null;
+  const published =
+    (payload.action === "published" || payload.action === "released") && !r.draft;
+  return {
+    provider: "github",
+    tag: r.tag_name,
+    name: r.name ?? null,
+    url: r.html_url ?? "",
+    notes: r.body ?? null,
+    published,
   };
 }
 

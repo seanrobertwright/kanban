@@ -118,3 +118,18 @@ export interface NormalizedCiEvent {
   branch?: string;
   messages?: string[];
 }
+
+/**
+ * A provider release/tag publication (2.8). The ingress matches `tag` to a
+ * planned `release` row (by name) in the connection's workspace and ships it.
+ * Only a `published` event flips state — a draft or an edit-of-an-existing does
+ * not — so a release ships exactly when the tag goes live.
+ */
+export interface NormalizedReleaseEvent {
+  provider: GitProvider;
+  tag: string;
+  name: string | null;
+  url: string;
+  notes: string | null;
+  published: boolean;
+}

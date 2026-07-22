@@ -616,5 +616,30 @@ tsc/eslint/build clean per feature.
       component: failed + running chips). tsc/eslint/build clean. **Flips the CI/CD
       integration scoreboard row** (98 ✅ / 34 ❌).
 
+- [x] **Release management** (055, rock 2.8) — versions grouping delivered work.
+      A `release` (board-scoped: name/state/notes/url) + `task.release_id`
+      (milestone_id's SET-NULL twin) that rolls up done/total exactly as a milestone
+      does. The git-native part: a release flips planned→released either by hand
+      (`updateRelease state='released'`) or when a matching git tag publishes —
+      `normalizeGithubReleaseEvent`/`normalizeGitlabReleaseEvent` (published/create
+      only, drafts skipped) feed `ingestReleaseEvent`, which ships the planned
+      release **of the same name in the connection's workspace only** (a repo can't
+      ship another workspace's release — ingestEvent's tenancy rule), stamps
+      `released_at`, and freezes notes — author notes win, then the tag body, then a
+      pure `compileReleaseNotes` list of the shipped tasks' titles (frozen at ship
+      time, derive-don't-store's exception). Shipping logs `release.released` onto
+      the same post-commit sink, so a shipped release can fire a Phase-1 rule. New
+      `release.*` activity family (action/snapshot/Activity arm/ActivityInput arm/
+      bell — the four-touch rule). CRUD member (`GET/POST /api/board/[id]/releases`,
+      `PATCH/DELETE /api/releases/[id]`); assignment is a dedicated
+      `POST /api/releases/[id]/tasks` kept **off** the task create/update hot path by
+      design (a release is its own surface). Self-fetching ReleasesDialog (Forms/
+      Timesheet shape) mounted beside Milestones, with per-release rollup, ship, and
+      a task-assignment panel. 13 tests (pure: notes compile, GH/GL release
+      normalization; DB: create + duplicate conflict + rollup, manual ship freezes
+      auto-notes + logs, assignment tenancy, git-tag ships + idempotent redelivery,
+      cross-workspace tag refused). tsc/eslint/build clean. **Flips the Release
+      management scoreboard row** (99 ✅ / 33 ❌).
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).

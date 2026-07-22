@@ -34,6 +34,7 @@ import {
   Plus,
   Rocket,
   SlidersHorizontal,
+  Tag,
   Tags,
   Target,
   Waypoints,
@@ -76,6 +77,7 @@ import { DiscoveryDialog } from "@/features/discovery/components/discovery-dialo
 import { CustomFieldsDialog } from "@/features/custom-fields/components/custom-fields-dialog";
 import type { CustomField } from "@/features/custom-fields/types";
 import { MilestonesDialog } from "@/features/milestones/components/milestones-dialog";
+import { ReleasesDialog } from "@/features/releases/components/releases-dialog";
 import type { Milestone } from "@/features/milestones/types";
 import { EpicsDialog } from "@/features/epics/components/epics-dialog";
 import type { Epic } from "@/features/epics/types";
@@ -245,6 +247,7 @@ export function Board({
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
   const [milestonesOpen, setMilestonesOpen] = useState(false);
+  const [releasesOpen, setReleasesOpen] = useState(false);
   const [epics, setEpics] = useState<Epic[]>(initialEpics);
   const [epicsOpen, setEpicsOpen] = useState(false);
   const [objectives, setObjectives] =
@@ -659,6 +662,14 @@ export function Board({
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
+            onClick={() => setReleasesOpen(true)}
+          >
+            <Tag /> Releases
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
             onClick={() => setEpicsOpen(true)}
           >
             <Layers /> Epics
@@ -1006,6 +1017,14 @@ export function Board({
         objectives={objectives}
         canEdit={canEdit}
         onOpenChange={setMilestonesOpen}
+        onChanged={refresh}
+      />
+      <ReleasesDialog
+        boardId={boardId}
+        open={releasesOpen}
+        tasks={visibleTaskList.map((t) => ({ id: t.id, title: t.title }))}
+        canEdit={canEdit}
+        onOpenChange={setReleasesOpen}
         onChanged={refresh}
       />
       <EpicsDialog

@@ -14,14 +14,17 @@ import {
   listTaskCiStatuses,
   listTaskGitLinks,
 } from "./repository";
+import { ingestReleaseEvent } from "@/features/releases/server/repository";
 import {
   normalizeGithubCiEvent,
   normalizeGithubEvent,
+  normalizeGithubReleaseEvent,
   verifyGithubSignature,
 } from "./github";
 import {
   normalizeGitlabCiEvent,
   normalizeGitlabEvent,
+  normalizeGitlabReleaseEvent,
   verifyGitlabToken,
 } from "./gitlab";
 import {
@@ -151,6 +154,9 @@ export async function handleGithubWebhook(request: Request, id: string) {
   // check_suite events feed the CI path (2.7), not the link path.
   const ci = normalizeGithubCiEvent(eventType, payload as Record<string, never>);
   if (ci) linked += (await ingestCiEvent(resolved.connection, ci)).linkedTaskIds.length;
+  // release events ship a matching planned release (2.8).
+  const rel = normalizeGithubReleaseEvent(eventType, payload as Record<string, never>);
+  if (rel) await ingestReleaseEvent(resolved.connection, rel);
   return Response.json({ ok: true, linked });
 }
 
@@ -189,6 +195,9 @@ export async function handleGitlabWebhook(request: Request, id: string) {
   // pipeline events feed the CI path (2.7).
   const ci = normalizeGitlabCiEvent(payload as Record<string, never>);
   if (ci) linked += (await ingestCiEvent(resolved.connection, ci)).linkedTaskIds.length;
+  // release events ship a matching planned release (2.8).
+  const rel = normalizeGitlabReleaseEvent(payload as Record<string, never>);
+  if (rel) await ingestReleaseEvent(resolved.connection, rel);
   return Response.json({ ok: true, linked });
 }
 
