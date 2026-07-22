@@ -328,6 +328,20 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       fire + idempotency). No scoreboard flip yet — 1.1/1.2 add the builder UI
       that flips those rows.
 
+- [x] **No-code automations + Conditional branching** (045, rocks 1.1 + 1.2) —
+      the builder UI on the engine spine, and the two are one commit because 1.2
+      *is* 1.0's evaluator surfaced: the `AutomationsDialog` (Forms-shaped,
+      self-fetching) is a When·If·Then recipe builder — a trigger-event picker, an
+      **If** block that composes an AND/OR predicate tree (combinator + per-field
+      operator rows, the conditional-branching row in the flesh), a **Then**
+      ordered action list (move / set field / add label / comment, each with the
+      right picker), an enable/pause toggle, and a per-rule run-log reading
+      `automation_run`. A saved rule reads back as a sentence ("When a task is
+      moved, if all of…, then move to Done"). Authoring admin (`canDeleteColumns`,
+      §7.4 — a rule acts as the workspace); reads viewer+. Mounted beside Forms in
+      the board toolbar. tsc/eslint/build clean; the engine's 21 tests cover the
+      evaluator the builder emits. **Flips two scoreboard rows** (81 ✅ / 51 ❌).
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,
