@@ -61,13 +61,33 @@ function gitlabProject(repo: string): string {
   return encodeURIComponent(repo);
 }
 
+/**
+ * Sanitizes a caller-supplied repo path into something safe to splice into a
+ * provider URL. Each segment is percent-encoded (so `?`, `#`, spaces, and other
+ * URL metacharacters cannot break out of the path), and empty / `.` / `..`
+ * segments are dropped — without this, a `path` of `../../owner/repo/contents`
+ * would `..`-normalize in the URL parser to a *different repository*, a
+ * scope-bypass past the connection's own repo. The `/` separators are the only
+ * structure preserved.
+ */
+function sanitizePath(path: string): string {
+  return path
+    .split("/")
+    .filter((seg) => seg && seg !== "." && seg !== "..")
+    .map(encodeURIComponent)
+    .join("/");
+}
+
 function treeUrl(conn: BrowseConnection, path: string, ref?: string): string {
-  const p = path.replace(/^\/+/, "");
+  const p = sanitizePath(path);
   if (conn.provider === "github") {
     const q = ref ? `?ref=${encodeURIComponent(ref)}` : "";
     return `https://api.github.com/repos/${conn.externalRepo}/contents/${p}${q}`;
   }
   if (conn.provider === "gitlab") {
+    // path rides a query param (URLSearchParams encodes it) and the project is
+    // fixed in the URL path, so traversal can't escape the project — but pass the
+    // sanitized form anyway, one rule for both providers.
     const q = new URLSearchParams({ path: p, ...(ref ? { ref } : {}) });
     return `https://gitlab.com/api/v4/projects/${gitlabProject(conn.externalRepo)}/repository/tree?${q}`;
   }

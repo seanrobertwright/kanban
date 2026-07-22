@@ -108,6 +108,27 @@ describe("repo browse proxy (db)", () => {
     expect(branches).toEqual([{ name: "main", protected: true }]);
   });
 
+  it("neutralizes path traversal so a caller cannot escape the connection's repo", async () => {
+    let captured = "";
+    const capturing: FetchLike = async (url) => {
+      captured = url;
+      return { ok: true, status: 200, json: async () => [] };
+    };
+    // A malicious path that would `..`-normalize to a different repo without encoding.
+    await browseRepoTree(
+      alice,
+      connectionId,
+      { path: "../../evil-owner/evil-repo/contents" },
+      { fetchImpl: capturing }
+    );
+    // Still scoped to acme/app's contents — the traversal segments survive only as
+    // harmless subpath names under it, never as a different repo owner/name.
+    expect(captured.startsWith("https://api.github.com/repos/acme/app/contents/")).toBe(true);
+    expect(captured).not.toContain("/repos/evil-owner");
+    // Traversal stripped — no raw ".." reaches the URL to be normalized away.
+    expect(captured).not.toMatch(/\.\.(\/|$)/);
+  });
+
   it("surfaces a provider error as a thrown AuthzError", async () => {
     await expect(
       browseRepoTree(alice, connectionId, {}, { fetchImpl: stub(null, false, 404) })
