@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **93 ✅ / 39 ❌ / 8 ⛔** — the **Workflow & Automation** area
+**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **95 ✅ / 37 ❌ / 8 ⛔** — the **Workflow & Automation** area
 (15/15) is now fully ✅, closed by the Phase 1 build on the automation engine
 (045): the trigger→conditions→actions rule engine and its twelve rocks
 (no-code + conditional branching, state transitions, recurring/scheduled, SLAs,
@@ -197,8 +197,8 @@ These features show whether the task system is close to code, releases, pull req
 | ✅ GitHub integration | Native or strong integration with GitHub. GitHub App webhook ingress (2.1): `X-Hub-Signature-256` verified against the connection's encrypted secret, `pull_request`/`push`/`create` payloads normalized onto the 2.0 link model, so a real GitHub App drives the board and fires Phase-1 rules. The OAuth install handshake + installation-token REST (branch creation 2.6, CI backfill 2.7) are wired to the same connection but exercised against the live API. |
 | ❌ GitLab integration | Native or strong integration with GitLab. |
 | ❌ Bitbucket integration | Native or strong integration with Bitbucket. |
-| ❌ Pull request links | Linking work items to pull requests. |
-| ❌ Commit links | Linking work items to commits. |
+| ✅ Pull request links | Linking work items to pull requests. Smart-commit resolution (2.0) links a PR to the task it references; the task dialog's Development section (2.4) lists them with open/merged/closed state chips and a link out. |
+| ✅ Commit links | Linking work items to commits. A push webhook links each commit referencing a task; the Development section (2.5) surfaces them by subject/short-sha. |
 | ❌ Branch linking/automation | Creating or tracking branches from work items. |
 | ❌ CI/CD integration | Linking work to builds, deployments, or pipeline results. |
 | ❌ Release management | Managing releases, versions, or deployment milestones. |

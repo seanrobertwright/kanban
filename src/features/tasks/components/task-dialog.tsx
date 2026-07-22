@@ -13,6 +13,7 @@ import { DependencySection } from "@/features/dependencies/components/dependency
 import { CommentThread } from "@/features/comments/components/comment-thread";
 import { CustomFieldsSection } from "@/features/custom-fields/components/custom-fields-section";
 import { TimeSection } from "@/features/time/components/time-section";
+import { DevelopmentSection } from "@/features/git/components/development-section";
 import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
 import type { Label as LabelData } from "@/features/labels/types";
@@ -895,6 +896,13 @@ export function TaskDialog({
                   onChanged: custom fields are outside the activity log by design. */}
               <CustomFieldsSection
                 key={`fields-${task.id}`}
+                taskId={task.id}
+              />
+              {/* Linked branches/PRs/commits (2.4/2.5). Read-only — the git host
+                  owns their lifecycle — and inert until a repo references the
+                  task, so it costs nothing on an unlinked one. */}
+              <DevelopmentSection
+                key={`dev-${task.id}`}
                 taskId={task.id}
               />
               {/* An agent run's review sits above the thread: it is what a human

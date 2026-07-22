@@ -540,5 +540,18 @@ tsc/eslint/build clean per feature.
       pull_request webhook links its `#ref` task, bad-sig→401, unknown-conn→404).
       **Flips the GitHub integration scoreboard row** (93 ✅ / 39 ❌).
 
+- [x] **Pull request + commit links** (rocks 2.4 + 2.5) — the `task_git_link`
+      rows (2.0) surfaced. A read-only, self-fetching `DevelopmentSection` in the
+      task dialog (TimeSection's shape, inert until a repo references the task —
+      CustomFieldsSection's precedent) lists the linked PRs/commits/branches with a
+      kind icon, a link out to the artifact, and a PR state chip
+      (open/merged/closed). `GET /api/tasks/[id]/git-links` (viewer+). No writes —
+      the git host owns a link's lifecycle. 3 component tests (PR by title + chip +
+      href, titleless commit → short sha, empty → renders nothing); task-dialog
+      test mocks it like the other self-fetching sections. tsc/build clean, eslint
+      clean (the grandfathered task-dialog set-state-in-effect only). **Flips the
+      Pull request links + Commit links scoreboard rows** (95 ✅ / 37 ❌). Branch
+      *creation* (2.6) stays ❌ — tracking is done, the API-create half is live-only.
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
