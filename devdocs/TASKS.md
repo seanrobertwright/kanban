@@ -8,8 +8,9 @@ added here is the next session's starting menu.
 Companion docs: `SESSION_HANDOFF.md` (per-session narrative + gotchas),
 `prd.md` (the milestone bet), `features.md` (breadth catalogue),
 `../docs/task_management_feature_summary.md` (the 140-criterion scoreboard,
-66 ✅ / 74 ❌ as of 2026-07-21 — the M4 agile cluster, the planning +
-collaboration sweep, and the Gantt + Goals/OKRs sweep are now scored ✅).
+67 ✅ / 73 ❌ as of 2026-07-21 — the M4 agile cluster, the planning +
+collaboration sweep, and the Gantt + Goals/OKRs sweep are now scored ✅, and
+Critical path flipped ✅ once 036's CPM was recognised as its own row).
 
 Convention: `[x]` done → cite the commit; `[ ]` open → one line on the slice.
 Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
@@ -160,9 +161,13 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
 ## Next up — candidates, roughly by value
 
 ### Collaboration breadth
-- [ ] **Rich text on task descriptions** — 033's `RichText` renders comment
-      bodies; task descriptions still edit/show as plain textarea. Needs an
-      edit/preview surface (the renderer already exists and is safe).
+- [x] **Rich text on task descriptions** — the task dialog's Description now
+      has a Write/Preview toggle: Write is the raw textarea (placeholder names the
+      Markdown), Preview mounts 033's `RichText` over the same string. No schema or
+      write-path change — the stored value stays raw Markdown, and submit hands back
+      the raw text (a test asserts Preview→Save does not mutate it), so escaping
+      stays the renderer's job (React elements, never HTML). Toggle resets to Write
+      on open. → `82cb2c1`
 
 ### OKR follow-ups (037 cuts, if the wedge wants them)
 - [ ] **Objective agent tools** — a `set_objective` / `score_key_result` in both
