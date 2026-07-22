@@ -488,3 +488,62 @@ describe("TaskDialog subtask", () => {
     expect(screen.queryByLabelText("Status")).toBeNull();
   });
 });
+
+/**
+ * The description takes the same safe Markdown subset as comments (033). The
+ * dialog only has to toggle between the raw textarea and a RichText preview and
+ * hand the *raw* text back on submit — the renderer's own suite owns escaping.
+ */
+describe("TaskDialog description", () => {
+  const withDescription = (): Task => ({
+    ...task(),
+    description: "ship **now** or `later`",
+  });
+
+  it("edits as raw Markdown and previews it rendered", () => {
+    render(
+      <TaskDialog
+        open
+        task={withDescription()}
+        columnNames={{ 1: "To Do" }}
+        members={MEMBERS}
+        agents={AGENTS}
+        labels={LABELS}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    );
+    // Write mode: the textarea shows the literal source, asterisks and all.
+    const textarea = screen.getByLabelText("Description") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("ship **now** or `later`");
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    // Preview mode: the textarea is gone, and the emphasis became an element —
+    // "now" renders without its surrounding asterisks.
+    expect(screen.queryByLabelText("Description")).toBeNull();
+    expect(screen.getByText("now").tagName).toBe("STRONG");
+  });
+
+  it("keeps the raw Markdown on submit, not the rendered text", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <TaskDialog
+        open
+        task={withDescription()}
+        columnNames={{ 1: "To Do" }}
+        members={MEMBERS}
+        agents={AGENTS}
+        labels={LABELS}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    );
+    // Preview first, then save — the toggle must not mutate what is stored.
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    submit();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      description: "ship **now** or `later`",
+    });
+  });
+});

@@ -34,6 +34,7 @@ import {
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
+import { RichText } from "@/shared/ui/rich-text";
 import {
   PRIORITY_LABELS,
   PRIORITY_ORDER,
@@ -243,6 +244,10 @@ export function TaskDialog({
 }: TaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  // Write/Preview toggle for the description. Preview renders the same safe
+  // Markdown subset comments use (033) through RichText, so a person's — or an
+  // agent's (M2) — angle brackets are escaped by construction, never HTML.
+  const [descPreview, setDescPreview] = useState(false);
   // The encoded picker value: "" | "human:id" | "agent:id". Decoded to an Actor
   // on submit; encoded from the task's Actor on open.
   const [assignee, setAssignee] = useState<string>(UNASSIGNED);
@@ -301,6 +306,7 @@ export function TaskDialog({
     if (open) {
       setTitle(task?.title ?? "");
       setDescription(task?.description ?? "");
+      setDescPreview(false);
       setAssignee(encodeAssignee(task?.assignee ?? null));
       setPriority(task?.priority ?? "none");
       setType(task?.type ?? "task");
@@ -452,14 +458,58 @@ export function TaskDialog({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="task-description">Description</Label>
-            <Textarea
-              id="task-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional details"
-              rows={4}
-            />
+            <div className="flex items-center justify-between">
+              <Label htmlFor="task-description">Description</Label>
+              {/* Write / Preview — the description takes the same safe Markdown
+                  subset as comments (**bold**, `code`, - lists, links…), and
+                  Preview renders it through RichText (033), which builds React
+                  elements, never HTML. */}
+              <div className="flex overflow-hidden rounded-md border border-input text-xs">
+                <button
+                  type="button"
+                  onClick={() => setDescPreview(false)}
+                  aria-pressed={!descPreview}
+                  className={`px-2 py-0.5 transition-colors ${
+                    descPreview
+                      ? "text-muted-foreground hover:bg-muted"
+                      : "bg-muted font-medium"
+                  }`}
+                >
+                  Write
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDescPreview(true)}
+                  aria-pressed={descPreview}
+                  className={`border-l border-input px-2 py-0.5 transition-colors ${
+                    descPreview
+                      ? "bg-muted font-medium"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  Preview
+                </button>
+              </div>
+            </div>
+            {descPreview ? (
+              <div className="min-h-[92px] rounded-lg border border-input px-3 py-2">
+                {description.trim() === "" ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nothing to preview.
+                  </p>
+                ) : (
+                  <RichText text={description} className="text-sm" />
+                )}
+              </div>
+            ) : (
+              <Textarea
+                id="task-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional details — Markdown supported"
+                rows={4}
+              />
+            )}
           </div>
           {/* A native select rather than a styled menu: it is one tab stop, it
               is announced as a listbox without any ARIA of our own, and it gets
