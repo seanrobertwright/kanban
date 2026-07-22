@@ -23,6 +23,7 @@ import {
   Download,
   Flag,
   GanttChartSquare,
+  Gauge,
   Inbox,
   Layers,
   LayoutTemplate,
@@ -64,6 +65,7 @@ import { BoardColumn } from "./board-column";
 import { InsightsDialog } from "./insights-dialog";
 import { TimesheetDialog } from "@/features/time/components/timesheet-dialog";
 import { FormsDialog } from "@/features/forms/components/forms-dialog";
+import { CapacityDialog } from "@/features/capacity/components/capacity-dialog";
 import { CustomFieldsDialog } from "@/features/custom-fields/components/custom-fields-dialog";
 import type { CustomField } from "@/features/custom-fields/types";
 import { MilestonesDialog } from "@/features/milestones/components/milestones-dialog";
@@ -229,6 +231,7 @@ export function Board({
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [formsOpen, setFormsOpen] = useState(false);
+  const [capacityOpen, setCapacityOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
   const [milestonesOpen, setMilestonesOpen] = useState(false);
   const [epics, setEpics] = useState<Epic[]>(initialEpics);
@@ -689,6 +692,14 @@ export function Board({
           >
             <ClipboardList /> Forms
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setCapacityOpen(true)}
+          >
+            <Gauge /> Capacity
+          </Button>
           {/* Export is a GET the browser can follow — plain anchors, so the
               download rides the session cookie with no fetch-and-blob dance.
               Viewer+: an export is a read of what the board already shows. */}
@@ -997,6 +1008,13 @@ export function Board({
         canEdit={canEdit}
         onOpenChange={setFormsOpen}
         onSubmitted={refresh}
+      />
+      <CapacityDialog
+        boardId={boardId}
+        workspaceId={workspaceId}
+        open={capacityOpen}
+        canManage={canDeleteColumns}
+        onOpenChange={setCapacityOpen}
       />
       <TemplatesDialog
         open={templatesOpen}
