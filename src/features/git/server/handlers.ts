@@ -14,6 +14,10 @@ import {
 } from "./repository";
 import { normalizeGithubEvent, verifyGithubSignature } from "./github";
 import { normalizeGitlabEvent, verifyGitlabToken } from "./gitlab";
+import {
+  normalizeBitbucketEvent,
+  verifyBitbucketSignature,
+} from "./bitbucket";
 
 /**
  * Git connection management (2.0). Reads of a task's links take a principal (an
@@ -152,6 +156,42 @@ export async function handleGitlabWebhook(request: Request, id: string) {
   }
 
   const events = normalizeGitlabEvent(payload as Record<string, never>);
+  let linked = 0;
+  for (const event of events) {
+    const result = await ingestEvent(resolved.connection, event);
+    linked += result.linkedTaskIds.length;
+  }
+  return Response.json({ ok: true, linked });
+}
+
+/**
+ * The Bitbucket webhook ingress (2.3). Like GitHub, Bitbucket HMAC-signs the raw
+ * body (`X-Hub-Signature: sha256=…`), so the body is read as raw text and verified
+ * BEFORE parsing. The event type rides `X-Event-Key`. A bad id, a non-Bitbucket
+ * connection, or a failed signature all answer the flat 404/401.
+ */
+export async function handleBitbucketWebhook(request: Request, id: string) {
+  const connectionId = Number(id);
+  if (!Number.isInteger(connectionId)) return notFound();
+
+  const resolved = await connectionForIngress(connectionId);
+  if (!resolved || resolved.connection.provider !== "bitbucket") return notFound();
+
+  const body = await request.text();
+  const signature = request.headers.get("x-hub-signature");
+  if (!verifyBitbucketSignature(resolved.secret, body, signature)) {
+    return new Response(null, { status: 401 });
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return badRequest("Invalid JSON body");
+  }
+
+  const eventKey = request.headers.get("x-event-key") ?? "";
+  const events = normalizeBitbucketEvent(eventKey, payload as Record<string, never>);
   let linked = 0;
   for (const event of events) {
     const result = await ingestEvent(resolved.connection, event);

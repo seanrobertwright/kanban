@@ -575,5 +575,23 @@ tsc/eslint/build clean per feature.
       tsc/eslint/build clean. **Flips the GitLab integration scoreboard row**
       (96 ✅ / 36 ❌).
 
+- [x] **Bitbucket integration** (rock 2.3) — the third vendor adapter, sibling of
+      2.1/2.2. Bitbucket sits with GitHub on verification: a configured secret makes
+      it HMAC-SHA256 the raw body and send `X-Hub-Signature: sha256=…` (GitHub's
+      scheme, header minus the `-256`), so `verifyBitbucketSignature` is GitHub's
+      constant-time compare. Events ride `X-Event-Key` (`pullrequest:*`,
+      `repo:push`) with Bitbucket's nested payload — a PR's `id`/`links.html.href`/
+      `source.branch.name`/`state` (OPEN→open, MERGED→merged, DECLINED|SUPERSEDED→
+      closed) and a push's `push.changes[]` (one commit link per commit across all
+      changes via `commits[].hash`/`links.html.href`, plus a branch link for a newly
+      created branch — `change.old == null`). Route `POST
+      /api/git/webhook/bitbucket/[id]` (no session — the signature is the credential;
+      bad id / non-Bitbucket connection / bad signature → flat 404/401). No
+      migration. 8 tests (pure: signature valid/tampered/missing, PR
+      open/merged/declined, push commits across changes, new-branch link, unmodeled
+      events; DB: a signed pullrequest webhook links its `#ref` task, bad-sig→401,
+      unknown-conn→404). tsc/eslint/build clean. **Flips the Bitbucket integration
+      scoreboard row** (97 ✅ / 35 ❌) — **all three git hosts now drive the board.**
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
