@@ -118,7 +118,8 @@ export type Action =
   | ({ type: "add_label"; labelId: number } & ActionBase)
   | ({ type: "comment"; body: string } & ActionBase)
   | ({ type: "notify"; target: NotifyTarget; message?: string } & ActionBase)
-  | ({ type: "create_task"; title: string; columnId?: number; priority?: TaskPriority } & ActionBase);
+  | ({ type: "create_task"; title: string; columnId?: number; priority?: TaskPriority } & ActionBase)
+  | ({ type: "script"; code: string } & ActionBase);
 
 /**
  * Who a notify action pings (1.5). "assignee" resolves to the task's current

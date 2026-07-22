@@ -201,6 +201,18 @@ export async function applyEffects(
         });
         break;
       }
+      case "script": {
+        // Custom scripts (1.11), off unless AUTOMATION_SCRIPTS_ENABLED. The
+        // sandbox has no capabilities — it returns effect *descriptors*, which
+        // are re-validated (no nested script) and applied through this very
+        // switch. So a script can only produce actions its admin author could
+        // declare by hand. See sandbox.ts for the threat model.
+        const { runScript, scriptsEnabled } = await import("./sandbox");
+        if (!scriptsEnabled()) break;
+        const produced = runScript(effect.code, snapshot);
+        if (produced.length) await applyEffects(by, taskId, produced, snapshot);
+        break;
+      }
     }
   }
 }

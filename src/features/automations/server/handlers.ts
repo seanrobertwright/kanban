@@ -31,6 +31,7 @@ import {
   updateAutomationRule,
 } from "./repository";
 import { fireExternalTrigger } from "./scheduler";
+import { scriptsEnabled } from "./sandbox";
 import {
   applyWorkflowTemplate,
   createWorkflowTemplate,
@@ -158,6 +159,13 @@ function readAction(v: unknown): Action | { error: string } {
         return { error: "create_task needs a title" };
       if (o.columnId !== undefined && !Number.isInteger(o.columnId))
         return { error: "create_task columnId must be an integer" };
+      return v as Action;
+    case "script":
+      if (!scriptsEnabled())
+        return { error: "scripting is disabled on this server" };
+      if (typeof o.code !== "string" || o.code.trim() === "")
+        return { error: "script needs code" };
+      if (o.code.length > 5000) return { error: "script is too long (max 5000 chars)" };
       return v as Action;
     default:
       return { error: `unknown action type: ${String(o.type)}` };

@@ -12,6 +12,7 @@ import {
 } from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { Textarea } from "@/shared/ui/textarea";
 import * as api from "../client/api";
 import * as slaApi from "@/features/sla/client/api";
 import type { SlaPolicy } from "@/features/sla/types";
@@ -209,6 +210,8 @@ function summarizeAction(a: Action, columns: AutomationsColumn[], labels: Automa
       return `notify ${a.target === "assignee" ? "assignee" : a.target.id}`;
     case "create_task":
       return `create task "${a.title}"`;
+    case "script":
+      return "run script";
   }
 }
 
@@ -869,7 +872,8 @@ type ActionDraft =
   | { type: "add_label"; labelId: string }
   | { type: "comment"; body: string }
   | { type: "notify"; message: string }
-  | { type: "create_task"; title: string; columnId: string };
+  | { type: "create_task"; title: string; columnId: string }
+  | { type: "script"; code: string };
 
 function CreateRule({
   boardId,
@@ -945,6 +949,8 @@ function CreateRule({
             title: a.title.trim(),
             columnId: a.columnId === "" ? undefined : Number(a.columnId),
           };
+        case "script":
+          return { type: "script", code: a.code };
       }
     });
   }
@@ -1109,7 +1115,9 @@ function CreateRule({
                           ? { type: "notify", message: "" }
                           : t === "create_task"
                             ? { type: "create_task", title: "", columnId: "" }
-                            : { type: "comment", body: "" }
+                            : t === "script"
+                              ? { type: "script", code: "" }
+                              : { type: "comment", body: "" }
                 );
               }}
             >
@@ -1119,6 +1127,7 @@ function CreateRule({
               <option value="comment">comment</option>
               <option value="notify">notify assignee</option>
               <option value="create_task">create task</option>
+              <option value="script">run script</option>
             </select>
 
             {a.type === "move" && (
@@ -1215,6 +1224,16 @@ function CreateRule({
                   ))}
                 </select>
               </>
+            )}
+            {a.type === "script" && (
+              <Textarea
+                aria-label={`Action ${i + 1} script`}
+                value={a.code}
+                rows={3}
+                onChange={(e) => setAction(i, { type: "script", code: e.target.value })}
+                placeholder="return task.priority === 'urgent' ? [{ type:'comment', body:'!' }] : []"
+                className="font-mono text-xs"
+              />
             )}
 
             {actions.length > 1 && (

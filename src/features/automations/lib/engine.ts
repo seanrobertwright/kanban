@@ -38,7 +38,8 @@ export type Effect =
   | { type: "add_label"; labelId: number }
   | { type: "comment"; body: string }
   | { type: "notify"; target: NotifyTarget; message?: string }
-  | { type: "create_task"; title: string; columnId?: number; priority?: TaskPriority };
+  | { type: "create_task"; title: string; columnId?: number; priority?: TaskPriority }
+  | { type: "script"; code: string };
 
 /**
  * Resolves a possibly-dotted field path against the snapshot ("assignee.id"

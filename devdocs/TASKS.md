@@ -462,6 +462,23 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       its source + requester; an ordinary task does not). **Flips one scoreboard
       row** (90 ✅ / 42 ❌).
 
+- [x] **Custom scripts/functions** (rock 1.11) — a sandboxed `script` action, the
+      phase's highest-risk rock, so it ships last, admin-only, **off by default**
+      (`AUTOMATION_SCRIPTS_ENABLED`). Its safety rests on a capability-free design:
+      the script gets a *frozen copy* of the task and returns effect *descriptors*
+      (plain JSON) — it never touches the DB, fs, or network. The engine
+      re-validates every returned effect (no nested script) and applies it through
+      the same gated repositories a declared action uses, so a script can only
+      produce actions its admin author could type by hand. The `node:vm` sandbox
+      adds a hard CPU timeout and strips Node globals (no require/process/fetch);
+      the threat model is documented honestly (node:vm isn't a hard boundary
+      against a determined admin — isolated-vm is the drop-in hardening behind the
+      same seam). Builder gains a "run script" action (code textarea). 6 pure
+      sandbox tests (effects through, invalid/nested-script dropped, no globals,
+      frozen snapshot, timeout). **Flips one scoreboard row** (91 ✅ / 41 ❌) —
+      **closes the Workflow & Automation area (15/15 ✅)** and all twelve Phase 1
+      rocks.
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,
