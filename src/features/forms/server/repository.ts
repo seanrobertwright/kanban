@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 
 import type { Principal } from "@/features/auth/server/principal";
+import { asPrincipal, principalActor } from "@/features/auth/server/principal";
 import { createTask } from "@/features/tasks/server/repository";
 import type { Task } from "@/features/tasks/types";
 import { query, queryOne, withTransaction } from "@/shared/db/client";
@@ -255,11 +256,20 @@ export async function submitForm(
   }
 
   const { title, description } = compileSubmission(form.fields, input.answers);
-  return createTask(actor, {
+  const task = await createTask(actor, {
     columnId,
     title,
     description,
     assignee: routed.assignee ?? undefined,
     labelIds: routed.labelIds,
   });
+
+  // Stamp the intake identity (1.8): which form it came through and who filed it.
+  // Its presence is what marks the task as a request for the Requests queue.
+  const by = principalActor(asPrincipal(actor));
+  await query(
+    `UPDATE task SET request_meta = $2::jsonb WHERE id = $1`,
+    [task.id, JSON.stringify({ source: form.name, requesterType: by.type, requesterId: by.id })]
+  );
+  return task;
 }

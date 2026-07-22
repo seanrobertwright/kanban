@@ -449,6 +449,19 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       spawns the task in the target column). **Flips one scoreboard row** (89 ✅ /
       43 ❌).
 
+- [x] **Request management** (052, rock 1.8) — a structured intake queue by
+      composition, not a new object: a "request" is a Form (039) submission — it
+      already lands as a task in a status column (custom statuses ✅), routed by
+      its answers (1.7) and timed by SLAs (1.6). This rock adds the intake
+      identity (`task.request_meta` JSONB — source form + requester, stamped on
+      submit; its presence marks a task as a request) and the **Requests queue**:
+      a self-fetching lens (`listRequests` viewer+, `GET /api/board/[id]/requests`)
+      that groups intake tasks by status, each showing its source form, requester
+      (resolved through user/agent like the activity feed), and nearest open SLA
+      due. RequestsDialog on the toolbar. 1 DB test (a form submission appears with
+      its source + requester; an ordinary task does not). **Flips one scoreboard
+      row** (90 ✅ / 42 ❌).
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,

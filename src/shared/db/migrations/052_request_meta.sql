@@ -1,0 +1,12 @@
+-- Request management (052, rock 1.8) — a structured intake queue. A "request" is
+-- a Form (039) submission: it already lands as a task in a status column (custom
+-- statuses ✅), routed by its answers (1.7) and timed by SLAs (1.6). What was
+-- missing is the intake identity — which form it came through and who filed it —
+-- so a Requests queue can show the backlog of incoming work with its requester
+-- and SLA, grouped by status.
+--
+-- request_meta is that identity: NULL for an ordinary task, and { source, requester }
+-- for one born of a form submission. JSONB (the request-shape is read whole), and
+-- its mere presence is what marks a task as a request — the Requests lens filters
+-- on request_meta IS NOT NULL.
+ALTER TABLE task ADD COLUMN request_meta JSONB;

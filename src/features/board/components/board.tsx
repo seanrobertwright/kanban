@@ -69,6 +69,7 @@ import { InsightsDialog } from "./insights-dialog";
 import { TimesheetDialog } from "@/features/time/components/timesheet-dialog";
 import { FormsDialog } from "@/features/forms/components/forms-dialog";
 import { AutomationsDialog } from "@/features/automations/components/automations-dialog";
+import { RequestsDialog } from "@/features/requests/components/requests-dialog";
 import { CapacityDialog } from "@/features/capacity/components/capacity-dialog";
 import { BudgetDialog } from "@/features/budget/components/budget-dialog";
 import { DiscoveryDialog } from "@/features/discovery/components/discovery-dialog";
@@ -238,6 +239,7 @@ export function Board({
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [formsOpen, setFormsOpen] = useState(false);
   const [automationsOpen, setAutomationsOpen] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
@@ -713,6 +715,14 @@ export function Board({
             variant="ghost"
             size="sm"
             className="text-muted-foreground"
+            onClick={() => setRequestsOpen(true)}
+          >
+            <Inbox /> Requests
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
             onClick={() => setCapacityOpen(true)}
           >
             <Gauge /> Capacity
@@ -1051,6 +1061,11 @@ export function Board({
         canManage={canDeleteColumns}
         onOpenChange={setAutomationsOpen}
         onChanged={refresh}
+      />
+      <RequestsDialog
+        boardId={boardId}
+        open={requestsOpen}
+        onOpenChange={setRequestsOpen}
       />
       <CapacityDialog
         boardId={boardId}
