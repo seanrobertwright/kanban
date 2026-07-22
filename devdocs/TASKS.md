@@ -236,6 +236,18 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
       removing a board. Cross-workspace filing refused (not_found). ProgramsButton
       in the header beside Portfolio. No activity (workspace-level, portfolio's
       read-only precedent). 5 DB tests + 3 pure. → `27aad54`
+- [x] **Resource + Capacity planning** (041) — one model, two capability rows.
+      `member_capacity` (workspace-scoped: a member's `weekly_points` budget + a
+      `role` label, keyed to the membership). A board Capacity dialog weighs each
+      member's open assigned demand (sum of `estimate`, done-column work excluded —
+      the same unit as the budget so they compare directly) against their budget:
+      role + who-carries-what (resource planning) and demand-vs-capacity with
+      over-allocation flagged (capacity planning). Pure `utilization` /
+      `isOverAllocated` / `summarizeCapacity` (5 unit tests); reads viewer+, budget
+      edits admin (upsert, member-guarded not_found). Humans-only by design —
+      agents are metered in dollars, not points (the log_time cut's reasoning).
+      Unassigned demand + a rollup footer. No activity (planning config). 3 DB
+      tests + 5 pure. **Flips two scoreboard rows.** → `c1af7f3`
 
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
