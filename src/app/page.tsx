@@ -10,6 +10,7 @@ import type { BoardData } from "@/features/board/types";
 import { listLabels } from "@/features/labels/server/repository";
 import { BoardSwitcher } from "@/features/workspaces/components/board-switcher";
 import { PortfolioButton } from "@/features/workspaces/components/portfolio-dialog";
+import { ProgramsButton } from "@/features/programs/components/programs-dialog";
 import { AuthzError } from "@/features/workspaces/server/authz";
 import {
   listMembers,
@@ -110,6 +111,10 @@ export default async function Home({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <ProgramsButton
+            workspaceId={data.board.workspaceId}
+            canManage={canDeleteColumns}
+          />
           <PortfolioButton workspaceId={data.board.workspaceId} />
           <NotificationBell workspaceId={data.board.workspaceId} />
           <ThemeToggle />
