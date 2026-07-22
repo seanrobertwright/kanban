@@ -28,6 +28,7 @@ import {
   Landmark,
   Layers,
   LayoutTemplate,
+  Lightbulb,
   List,
   Map as MapIcon,
   Plus,
@@ -68,6 +69,7 @@ import { TimesheetDialog } from "@/features/time/components/timesheet-dialog";
 import { FormsDialog } from "@/features/forms/components/forms-dialog";
 import { CapacityDialog } from "@/features/capacity/components/capacity-dialog";
 import { BudgetDialog } from "@/features/budget/components/budget-dialog";
+import { DiscoveryDialog } from "@/features/discovery/components/discovery-dialog";
 import { CustomFieldsDialog } from "@/features/custom-fields/components/custom-fields-dialog";
 import type { CustomField } from "@/features/custom-fields/types";
 import { MilestonesDialog } from "@/features/milestones/components/milestones-dialog";
@@ -235,6 +237,7 @@ export function Board({
   const [formsOpen, setFormsOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
+  const [discoveryOpen, setDiscoveryOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
   const [milestonesOpen, setMilestonesOpen] = useState(false);
   const [epics, setEpics] = useState<Epic[]>(initialEpics);
@@ -711,6 +714,14 @@ export function Board({
           >
             <Landmark /> Budget
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setDiscoveryOpen(true)}
+          >
+            <Lightbulb /> Discovery
+          </Button>
           {/* Export is a GET the browser can follow — plain anchors, so the
               download rides the session cookie with no fetch-and-blob dance.
               Viewer+: an export is a read of what the board already shows. */}
@@ -1032,6 +1043,13 @@ export function Board({
         open={budgetOpen}
         canManage={canDeleteColumns}
         onOpenChange={setBudgetOpen}
+      />
+      <DiscoveryDialog
+        boardId={boardId}
+        open={discoveryOpen}
+        canEdit={canEdit}
+        onOpenChange={setDiscoveryOpen}
+        onPromoted={refresh}
       />
       <TemplatesDialog
         open={templatesOpen}

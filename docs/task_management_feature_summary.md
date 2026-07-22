@@ -91,8 +91,8 @@ These features are most important for software, product, and agile delivery team
 | ✅ Velocity | Tracking completed work per sprint or iteration. |
 | ✅ Burndown chart | Sprint progress chart showing remaining work over time. |
 | ✅ Release planning | Grouping work into versions, releases, or launch plans. |
-| ❌ Product discovery | Support for ideas, research, feedback, validation, or discovery work. |
-| ❌ Feedback intake/portal | Dedicated intake channel for customer or stakeholder feedback. |
+| ✅ Product discovery | Support for ideas, research, feedback, validation, or discovery work. |
+| ✅ Feedback intake/portal | Dedicated intake channel for customer or stakeholder feedback. |
 | ✅ Prioritization scoring | Scoring work by value, effort, risk, reach, impact, or custom criteria. |
 | ❌ Scaled Agile/SAFe | Support for enterprise agile layers such as teams, programs, ARTs, and portfolios. |
 

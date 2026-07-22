@@ -261,6 +261,26 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–042.
       tests + 4 pure. **Closes the Planning & Views area (16/16 ✅) — both rocks
       done.** → `a689bd6`
 
+## Done — 2026-07-22 Agile & Product rocks sweep (finish the Agile & Product area)
+
+- [x] **Product discovery + Feedback intake** (043) — one model, two capability
+      rows. Two board-scoped tables: `idea` (a pre-task candidate moving through
+      an exploring → validating → validated → promoted | archived pipeline, with
+      the four RICE inputs) and `feedback` (a customer/stakeholder signal, votes,
+      sentiment, optionally filed under the idea it argues for). RICE is derived
+      in a pure `riceScore` (priority_score's derive-don't-store rule), the
+      backlog ranked by stage then score in `buildDiscoveryOverview`; feedback
+      demand (count + votes) rolls onto each idea. Promoting a validated idea
+      rides `createTask` (member gate, task.created logged) with a compiled
+      footer carrying its detail + demand, stamps `status='promoted'` +
+      `promoted_task_id` in one txn, and refuses a second promotion
+      (`PromoteError` → 400). Feedback SET-NULLs back to the inbox when its idea
+      is deleted; idea_id filing is the three-valued forms shape and cross-board
+      guarded. Reads viewer+, authoring/promote member. DiscoveryDialog
+      (Timesheet's self-fetching shape) with an Ideas backlog + a Feedback inbox.
+      No activity log (pre-commitment plumbing, forms' cut). 5 DB tests + 8 pure.
+      **Flips two scoreboard rows.**
+
 ## Rocks sweep — outcome
 
 Both target capability areas are now fully native: **Core Work Items 14/14 ✅**
