@@ -15,6 +15,7 @@ import {
   listTaskGitLinks,
 } from "./repository";
 import { ingestReleaseEvent } from "@/features/releases/server/repository";
+import { browseRepoTree, listRepoBranches } from "./browse";
 import {
   normalizeGithubCiEvent,
   normalizeGithubEvent,
@@ -97,6 +98,41 @@ export async function handleListTaskGitLinks(request: Request, id: string) {
   if (!Number.isInteger(taskId)) return badRequest("Invalid task id");
   try {
     return Response.json(await listTaskGitLinks(principal, taskId));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/**
+ * Repository browsing (2.10). Viewer+ of the connection's workspace (the gate is
+ * in browseRepoTree/listRepoBranches). The `path`/`ref` come from the query
+ * string; a provider error surfaces as the AuthzError the repository throws.
+ */
+export async function handleBrowseRepoTree(request: Request, id: string) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  const connectionId = Number(id);
+  if (!Number.isInteger(connectionId)) return badRequest("Invalid connection id");
+  const url = new URL(request.url);
+  try {
+    return Response.json(
+      await browseRepoTree(principal, connectionId, {
+        path: url.searchParams.get("path") ?? "",
+        ref: url.searchParams.get("ref") ?? undefined,
+      })
+    );
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleListRepoBranches(request: Request, id: string) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  const connectionId = Number(id);
+  if (!Number.isInteger(connectionId)) return badRequest("Invalid connection id");
+  try {
+    return Response.json(await listRepoBranches(principal, connectionId));
   } catch (error) {
     return authzErrorResponse(error);
   }

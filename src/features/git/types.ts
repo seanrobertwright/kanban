@@ -119,6 +119,21 @@ export interface NormalizedCiEvent {
   messages?: string[];
 }
 
+/** One entry in a repository tree listing (2.10) — a file or a directory. */
+export interface RepoEntry {
+  name: string;
+  path: string;
+  type: "file" | "dir";
+  /** File size in bytes, when the provider reports it (dirs: null). */
+  size: number | null;
+}
+
+/** A branch in the repository's branch list (2.10). */
+export interface RepoBranch {
+  name: string;
+  protected: boolean;
+}
+
 /**
  * A provider release/tag publication (2.8). The ingress matches `tag` to a
  * planned `release` row (by name) in the connection's workspace and ships it.

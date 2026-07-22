@@ -673,5 +673,33 @@ tsc/eslint/build clean per feature.
       non-member's query errors + null — authz inherited). tsc/eslint/build clean.
       **Flips the GraphQL API scoreboard row** (101 ✅ / 31 ❌).
 
+- [x] **Repository browsing** (rock 2.10) — a read-through proxy into the connected
+      repo. `GET /api/repo-connections/[id]/tree?path=&ref=` and `/branches` call the
+      provider's contents/branches API and normalize GitHub + GitLab responses onto a
+      common `RepoEntry`/`RepoBranch` shape (pure `lib/browse.ts`: tree→dir/blob→file,
+      dirs sorted before files). **No repo data stored** — a pass-through, not a
+      mirror, the self-hosted "hold only what we must" stance. Gated viewer+ of the
+      connection's workspace (`browseRepoTree`/`listRepoBranches`). The provider HTTP
+      call is injected (`deps.fetchImpl`, global fetch by default), so the
+      normalization + the gate are testable without a network; the installation-token
+      retrieval, response caching, and a read-only file/branch panel are the live-only
+      layer. Bitbucket browse is a stated follow-up (its API differs enough to
+      warrant its own pass). 7 tests (pure: GH/GL tree fold + single-file + branch
+      lists; DB: normalized tree/branches through a stub fetch, provider error →
+      throw, non-member + unknown-connection refused). tsc/eslint/build clean.
+      **Flips the Repository browsing scoreboard row** (102 ✅ / 30 ❌).
+
+## Phase 2 — complete
+
+**All ten Phase 2 rocks (2.0–2.10) plus the pulled-forward 6.5 have shipped.** The
+Developer & DevOps / Git area is native end to end: one link model (2.0) verified
+inbound from **all three hosts** — GitHub (2.1), GitLab (2.2), Bitbucket (2.3) —
+surfacing PRs/commits/branches (2.4/2.5) and CI runs (2.7) on the task, generating
+the canonical branch name to create (2.6), grouping delivered work into git-tag-
+shipped releases (2.8), a read-first GraphQL surface (2.9), and a read-through repo
+browser (2.10) — every git event riding the same post-commit sink so a merged PR,
+a green build, or a shipped release fires an ordinary Phase-1 rule. Scoreboard
+**102 ✅ / 30 ❌ / 8 ⛔**.
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
