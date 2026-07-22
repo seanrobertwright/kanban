@@ -299,6 +299,35 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       management. No activity log (workspace-level, portfolio/programs precedent).
       3 DB tests + 3 pure. **Closes the Agile & Product area (14/14 ✅).**
 
+## Phase 1 — Workflow & Automation engine (building, per devdocs/SPEC.md)
+
+- [x] **Automation engine core** (045) — the Phase 1 spine, not itself a
+      scoreboard row (it enables the twelve). A board-scoped
+      trigger→conditions→actions rule engine welded to the existing activity tap:
+      `logActivity` already fans every committed mutation to webhooks (025), so
+      the engine is a *second subscriber* at that same post-commit seam
+      (`queueAutomations` beside `queueDelivery`) — a rule fires on exactly the
+      events a webhook sees, no second bus. `automation_rule` (trigger/conditions/
+      actions JSONB, board-scoped, `created_by` the principal it acts as) +
+      `automation_run` (every fire logged, `UNIQUE(rule_id, activity_id)` doubling
+      as the idempotency key). The pure heart lives in `lib/engine.ts` —
+      `evaluate(conditions, snapshot)` over an AND/OR/NOT predicate tree and
+      `planActions(actions, snapshot)` (per-action `onlyIf` branch = 1.2 in data
+      form; no-op self-move elided) — total by construction so a rule can never
+      crash the mutation that triggered it. The runner re-reads the committed
+      activity (the receipt), dispatches by (board, event), and applies effects
+      **as the rule's author through the ordinary repositories** (moveTask,
+      updateTask, createComment) — so an automation's blast radius is exactly its
+      admin author's, no elevated door. Guards: idempotency (the UNIQUE claim) +
+      an AsyncLocalStorage cascade depth cap (an action logs activity, which
+      re-enters the runner — capped so A→B→A cannot recurse). Authoring admin
+      (acts as the workspace, §7.4); reads viewer+. Agent authoring deferred
+      behind `AskUserQuestion` (§7 — a rule an agent can write is agent surface).
+      `GET/POST /api/board/[id]/automations`, `PATCH/DELETE /api/automations/[id]`,
+      `GET /api/automations/[id]/runs`. 15 pure tests + 6 DB (incl. end-to-end
+      fire + idempotency). No scoreboard flip yet — 1.1/1.2 add the builder UI
+      that flips those rows.
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,

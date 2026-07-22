@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import { query } from "@/shared/db/client";
 import type { Principal } from "@/features/auth/server/principal";
 import { queueDelivery } from "@/features/webhooks/server/dispatch";
+import { queueAutomations } from "@/features/automations/server/runner";
 import { noteActivity } from "./activity-capture";
 import {
   requireTaskRole,
@@ -148,6 +149,11 @@ export async function logActivity(
   // via after(), post-commit, and re-reads the row first so a rollback after
   // this INSERT delivers nothing. See webhooks/server/dispatch.ts.
   queueDelivery(rows[0].id);
+  // The automation engine (045) is the second subscriber on this same sink:
+  // every mutation already lands here, so a rule fires on exactly the events a
+  // webhook sees. Queued, not run — post-commit via after(), re-reading the row
+  // first for the same receipt reason. See automations/server/runner.ts.
+  queueAutomations(rows[0].id);
   return rows[0].id;
 }
 
