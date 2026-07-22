@@ -21,6 +21,7 @@ import type {
   Predicate,
   SettableField,
   SettableValue,
+  TaskPriority,
 } from "../types";
 
 /** The fact a condition reads — in practice a TaskSnapshot, but treated opaquely. */
@@ -36,7 +37,8 @@ export type Effect =
   | { type: "set_field"; field: SettableField; value: SettableValue }
   | { type: "add_label"; labelId: number }
   | { type: "comment"; body: string }
-  | { type: "notify"; target: NotifyTarget; message?: string };
+  | { type: "notify"; target: NotifyTarget; message?: string }
+  | { type: "create_task"; title: string; columnId?: number; priority?: TaskPriority };
 
 /**
  * Resolves a possibly-dotted field path against the snapshot ("assignee.id"

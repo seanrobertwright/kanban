@@ -207,6 +207,8 @@ function summarizeAction(a: Action, columns: AutomationsColumn[], labels: Automa
       return a.assignee ? `assign to ${a.assignee.id}` : "unassign";
     case "notify":
       return `notify ${a.target === "assignee" ? "assignee" : a.target.id}`;
+    case "create_task":
+      return `create task "${a.title}"`;
   }
 }
 
@@ -866,7 +868,8 @@ type ActionDraft =
   | { type: "set_field"; field: SettableField; value: string }
   | { type: "add_label"; labelId: string }
   | { type: "comment"; body: string }
-  | { type: "notify"; message: string };
+  | { type: "notify"; message: string }
+  | { type: "create_task"; title: string; columnId: string };
 
 function CreateRule({
   boardId,
@@ -936,6 +939,12 @@ function CreateRule({
           return { type: "comment", body: a.body.trim() };
         case "notify":
           return { type: "notify", target: "assignee", message: a.message.trim() || undefined };
+        case "create_task":
+          return {
+            type: "create_task",
+            title: a.title.trim(),
+            columnId: a.columnId === "" ? undefined : Number(a.columnId),
+          };
       }
     });
   }
@@ -1098,7 +1107,9 @@ function CreateRule({
                         ? { type: "add_label", labelId: String(labels[0]?.id ?? "") }
                         : t === "notify"
                           ? { type: "notify", message: "" }
-                          : { type: "comment", body: "" }
+                          : t === "create_task"
+                            ? { type: "create_task", title: "", columnId: "" }
+                            : { type: "comment", body: "" }
                 );
               }}
             >
@@ -1107,6 +1118,7 @@ function CreateRule({
               <option value="add_label">add label</option>
               <option value="comment">comment</option>
               <option value="notify">notify assignee</option>
+              <option value="create_task">create task</option>
             </select>
 
             {a.type === "move" && (
@@ -1179,6 +1191,30 @@ function CreateRule({
                 placeholder="Message (optional) — pings the assignee"
                 className="h-7 text-xs"
               />
+            )}
+            {a.type === "create_task" && (
+              <>
+                <Input
+                  aria-label={`Action ${i + 1} task title`}
+                  value={a.title}
+                  onChange={(e) => setAction(i, { type: "create_task", title: e.target.value, columnId: a.columnId })}
+                  placeholder="New task title"
+                  className="h-7 text-xs"
+                />
+                <select
+                  aria-label={`Action ${i + 1} task column`}
+                  className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                  value={a.columnId}
+                  onChange={(e) => setAction(i, { type: "create_task", title: a.title, columnId: e.target.value })}
+                >
+                  <option value="">same column</option>
+                  {columns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                    </option>
+                  ))}
+                </select>
+              </>
             )}
 
             {actions.length > 1 && (

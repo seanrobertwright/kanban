@@ -153,6 +153,12 @@ function readAction(v: unknown): Action | { error: string } {
         return { error: "notify message must be a string" };
       return v as Action;
     }
+    case "create_task":
+      if (typeof o.title !== "string" || o.title.trim() === "")
+        return { error: "create_task needs a title" };
+      if (o.columnId !== undefined && !Number.isInteger(o.columnId))
+        return { error: "create_task columnId must be an integer" };
+      return v as Action;
     default:
       return { error: `unknown action type: ${String(o.type)}` };
   }

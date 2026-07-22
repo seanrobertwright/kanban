@@ -186,6 +186,21 @@ export async function applyEffects(
         await createComment(by, { taskId, body: `@${name} ${message}` });
         break;
       }
+      case "create_task": {
+        // The "declare incident" primitive (1.10): spawn a new task. Default it
+        // to the triggering task's column (same board) when none is named, so a
+        // rule can create a sibling without knowing the board's columns.
+        const columnId =
+          effect.columnId ?? (typeof snapshot.columnId === "number" ? snapshot.columnId : undefined);
+        if (columnId === undefined) break;
+        const { createTask } = await import("@/features/tasks/server/repository");
+        await createTask(by, {
+          columnId,
+          title: effect.title,
+          priority: effect.priority,
+        });
+        break;
+      }
     }
   }
 }

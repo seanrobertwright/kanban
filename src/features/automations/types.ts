@@ -117,7 +117,8 @@ export type Action =
   | ({ type: "set_field"; field: SettableField; value: SettableValue } & ActionBase)
   | ({ type: "add_label"; labelId: number } & ActionBase)
   | ({ type: "comment"; body: string } & ActionBase)
-  | ({ type: "notify"; target: NotifyTarget; message?: string } & ActionBase);
+  | ({ type: "notify"; target: NotifyTarget; message?: string } & ActionBase)
+  | ({ type: "create_task"; title: string; columnId?: number; priority?: TaskPriority } & ActionBase);
 
 /**
  * Who a notify action pings (1.5). "assignee" resolves to the task's current

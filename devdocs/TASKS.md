@@ -437,6 +437,18 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       Incident apply adds columns+rules+SLA, idempotent on columns). **Flips one
       scoreboard row** (88 ✅ / 44 ❌).
 
+- [x] **Incident/service workflows** (rock 1.10) — not a new engine, per the
+      SPEC: the **Incident** built-in template (1.9) *is* the native incident
+      process — severity columns (Triage/Investigating/Mitigated/Resolved), an
+      escalation SLA (urgent within 30m → notify + comment on breach), and a
+      notify-on-urgent rule — applied to any board in one move. This rock adds the
+      one missing primitive to *declare* one: a `create_task` engine action that
+      spawns a task (into a named column or the triggering task's, defaulting
+      through the same createTask gate), so a rule/template can open an incident.
+      Added to the builder as "create task". 1 DB test (a rule's create_task
+      spawns the task in the target column). **Flips one scoreboard row** (89 ✅ /
+      43 ❌).
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,
