@@ -40,6 +40,15 @@ export const TRIGGER_EVENTS = [
   // Synthetic, raised by an external tool POSTing a board's trigger token (1.12).
   // Like schedule.tick it scans the board — the difference is what wakes it.
   "external.trigger",
+  // Git development events (2.0), logged by the git ingress against the task an
+  // artifact references. A rule triggers on these exactly as on a task.* event —
+  // the git.* activity's snapshot is the linked task's, so "when a PR merges, move
+  // this to Done" is an ordinary recipe. See features/git.
+  "git.branch_linked",
+  "git.pr_opened",
+  "git.pr_merged",
+  "git.pr_closed",
+  "git.commit_linked",
 ] as const;
 
 export type TriggerEvent = (typeof TRIGGER_EVENTS)[number];

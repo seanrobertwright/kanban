@@ -501,5 +501,28 @@ tsc/eslint/build clean per feature.
       scoreboard row** (92 ✅ / 40 ❌). SPEC's build sequence: 6.5 lands before
       Phase 2/7 store any third-party token.
 
+- [x] **Git provider connection + link model** (053, rock 2.0, the spine — not
+      itself a scoreboard row, enables 2.1–2.10) — the mirror of webhooks (025):
+      a *verified inbound* ingress where 025 is signed outbound. `repo_connection`
+      (workspace-scoped, provider/repo, inbound signing secret **encrypted** via
+      6.5, `created_by` NOT NULL CASCADE so a git event has a real actor —
+      automation_rule's model) + `task_git_link` (per-task branch/pr/commit rows,
+      `UNIQUE(task,provider,kind,external_id)` so a PR that opens→merges is one row
+      that changes state). Pure smart-commit parsing (`lib/parse.ts`: `#123` in
+      messages, `feature/123-slug` branch refs, strict enough to skip `v1.2.3`).
+      The ingress (`ingestEvent`, provider-agnostic) resolves refs to tasks **in
+      the connection's workspace only** (repo A can't touch repo B's board),
+      upserts links, and logs a `git.*` activity **only on a real state change**
+      (idempotent redelivery, no delivery-id bookkeeping) — which rides the same
+      post-commit sink webhooks + the automation engine subscribe to, so
+      **"when a PR merges, move to Done" is an ordinary Phase-1 rule** (one-line
+      runner relaxation to dispatch `git.` events; git trigger events added to the
+      builder). New `git.*` activity family (GitAction + GitSnapshot = the linked
+      task's snapshot + the git artifact) with feed narration + bell verbs.
+      Connection CRUD admin (secret shown once), link reads viewer+, ingress takes
+      no session (the signature is the credential — boardForTriggerToken's shape).
+      16 tests (10 git: secret-encrypted-at-rest, ingest+tenancy, idempotency,
+      end-to-end pr_merged→rule-fire; + 6 pure parse). tsc/eslint/build clean.
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).

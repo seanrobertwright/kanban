@@ -239,6 +239,25 @@ export type SprintAction =
  */
 export type CustomFieldValueAction = "customField.valued";
 
+/**
+ * Git development events (2.0) — a new *kind* of activity, not a task mutation.
+ * A linked branch/PR/commit changing state is worth a feed line, a webhook, and
+ * (the leverage) a Phase-1 rule trigger: "when git.pr_merged, move to Done" is an
+ * ordinary automation. The family is logged by the git ingress against the task
+ * the artifact references, so it rides the same post-commit sink every other
+ * action does — see features/git/server/repository.ts.
+ *
+ * These carry no undo (003's "an action exists when its inverse is a want" test):
+ * a merged PR is a fact about the outside world, not a board edit to revert. They
+ * exist for the feed, the webhooks, and the automation trigger, not for undo.
+ */
+export type GitAction =
+  | "git.branch_linked"
+  | "git.pr_opened"
+  | "git.pr_merged"
+  | "git.pr_closed"
+  | "git.commit_linked";
+
 export type ActivityAction =
   | TaskAction
   | CommentAction
@@ -249,7 +268,8 @@ export type ActivityAction =
   | ObjectiveAction
   | TimeAction
   | SprintAction
-  | CustomFieldValueAction;
+  | CustomFieldValueAction
+  | GitAction;
 
 /** What a task looked like at one instant. */
 export interface TaskSnapshot {
@@ -529,6 +549,29 @@ export interface CustomFieldValueSnapshot {
   value: string | null;
 }
 
+/**
+ * The git artifact a git.* activity is about, carried alongside the task's own
+ * snapshot. Plain string fields (not the git feature's stricter unions) so this
+ * low-level module takes no dependency on features/git — the git feature's typed
+ * values are structurally assignable in.
+ */
+export interface GitLinkInfo {
+  provider: string;
+  kind: string;
+  externalId: string;
+  url: string;
+  state: string | null;
+  title: string | null;
+}
+
+/**
+ * A git event's snapshot: the linked task exactly as a TaskSnapshot (so the
+ * automation evaluator reads its fields and effects apply to it, unchanged), plus
+ * the `git` artifact that triggered the event. The intersection is what lets one
+ * activity both fire a task-shaped rule and narrate "a PR merged" in the feed.
+ */
+export type GitSnapshot = TaskSnapshot & { git: GitLinkInfo };
+
 export type Snapshot =
   | TaskSnapshot
   | CommentSnapshot
@@ -539,7 +582,8 @@ export type Snapshot =
   | ObjectiveSnapshot
   | TimeSnapshot
   | SprintSnapshot
-  | CustomFieldValueSnapshot;
+  | CustomFieldValueSnapshot
+  | GitSnapshot;
 
 interface ActivityBase {
   id: string;
@@ -622,6 +666,12 @@ export interface CustomFieldValueActivity extends ActivityBase {
   after: CustomFieldValueSnapshot | null;
 }
 
+export interface GitActivity extends ActivityBase {
+  action: GitAction;
+  before: GitSnapshot | null;
+  after: GitSnapshot | null;
+}
+
 export type Activity =
   | TaskActivity
   | CommentActivity
@@ -632,7 +682,8 @@ export type Activity =
   | ObjectiveActivity
   | TimeActivity
   | SprintActivity
-  | CustomFieldValueActivity;
+  | CustomFieldValueActivity
+  | GitActivity;
 
 /**
  * An activity joined to the human who caused it, for rendering.

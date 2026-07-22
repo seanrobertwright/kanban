@@ -243,6 +243,27 @@ function describe(
       if (to === null && from !== null) return `cleared ${fieldName}`;
       return `changed ${fieldName} from "${from}" to "${to}"`;
     }
+    // Git development events (2.0). The artifact travels in the snapshot's `git`,
+    // so the line names the PR/commit/branch even after a connection is removed.
+    case "git.branch_linked": {
+      const b = entry.after && "git" in entry.after ? entry.after.git.externalId : "";
+      return b ? `linked branch ${b}` : "linked a branch";
+    }
+    case "git.pr_opened":
+    case "git.pr_merged":
+    case "git.pr_closed": {
+      const n =
+        entry.after && "git" in entry.after ? entry.after.git.externalId : null;
+      const verb =
+        entry.action === "git.pr_merged"
+          ? "merged"
+          : entry.action === "git.pr_closed"
+            ? "closed"
+            : "opened";
+      return `${verb} pull request${n ? ` #${n}` : ""}`;
+    }
+    case "git.commit_linked":
+      return "linked a commit";
     default:
       // `action` is TEXT in Postgres and this union grows every milestone, so a
       // row written by newer code can reach older code. Say something true

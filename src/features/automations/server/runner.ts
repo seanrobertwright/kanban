@@ -73,9 +73,13 @@ export async function runAutomationsForActivity(
     [activityId]
   );
   const entry = rows[0];
-  // The engine only acts on task events carrying a board and a snapshot to test.
+  // The engine only acts on events carrying a board and a snapshot to test.
   if (!entry || entry.boardId == null || entry.taskId == null) return;
-  if (!entry.action.startsWith("task.")) return;
+  // task.* is the ordinary board mutation; git.* is a development event (2.0)
+  // whose `after` is the linked task's snapshot plus its git artifact, so a rule
+  // like "when git.pr_merged, move to Done" evaluates and applies exactly as a
+  // task-triggered one — the git details ride along and the task fields drive it.
+  if (!entry.action.startsWith("task.") && !entry.action.startsWith("git.")) return;
   const snapshot = (entry.after ?? {}) as Snapshot;
 
   const rules = await rulesForDispatch(entry.boardId, entry.action);

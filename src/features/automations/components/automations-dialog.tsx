@@ -192,6 +192,11 @@ const EVENT_LABELS: Record<TriggerEvent, string> = {
   "task.labeled": "a task's labels change",
   "schedule.tick": "on a schedule",
   "external.trigger": "an external tool fires it",
+  "git.branch_linked": "a branch is linked",
+  "git.pr_opened": "a pull request is opened",
+  "git.pr_merged": "a pull request is merged",
+  "git.pr_closed": "a pull request is closed",
+  "git.commit_linked": "a commit is linked",
 };
 
 function summarizeAction(a: Action, columns: AutomationsColumn[], labels: AutomationsLabel[]): string {

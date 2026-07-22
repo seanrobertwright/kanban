@@ -56,6 +56,11 @@ const ACTION_VERB: Record<string, string> = {
   "sprint.completed": "completed a sprint",
   "sprint.deleted": "deleted a sprint",
   "customField.valued": "updated a field on",
+  "git.branch_linked": "linked a branch on",
+  "git.pr_opened": "opened a pull request for",
+  "git.pr_merged": "merged a pull request for",
+  "git.pr_closed": "closed a pull request for",
+  "git.commit_linked": "linked a commit to",
 };
 
 const POLL_MS = 60_000;

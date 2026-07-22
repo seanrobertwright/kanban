@@ -22,6 +22,8 @@ import type {
   CustomFieldValueSnapshot,
   EpicAction,
   EpicSnapshot,
+  GitAction,
+  GitSnapshot,
   ObjectiveAction,
   ObjectiveSnapshot,
   LabelAction,
@@ -101,6 +103,11 @@ export type ActivityInput =
       action: CustomFieldValueAction;
       before?: CustomFieldValueSnapshot | null;
       after?: CustomFieldValueSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: GitAction;
+      before?: GitSnapshot | null;
+      after?: GitSnapshot | null;
     });
 
 /**
