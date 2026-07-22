@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-21):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **71 ✅ / 69 ❌**.
+**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not implemented (including capabilities that are certifications, hosted-vendor integrations, or explicit non-goals). Current tally: **72 ✅ / 68 ❌** — the **Core Work Items** area is now fully ✅ (Forms/intake landed, 039).
 
 ## Scoring Scale
 
@@ -45,7 +45,7 @@ These features define whether a system can reliably capture, classify, and manag
 | ✅ Custom fields | User-defined metadata fields such as priority, impact, account, component, or score. |
 | ✅ Task templates | Reusable task/project patterns for repeatable work. |
 | ✅ Bulk edit | Ability to update many work items at once. |
-| ❌ Forms/intake | Structured request capture from internal or external users. |
+| ✅ Forms/intake | Structured request capture from internal or external users. |
 | ✅ Attachments | File attachment support on tasks or records. |
 | ✅ Priority | Native priority field, ranking, or urgency indicator. |
 | ✅ Labels/tags | Flexible classification labels or tags. |

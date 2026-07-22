@@ -8,9 +8,10 @@ added here is the next session's starting menu.
 Companion docs: `SESSION_HANDOFF.md` (per-session narrative + gotchas),
 `prd.md` (the milestone bet), `features.md` (breadth catalogue),
 `../docs/task_management_feature_summary.md` (the 140-criterion scoreboard,
-67 ✅ / 73 ❌ as of 2026-07-21 — the M4 agile cluster, the planning +
-collaboration sweep, and the Gantt + Goals/OKRs sweep are now scored ✅, and
-Critical path flipped ✅ once 036's CPM was recognised as its own row).
+72 ✅ / 68 ❌ as of 2026-07-22 — the M4 agile cluster, the planning +
+collaboration sweep, the Gantt + Goals/OKRs sweep, and Portfolio/Timesheets are
+scored ✅; the 2026-07-22 rocks sweep is closing out the **Core Work Items** and
+**Planning & Views** capability areas row by row — Forms/intake landed first).
 
 Convention: `[x]` done → cite the commit; `[ ]` open → one line on the slice.
 Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
@@ -209,6 +210,21 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–031.
 ### Custom-fields follow-ups (035 cuts, if the wedge wants them)
 - [ ] **Custom-field values on the Gantt/Timeline** — answers show on cards and
       list columns now; the schedule lenses do not read them.
+
+## Done — 2026-07-22 rocks sweep (finish Core Work Items + Planning & Views areas)
+
+- [x] **Forms / intake** (039) — a board-scoped, reusable intake definition: a
+      name, a target column, and an ordered list of questions
+      (text/textarea/number, each optionally required). Submitting a form creates
+      a task — the first answer is the title, every answered field compiles into a
+      `**Label:** value` description (pure `compileSubmission`, 2 unit tests). A
+      form rides `createTask` for submission (member gate, task.created logged), so
+      it never opens a wider door; a closed form and a missing required answer are
+      refused (`FormSubmitError` → 400). Target column is a SET NULL FK that falls
+      back to the board's first column. Self-fetching FormsDialog (Timesheet's
+      shape — not on BoardData) with a builder + a fill panel. Member manages +
+      submits; CRUD stays out of the activity log (035's custom-field-def cut). 6
+      DB tests + 2 pure. **Closes the Core Work Items area (14/14 ✅).** → `a4f8ca4`
 
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
