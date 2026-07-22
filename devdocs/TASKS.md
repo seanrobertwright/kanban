@@ -657,5 +657,21 @@ tsc/eslint/build clean per feature.
       cap, round-trip). tsc/eslint/build clean. **Flips the Branch linking/automation
       scoreboard row** (100 ✅ / 32 ❌).
 
+- [x] **GraphQL API** (rock 2.9) — a read-first `/api/graphql` beside REST, over the
+      existing repositories (the `graphql` reference impl, schema-first via
+      `buildSchema`). `Query.board(id)` returns the board tree (columns → tasks) +
+      milestones; `Query.task(id)` a single task. The design point: it is a second
+      *shape*, not a second permission system — every resolver calls `getBoard` /
+      `getTask`, so it inherits their `requireBoardRole`/`requireTaskRole` gates and
+      the shared principal resolution (`getPrincipalFromRequest`: a session cookie or
+      an `x-agent-key`), and a query for a board the caller can't read surfaces a
+      GraphQL error + null field, never another board's rows. Only the two Query
+      fields need a resolver — the nested tree is pre-shaped so GraphQL's default
+      field resolver reads it. Read-only first cut (mutations phase in behind the
+      REST gates), so the new surface's blast radius is zero. Added the `graphql@16`
+      dependency. 3 DB tests (board tree with columns+tasks, single task, a
+      non-member's query errors + null — authz inherited). tsc/eslint/build clean.
+      **Flips the GraphQL API scoreboard row** (101 ✅ / 31 ❌).
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
