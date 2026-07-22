@@ -6,6 +6,9 @@
  * without the intaker having to know the board's columns or fields.
  */
 
+import type { Actor, Condition } from "@/features/automations/types";
+import { evaluate, type Snapshot } from "@/features/automations/lib/engine";
+
 /** The kinds of question a form can ask. text is a single line, textarea a
  *  paragraph, number a numeric entry — all captured into the task description. */
 export type FormFieldType = "text" | "textarea" | "number";
@@ -35,7 +38,23 @@ export interface Form {
   fields: FormField[];
   /** A closed form is defined but refuses submissions. */
   isOpen: boolean;
+  /** Routing rules (1.7), in order; the first whose conditions match overrides
+   *  the target column and sets assignee + labels. Empty = default routing. */
+  routing: FormRoute[];
   createdAt: string;
+}
+
+/**
+ * One routing rule (1.7): if `conditions` hold against the submission's answers
+ * (keyed by question label), send the task to `columnId` (when set), assign it,
+ * and apply `labelIds`. Reuses the automation engine's Condition tree so a form
+ * routes with the same predicate vocabulary a rule fires on.
+ */
+export interface FormRoute {
+  conditions: Condition;
+  columnId?: number | null;
+  assignee?: Actor | null;
+  labelIds?: number[];
 }
 
 export interface CreateFormInput {
@@ -44,6 +63,7 @@ export interface CreateFormInput {
   targetColumnId?: number | null;
   fields: FormField[];
   isOpen?: boolean;
+  routing?: FormRoute[];
 }
 
 export interface UpdateFormInput {
@@ -52,6 +72,7 @@ export interface UpdateFormInput {
   targetColumnId?: number | null;
   fields?: FormField[];
   isOpen?: boolean;
+  routing?: FormRoute[];
 }
 
 /** A filled-in form: one answer per field, aligned to `fields` by index. */
@@ -89,4 +110,47 @@ export function compileSubmission(
     lines.push(`**${fields[i].label}:** ${value}`);
   }
   return { title, description: lines.join("\n\n") };
+}
+
+/**
+ * Builds the snapshot a routing rule reads: each question's label → its trimmed
+ * answer. A numeric question's answer is coerced to a number so numeric operators
+ * work. This is the one place the answers→predicate-input shape is decided, so
+ * the repository and its test agree.
+ */
+export function answersSnapshot(
+  fields: FormField[],
+  answers: string[]
+): Snapshot {
+  const snap: Snapshot = {};
+  for (let i = 0; i < fields.length; i++) {
+    const raw = (answers[i] ?? "").trim();
+    snap[fields[i].label] =
+      fields[i].type === "number" && raw !== "" ? Number(raw) : raw;
+  }
+  return snap;
+}
+
+/**
+ * Resolves a submission's routing (1.7): the first route whose conditions hold
+ * against the answers snapshot wins, contributing its column/assignee/labels.
+ * Returns an empty object when nothing matches, so the caller keeps the form's
+ * defaults. Pure — the repository applies the result through createTask.
+ */
+export function resolveRouting(
+  routes: FormRoute[],
+  fields: FormField[],
+  answers: string[]
+): { columnId?: number | null; assignee?: Actor | null; labelIds?: number[] } {
+  const snap = answersSnapshot(fields, answers);
+  for (const route of routes) {
+    if (evaluate(route.conditions, snap)) {
+      const out: { columnId?: number | null; assignee?: Actor | null; labelIds?: number[] } = {};
+      if ("columnId" in route) out.columnId = route.columnId;
+      if ("assignee" in route) out.assignee = route.assignee;
+      if (route.labelIds) out.labelIds = route.labelIds;
+      return out;
+    }
+  }
+  return {};
 }

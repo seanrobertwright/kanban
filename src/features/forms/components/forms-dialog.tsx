@@ -14,12 +14,14 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
 import * as api from "../client/api";
+import { OPERATORS, type Operator } from "@/features/automations/types";
 import {
   FORM_FIELD_TYPES,
   FORM_MAX_FIELDS,
   type Form,
   type FormField,
   type FormFieldType,
+  type FormRoute,
 } from "../types";
 
 interface FormsColumn {
@@ -330,6 +332,11 @@ function CreateForm({
   const [fields, setFields] = useState<FormField[]>([
     { label: "Title", type: "text", required: true },
   ]);
+  // Routing (1.7): each row sends submissions matching one answer condition to a
+  // chosen column. Kept simple — one predicate per route — over the raw tree.
+  const [routes, setRoutes] = useState<
+    { field: string; op: Operator; value: string; columnId: string }[]
+  >([]);
 
   function setField(index: number, patch: Partial<FormField>) {
     setFields((prev) =>
@@ -349,6 +356,14 @@ function CreateForm({
           description: description.trim() || undefined,
           targetColumnId: targetColumnId === "" ? null : Number(targetColumnId),
           fields: fields.map((f) => ({ ...f, label: f.label.trim() })),
+          routing: routes
+            .filter((r) => r.field.trim() !== "" && r.columnId !== "")
+            .map(
+              (r): FormRoute => ({
+                conditions: { field: r.field.trim(), op: r.op, value: r.value },
+                columnId: Number(r.columnId),
+              })
+            ),
         }),
       "Could not create the form"
     );
@@ -357,6 +372,7 @@ function CreateForm({
       setDescription("");
       setTargetColumnId("");
       setFields([{ label: "Title", type: "text", required: true }]);
+      setRoutes([]);
     }
   }
 
@@ -444,6 +460,90 @@ function CreateForm({
           </li>
         ))}
       </ul>
+      <p className="text-xs text-muted-foreground">
+        Routing — send a submission to a column based on an answer (1.7).
+      </p>
+      <ul className="grid gap-1.5">
+        {routes.map((r, i) => (
+          <li key={i} className="flex items-center gap-1.5">
+            <select
+              aria-label={`Route ${i + 1} question`}
+              className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+              value={r.field}
+              onChange={(e) =>
+                setRoutes((prev) => prev.map((x, idx) => (idx === i ? { ...x, field: e.target.value } : x)))
+              }
+            >
+              <option value="">question…</option>
+              {fields.map((f, fi) => (
+                <option key={fi} value={f.label}>
+                  {f.label || `Q${fi + 1}`}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label={`Route ${i + 1} operator`}
+              className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+              value={r.op}
+              onChange={(e) =>
+                setRoutes((prev) => prev.map((x, idx) => (idx === i ? { ...x, op: e.target.value as Operator } : x)))
+              }
+            >
+              {OPERATORS.map((op) => (
+                <option key={op} value={op}>
+                  {op}
+                </option>
+              ))}
+            </select>
+            <Input
+              aria-label={`Route ${i + 1} value`}
+              value={r.value}
+              onChange={(e) =>
+                setRoutes((prev) => prev.map((x, idx) => (idx === i ? { ...x, value: e.target.value } : x)))
+              }
+              placeholder="value"
+              className="h-7 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">→</span>
+            <select
+              aria-label={`Route ${i + 1} column`}
+              className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+              value={r.columnId}
+              onChange={(e) =>
+                setRoutes((prev) => prev.map((x, idx) => (idx === i ? { ...x, columnId: e.target.value } : x)))
+              }
+            >
+              <option value="">column…</option>
+              {columns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-1.5 text-xs text-muted-foreground hover:text-destructive"
+              onClick={() => setRoutes((prev) => prev.filter((_, idx) => idx !== i))}
+            >
+              ✕
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="h-7 w-fit px-2 text-xs"
+        onClick={() =>
+          setRoutes((prev) => [...prev, { field: "", op: "eq", value: "", columnId: "" }])
+        }
+      >
+        Add route
+      </Button>
+
       <div className="flex items-center gap-2">
         {fields.length < FORM_MAX_FIELDS && (
           <Button

@@ -382,6 +382,17 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       mentioning comment lands for the assignee). **Flips one scoreboard row**
       (84 ✅ / 48 ❌).
 
+- [x] **Forms routing** (048, rock 1.7) — send a submission to the right column /
+      assignee / labels by its answers. An ordered `form.routing JSONB` list;
+      `submitForm` evaluates each route (the automation engine's condition
+      evaluator, over a snapshot of the answers keyed by question label) and the
+      first match overrides the form's default target column and sets the new
+      task's assignee + labels. A form thus routes with the same predicate
+      vocabulary a rule fires on. Empty = today's behavior. Compact routing editor
+      in the FormsDialog builder ([question][op][value] → [column]). 3 tests (pure
+      resolveRouting + a DB submit routed vs default). **Flips one scoreboard row**
+      (85 ✅ / 47 ❌).
+
 ## Rocks sweep — outcome
 
 Three capability areas are now fully native: **Core Work Items 14/14 ✅**,

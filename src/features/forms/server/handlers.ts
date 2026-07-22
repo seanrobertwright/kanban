@@ -54,6 +54,34 @@ function readFields(v: unknown): FormField[] | { error: string } {
   return fields;
 }
 
+/**
+ * Validates the routing list (1.7). Each route needs a `conditions` object (the
+ * engine evaluates it and is total, so its inner shape is trusted — a malformed
+ * predicate simply never matches) and optional column/assignee/label overrides,
+ * each tenancy-checked at submit time by createTask.
+ */
+function readRouting(v: unknown): import("../types").FormRoute[] | { error: string } {
+  if (!Array.isArray(v)) return { error: "routing must be an array" };
+  const routes: import("../types").FormRoute[] = [];
+  for (const raw of v) {
+    if (!raw || typeof raw !== "object") return { error: "each route must be an object" };
+    const r = raw as Record<string, unknown>;
+    if (!r.conditions || typeof r.conditions !== "object")
+      return { error: "each route needs a conditions object" };
+    if (r.columnId !== undefined && r.columnId !== null && !Number.isInteger(r.columnId))
+      return { error: "route columnId must be an integer or null" };
+    if (r.assignee !== undefined && r.assignee !== null) {
+      const a = r.assignee as Record<string, unknown>;
+      if ((a.type !== "human" && a.type !== "agent") || typeof a.id !== "string")
+        return { error: "route assignee must be {type, id} or null" };
+    }
+    if (r.labelIds !== undefined && (!Array.isArray(r.labelIds) || r.labelIds.some((l) => !Number.isInteger(l))))
+      return { error: "route labelIds must be an array of integers" };
+    routes.push(raw as import("../types").FormRoute);
+  }
+  return routes;
+}
+
 /** A column id (number) or null; the sentinel `false` on a malformed value. */
 function readTargetColumn(
   payload: Record<string, unknown>
@@ -107,6 +135,11 @@ export async function handleCreateForm(request: Request, id: string) {
     isOpen: p.isOpen as boolean | undefined,
   };
   if (target.present) input.targetColumnId = target.value;
+  if (p.routing !== undefined) {
+    const routing = readRouting(p.routing);
+    if ("error" in routing) return badRequest(routing.error);
+    input.routing = routing;
+  }
 
   try {
     return Response.json(await createForm(session.user.id, boardId, input), {
@@ -150,6 +183,11 @@ export async function handleUpdateForm(request: Request, id: string) {
   if (p.isOpen !== undefined) {
     if (typeof p.isOpen !== "boolean") return badRequest("isOpen must be a boolean");
     input.isOpen = p.isOpen;
+  }
+  if (p.routing !== undefined) {
+    const routing = readRouting(p.routing);
+    if ("error" in routing) return badRequest(routing.error);
+    input.routing = routing;
   }
 
   try {

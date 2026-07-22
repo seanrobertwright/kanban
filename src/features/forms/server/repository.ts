@@ -10,6 +10,7 @@ import {
 } from "@/features/workspaces/server/authz";
 import {
   compileSubmission,
+  resolveRouting,
   type CreateFormInput,
   type Form,
   type FormField,
@@ -47,7 +48,7 @@ export class FormSubmitError extends Error {
 
 const FORM_COLUMNS = `id, board_id AS "boardId", name, description,
                       target_column_id AS "targetColumnId", fields,
-                      is_open AS "isOpen", created_at AS "createdAt"`;
+                      is_open AS "isOpen", routing, created_at AS "createdAt"`;
 
 async function selectForm(
   client: PoolClient,
@@ -113,8 +114,9 @@ export async function createForm(
       await assertColumnOnBoard(client, boardId, input.targetColumnId);
     }
     const { rows } = await client.query<{ id: number }>(
-      `INSERT INTO form (board_id, name, description, target_column_id, fields, is_open)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6) RETURNING id`,
+      `INSERT INTO form (board_id, name, description, target_column_id, fields,
+                         is_open, routing)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7::jsonb) RETURNING id`,
       [
         boardId,
         input.name.trim(),
@@ -122,6 +124,7 @@ export async function createForm(
         input.targetColumnId ?? null,
         JSON.stringify(cleanFields(input.fields)),
         input.isOpen ?? true,
+        JSON.stringify(input.routing ?? []),
       ]
     );
     return (await selectForm(client, rows[0].id))!;
@@ -160,13 +163,15 @@ export async function updateForm(
       await assertColumnOnBoard(client, boardId, input.targetColumnId);
     }
     const setsFields = input.fields !== undefined;
+    const setsRouting = input.routing !== undefined;
     await client.query(
       `UPDATE form
           SET name = COALESCE($2, name),
               description = COALESCE($3, description),
               target_column_id = CASE WHEN $4::boolean THEN $5::int ELSE target_column_id END,
               fields = CASE WHEN $6::boolean THEN $7::jsonb ELSE fields END,
-              is_open = COALESCE($8, is_open)
+              is_open = COALESCE($8, is_open),
+              routing = CASE WHEN $9::boolean THEN $10::jsonb ELSE routing END
         WHERE id = $1`,
       [
         id,
@@ -177,6 +182,8 @@ export async function updateForm(
         setsFields,
         setsFields ? JSON.stringify(cleanFields(input.fields!)) : null,
         input.isOpen ?? null,
+        setsRouting,
+        setsRouting ? JSON.stringify(input.routing) : null,
       ]
     );
     return (await selectForm(client, id))!;
@@ -229,7 +236,12 @@ export async function submitForm(
     }
   }
 
+  // Routing (1.7): the first matching route overrides the target column and sets
+  // assignee + labels; when nothing matches, the form's defaults stand. Evaluated
+  // over the answers before the column falls back to the board's first.
+  const routed = resolveRouting(form.routing ?? [], form.fields, input.answers);
   const columnId =
+    (routed.columnId ?? undefined) ??
     form.targetColumnId ??
     (
       await queryOne<{ id: number }>(
@@ -243,5 +255,11 @@ export async function submitForm(
   }
 
   const { title, description } = compileSubmission(form.fields, input.answers);
-  return createTask(actor, { columnId, title, description });
+  return createTask(actor, {
+    columnId,
+    title,
+    description,
+    assignee: routed.assignee ?? undefined,
+    labelIds: routed.labelIds,
+  });
 }

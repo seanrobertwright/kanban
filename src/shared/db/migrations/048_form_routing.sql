@@ -1,0 +1,12 @@
+-- Forms routing (048, rock 1.7) — send a submission to the right column /
+-- assignee / labels based on its answers. An ordered list of routes on the form;
+-- submitForm evaluates them (the automation engine's condition evaluator, over a
+-- snapshot of the answers keyed by question label) and the first match overrides
+-- the form's default target column and sets the new task's assignee + labels.
+--
+-- JSONB on the form, the routing/recurrence precedent — a small read-together
+-- shape, not a table. Empty default = today's behavior (every submission lands in
+-- the form's target column, unassigned). Shape:
+--   [ { "conditions": <tree>, "columnId": <id?>, "assignee": <actor?>,
+--       "labelIds": [<id>...] } ]
+ALTER TABLE form ADD COLUMN routing JSONB NOT NULL DEFAULT '[]';
