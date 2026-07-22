@@ -5,11 +5,14 @@ import {
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import {
+  connectionForIngress,
   createConnection,
   deleteConnection,
+  ingestEvent,
   listConnections,
   listTaskGitLinks,
 } from "./repository";
+import { normalizeGithubEvent, verifyGithubSignature } from "./github";
 
 /**
  * Git connection management (2.0). Reads of a task's links take a principal (an
@@ -79,4 +82,44 @@ export async function handleListTaskGitLinks(request: Request, id: string) {
   } catch (error) {
     return authzErrorResponse(error);
   }
+}
+
+/**
+ * The GitHub webhook ingress (2.1). No session — the signature is the credential
+ * (boardForTriggerToken's shape). The connection id is in the URL, so a bad id, a
+ * non-GitHub connection, or a failed signature all answer the same way an
+ * external caller should see: a flat 404/401 that leaks nothing about which repo
+ * or whether the connection exists.
+ *
+ * The body is read as raw text and verified BEFORE parsing — the HMAC is over the
+ * exact bytes GitHub sent, so a re-serialized body would never match.
+ */
+export async function handleGithubWebhook(request: Request, id: string) {
+  const connectionId = Number(id);
+  if (!Number.isInteger(connectionId)) return notFound();
+
+  const resolved = await connectionForIngress(connectionId);
+  if (!resolved || resolved.connection.provider !== "github") return notFound();
+
+  const body = await request.text();
+  const signature = request.headers.get("x-hub-signature-256");
+  if (!verifyGithubSignature(resolved.secret, body, signature)) {
+    return new Response(null, { status: 401 });
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return badRequest("Invalid JSON body");
+  }
+
+  const eventType = request.headers.get("x-github-event") ?? "";
+  const events = normalizeGithubEvent(eventType, payload as Record<string, never>);
+  let linked = 0;
+  for (const event of events) {
+    const result = await ingestEvent(resolved.connection, event);
+    linked += result.linkedTaskIds.length;
+  }
+  return Response.json({ ok: true, linked });
 }

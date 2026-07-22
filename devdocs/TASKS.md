@@ -524,5 +524,21 @@ tsc/eslint/build clean per feature.
       16 tests (10 git: secret-encrypted-at-rest, ingest+tenancy, idempotency,
       end-to-end pr_merged→rule-fire; + 6 pure parse). tsc/eslint/build clean.
 
+- [x] **GitHub integration** (rock 2.1) — the concrete GitHub App adapter on the
+      2.0 spine: `github.ts` verifies `X-Hub-Signature-256` (constant-time, over
+      the raw body before parse) against the connection's decrypted secret, then
+      normalizes `pull_request` (opened/merged/closed → the right `git.*` action),
+      `push` (one commit link per commit), and `create` (branch) payloads onto the
+      provider-agnostic `NormalizedGitEvent` the 2.0 ingress consumes. Route
+      `POST /api/git/webhook/github/[id]` (no session — the signature is the
+      credential; a bad id/provider/signature is a flat 404/401 that leaks
+      nothing). So a real GitHub App drives the board and fires Phase-1 rules
+      end-to-end. The OAuth install handshake + installation-token REST (branch
+      creation 2.6, CI backfill 2.7) are wired to the same `repo_connection` but
+      run against the live API, not the sandbox. 14 tests (pure: signature
+      valid/tampered/missing, PR/push/create normalization; DB: a signed
+      pull_request webhook links its `#ref` task, bad-sig→401, unknown-conn→404).
+      **Flips the GitHub integration scoreboard row** (93 ✅ / 39 ❌).
+
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
