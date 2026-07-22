@@ -33,3 +33,37 @@ export function formatMinutes(minutes: number): string {
   if (h === 0) return `${m}m`;
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
+
+/**
+ * A board timesheet: the time_entry ledger rolled up per contributor per
+ * day over a window, so an admin can review who logged what across a week rather
+ * than opening tasks one at a time. Time tracking is humans-only (027), so a row
+ * is always a person — an agent's spend stays metered in dollars, not minutes.
+ */
+export interface TimesheetRow {
+  userId: string;
+  userName: string | null;
+  /** 'YYYY-MM-DD' → minutes that day; only days with entries are present. */
+  byDay: Record<string, number>;
+  total: number;
+}
+
+export interface Timesheet {
+  /** The (inclusive) window, 'YYYY-MM-DD' — clamped server-side to a bound. */
+  from: string;
+  to: string;
+  /** Every date in [from, to], so the grid can render empty days too. */
+  days: string[];
+  rows: TimesheetRow[];
+  /** 'YYYY-MM-DD' → minutes across all contributors that day (column footer). */
+  dayTotals: Record<string, number>;
+  total: number;
+}
+
+/** One ungrouped ledger fact, as the board rollup query returns it. */
+export interface TimesheetCell {
+  userId: string;
+  userName: string | null;
+  spentOn: string;
+  minutes: number;
+}

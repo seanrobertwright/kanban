@@ -1,4 +1,4 @@
-import type { TaskTime, TimeEntry } from "../types";
+import type { TaskTime, TimeEntry, Timesheet } from "../types";
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -26,6 +26,22 @@ export function addTimeEntry(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ minutes, note }),
   }).then((res) => jsonOrThrow<TimeEntry>(res));
+}
+
+/** The board's per-contributor, per-day time rollup over an optional
+ *  window; the server defaults and clamps it, so bare params are fine. */
+export async function fetchBoardTimesheet(
+  boardId: number,
+  window: { from?: string; to?: string } = {}
+): Promise<Timesheet> {
+  const qs = new URLSearchParams();
+  if (window.from) qs.set("from", window.from);
+  if (window.to) qs.set("to", window.to);
+  const suffix = qs.toString() ? `?${qs}` : "";
+  const res = await fetch(`/api/board/${boardId}/timesheet${suffix}`, {
+    cache: "no-store",
+  });
+  return jsonOrThrow<Timesheet>(res);
 }
 
 export async function deleteTimeEntry(id: number): Promise<void> {

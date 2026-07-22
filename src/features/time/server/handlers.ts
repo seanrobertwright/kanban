@@ -5,6 +5,7 @@ import {
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import { addTimeEntry, deleteTimeEntry, listTaskTime } from "./repository";
+import { getBoardTimesheet } from "./timesheet";
 
 // Reads take a principal (an agent reasoning about a task may read its
 // hours); writes take a session — minutes are a human's ledger, an agent's
@@ -23,6 +24,27 @@ export async function handleListTaskTime(request: Request, id: string) {
   if (!Number.isInteger(taskId)) return badRequest("Invalid task id");
   try {
     return Response.json(await listTaskTime(principal, taskId));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleBoardTimesheet(request: Request, id: string) {
+  // A read (viewer+), so a principal — an agent reasoning about a board may read
+  // its hours, listTaskTime's rule one level up. from/to ride the query string.
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+
+  const url = new URL(request.url);
+  try {
+    return Response.json(
+      await getBoardTimesheet(principal, boardId, {
+        from: url.searchParams.get("from"),
+        to: url.searchParams.get("to"),
+      })
+    );
   } catch (error) {
     return authzErrorResponse(error);
   }

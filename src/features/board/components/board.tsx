@@ -17,6 +17,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import {
   CalendarDays,
   ChartNoAxesColumn,
+  Clock,
   Columns3,
   Download,
   Flag,
@@ -60,6 +61,7 @@ import { fetchBoard } from "../client/api";
 import type { Column } from "../types";
 import { BoardColumn } from "./board-column";
 import { InsightsDialog } from "./insights-dialog";
+import { TimesheetDialog } from "@/features/time/components/timesheet-dialog";
 import { CustomFieldsDialog } from "@/features/custom-fields/components/custom-fields-dialog";
 import type { CustomField } from "@/features/custom-fields/types";
 import { MilestonesDialog } from "@/features/milestones/components/milestones-dialog";
@@ -223,6 +225,7 @@ export function Board({
   const [templates, setTemplates] = useState<TaskTemplate[]>(initialTemplates);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
   const [milestonesOpen, setMilestonesOpen] = useState(false);
   const [epics, setEpics] = useState<Epic[]>(initialEpics);
@@ -667,6 +670,14 @@ export function Board({
           >
             <ChartNoAxesColumn /> Insights
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setTimesheetOpen(true)}
+          >
+            <Clock /> Timesheet
+          </Button>
           {/* Export is a GET the browser can follow — plain anchors, so the
               download rides the session cookie with no fetch-and-blob dance.
               Viewer+: an export is a read of what the board already shows. */}
@@ -962,6 +973,11 @@ export function Board({
         membersById={membersById}
         agentsById={agentsById}
         onOpenChange={setInsightsOpen}
+      />
+      <TimesheetDialog
+        boardId={boardId}
+        open={timesheetOpen}
+        onOpenChange={setTimesheetOpen}
       />
       <TemplatesDialog
         open={templatesOpen}
