@@ -2,6 +2,7 @@ import type { Principal } from "@/features/auth/server/principal";
 import { requireBoardRole } from "@/features/workspaces/server/authz";
 import { query, queryOne } from "@/shared/db/client";
 import type { BoardAnalytics, FlowStats } from "../types";
+import { assessRisk } from "../lib/risk";
 
 /**
  * Flow analytics for one board — lead time, cycle time, throughput, a
@@ -333,5 +334,19 @@ export async function getBoardAnalytics(
 
   const burndown = await computeBurndown(boardId, doneColumnId);
 
-  return { leadTime, cycleTime, throughput, cfd, workload, velocity, burndown };
+  const riskFacts = await query<{
+    id: number; title: string; dueDate: string | null; blockedByCount: number;
+    ageDays: number; inDoneColumn: boolean;
+  }>(
+    `SELECT t.id, t.title, t.due_date AS "dueDate",
+            (SELECT COUNT(*)::int FROM task_dependency d WHERE d.task_id=t.id) AS "blockedByCount",
+            EXTRACT(EPOCH FROM (now() - t.created_at)) / 86400 AS "ageDays",
+            ($2::int IS NOT NULL AND t.column_id=$2::int) AS "inDoneColumn"
+       FROM task t JOIN board_column bc ON bc.id=t.column_id
+      WHERE bc.board_id=$1 AND t.parent_id IS NULL`,
+    [boardId, doneColumnId]
+  );
+  const risks = assessRisk(riskFacts);
+
+  return { leadTime, cycleTime, throughput, cfd, workload, velocity, burndown, risks };
 }

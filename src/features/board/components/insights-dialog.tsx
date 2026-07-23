@@ -395,6 +395,22 @@ export function InsightsDialog({
             )}
 
             <div className="grid gap-1">
+              <p className="text-xs font-medium text-muted-foreground">Risks — explainable delivery signals</p>
+              {data.risks.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No overdue, blocked, or aging work is currently flagged.</p>
+              ) : (
+                <ul className="grid gap-1.5">
+                  {data.risks.map((risk) => (
+                    <li key={risk.taskId} className="rounded border p-2 text-xs">
+                      <div className="flex justify-between gap-2"><span className="font-medium">{risk.title}</span><span className={risk.level === "high" ? "text-destructive" : "text-amber-600"}>{risk.level} risk · {Math.round(risk.score * 100)}%</span></div>
+                      <p className="mt-1 text-muted-foreground">{risk.reasons.join(" · ")}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="grid gap-1">
               <p className="text-xs font-medium text-muted-foreground">
                 Cumulative flow — last 30 days
               </p>

@@ -35,6 +35,8 @@ export interface FlowStats {
  * client can name it without a server import.
  */
 export interface BoardAnalytics {
+  /** Explainable, deterministic delivery-risk signals for open top-level work. */
+  risks: import("./lib/risk").TaskRisk[];
   /** Created → done, per completed task. Null when no done column is set. */
   leadTime: FlowStats | null;
   /** First move → done — time in motion, not time in the backlog. */

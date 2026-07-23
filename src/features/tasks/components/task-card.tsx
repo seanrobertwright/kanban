@@ -12,6 +12,7 @@ import {
   Paperclip,
   Pencil,
   Repeat,
+  TriangleAlert,
   Trash2,
 } from "lucide-react";
 
@@ -152,6 +153,17 @@ function DueDate({ date }: { date: string }) {
   );
 }
 
+/** A compact on-card companion to the full deterministic Risks panel. */
+function RiskMark({ task }: { task: Task }) {
+  const today = useToday();
+  const overdue = today != null && task.dueDate != null && task.dueDate < today;
+  if (!overdue && task.blockedByCount === 0) return null;
+  const label = overdue
+    ? "At risk: overdue"
+    : `At risk: blocked by ${task.blockedByCount} task${task.blockedByCount === 1 ? "" : "s"}`;
+  return <span title={label} className="inline-flex items-center text-amber-600"><TriangleAlert className="size-3.5" aria-hidden="true" /><span className="sr-only">{label}</span></span>;
+}
+
 /**
  * The assignee's display data, resolved from whichever roster its kind names
  * (011): a human from the members, an agent from the agents. Undefined when
@@ -198,6 +210,7 @@ export function TaskCard({
         <CardTitle className="flex items-center gap-1.5 text-sm leading-snug">
           <PriorityDot priority={task.priority} />
           <TypeMark type={task.type} />
+          <RiskMark task={task} />
           {task.title}
         </CardTitle>
         {(onEdit || onDelete) && (
