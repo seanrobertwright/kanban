@@ -2,16 +2,10 @@
 
 import { Bot, Search, X } from "lucide-react";
 
-import type { Actor } from "@/features/activity/types";
 import { labelDotClass } from "@/features/labels/components/label-chip";
 import type { Label } from "@/features/labels/types";
 import type { AgentSummary } from "@/features/agents/types";
-import type { Task } from "@/features/tasks/types";
-import {
-  PRIORITY_LABELS,
-  PRIORITY_ORDER,
-  type TaskPriority,
-} from "@/features/tasks/types";
+import { PRIORITY_LABELS, PRIORITY_ORDER } from "@/features/tasks/types";
 import type { Member } from "@/features/workspaces/types";
 import { Button } from "@/shared/ui/button";
 import {
@@ -22,70 +16,17 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { Input } from "@/shared/ui/input";
 
-/**
- * The board's client-side filter. Nothing here touches the server: every task is
- * already loaded, so filtering is a view over `items`, not a query. That is also
- * why it is ephemeral — it lives as long as the board is mounted and no longer.
- * Saved views (a later feature) are what make a filter outlive the session.
- *
- * Within a facet the selected values are OR'd (any chosen priority matches);
- * across facets they are AND'd (a matching priority AND a matching label). The
- * assignee facet carries the sentinel "unassigned" so "has no assignee" is a
- * value you can pick rather than an absence you cannot express.
- */
-export interface BoardFilter {
-  text: string;
-  priorities: TaskPriority[];
-  labelIds: number[];
-  /** Actor keys — `human:<id>` / `agent:<id>` — plus the literal "unassigned". */
-  assignees: string[];
-}
+// The filter type + pure predicate now live in a dependency-free lib so server
+// report code (5.1) can reuse them; imported for local use and re-exported here
+// for existing importers.
+import {
+  type BoardFilter,
+  EMPTY_FILTER,
+  isFilterActive,
+  taskMatchesFilter,
+} from "@/features/board/lib/filter";
 
-export const EMPTY_FILTER: BoardFilter = {
-  text: "",
-  priorities: [],
-  labelIds: [],
-  assignees: [],
-};
-
-export function isFilterActive(f: BoardFilter): boolean {
-  return (
-    f.text.trim() !== "" ||
-    f.priorities.length > 0 ||
-    f.labelIds.length > 0 ||
-    f.assignees.length > 0
-  );
-}
-
-function actorKey(a: Actor | null): string {
-  return a ? `${a.type}:${a.id}` : "unassigned";
-}
-
-/**
- * Whether a task survives the filter. Cheap and pure so it can run over every
- * task on every keystroke without a fetch — see the module comment.
- */
-export function taskMatchesFilter(task: Task, f: BoardFilter): boolean {
-  const q = f.text.trim().toLowerCase();
-  if (
-    q &&
-    !task.title.toLowerCase().includes(q) &&
-    !task.description.toLowerCase().includes(q)
-  ) {
-    return false;
-  }
-  if (f.priorities.length > 0 && !f.priorities.includes(task.priority)) {
-    return false;
-  }
-  if (f.labelIds.length > 0) {
-    const worn = new Set(task.labels.map((l) => l.id));
-    if (!f.labelIds.some((id) => worn.has(id))) return false;
-  }
-  if (f.assignees.length > 0 && !f.assignees.includes(actorKey(task.assignee))) {
-    return false;
-  }
-  return true;
-}
+export { type BoardFilter, EMPTY_FILTER, isFilterActive, taskMatchesFilter };
 
 function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value)
