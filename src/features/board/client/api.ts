@@ -1,4 +1,5 @@
 import type { BoardAnalytics, BoardData, Column } from "../types";
+import type { ScheduleProposal } from "../lib/schedule-proposal";
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -62,6 +63,8 @@ export async function fetchBoardAnalytics(
   });
   return jsonOrThrow<BoardAnalytics>(res);
 }
+export function fetchScheduleProposal(boardId: number) { return fetch(`/api/board/${boardId}/schedule`, { cache: "no-store" }).then(jsonOrThrow<ScheduleProposal[]>); }
+export async function applyScheduleProposal(boardId: number, proposals: ScheduleProposal[]) { const res = await fetch(`/api/board/${boardId}/schedule`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(proposals) }); if (!res.ok) throw new Error("Could not apply schedule"); }
 
 /** Set or clear (null) a column's WIP limit (023). */
 export function setColumnWipLimit(

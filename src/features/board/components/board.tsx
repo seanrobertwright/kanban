@@ -67,6 +67,7 @@ import { fetchBoard } from "../client/api";
 import type { Column } from "../types";
 import { BoardColumn } from "./board-column";
 import { InsightsDialog } from "./insights-dialog";
+import { ScheduleDialog } from "./schedule-dialog";
 import { TimesheetDialog } from "@/features/time/components/timesheet-dialog";
 import { FormsDialog } from "@/features/forms/components/forms-dialog";
 import { AutomationsDialog } from "@/features/automations/components/automations-dialog";
@@ -238,6 +239,7 @@ export function Board({
   const [templates, setTemplates] = useState<TaskTemplate[]>(initialTemplates);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [timesheetOpen, setTimesheetOpen] = useState(false);
   const [formsOpen, setFormsOpen] = useState(false);
   const [automationsOpen, setAutomationsOpen] = useState(false);
@@ -698,6 +700,9 @@ export function Board({
           >
             <ChartNoAxesColumn /> Insights
           </Button>
+          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setScheduleOpen(true)}>
+            <Clock /> Schedule
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -1058,6 +1063,7 @@ export function Board({
         agentsById={agentsById}
         onOpenChange={setInsightsOpen}
       />
+      <ScheduleDialog boardId={boardId} open={scheduleOpen} onOpenChange={setScheduleOpen} onApplied={refresh} />
       <TimesheetDialog
         boardId={boardId}
         open={timesheetOpen}

@@ -5,6 +5,7 @@ import {
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import { getBoardAnalytics } from "./analytics";
+import { applyScheduleProposal, getScheduleProposal } from "./schedule-proposal";
 import {
   createColumn,
   deleteColumn,
@@ -118,6 +119,20 @@ export async function handleBoardAnalytics(request: Request, id: string) {
   } catch (error) {
     return authzErrorResponse(error);
   }
+}
+
+export async function handleScheduleProposal(request: Request, id: string) {
+  const principal = await getPrincipalFromRequest(request); if (!principal) return unauthorized();
+  const boardId = Number(id); if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+  try { return Response.json(await getScheduleProposal(principal, boardId)); } catch (error) { return authzErrorResponse(error); }
+}
+
+export async function handleApplyScheduleProposal(request: Request, id: string) {
+  const session = await getSessionFromRequest(request); if (!session) return unauthorized();
+  const boardId = Number(id); if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+  const proposals = await request.json().catch(() => null);
+  if (!Array.isArray(proposals) || !proposals.every(p => p && Number.isInteger(p.taskId) && typeof p.startDate === "string" && typeof p.dueDate === "string")) return badRequest("Invalid schedule proposal");
+  try { await applyScheduleProposal(session.user.id, boardId, proposals); return new Response(null, { status: 204 }); } catch (error) { return authzErrorResponse(error); }
 }
 
 export async function handleDeleteColumn(request: Request, id: string) {
