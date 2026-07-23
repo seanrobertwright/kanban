@@ -703,3 +703,50 @@ a green build, or a shipped release fires an ordinary Phase-1 rule. Scoreboard
 
 > Anything touching **agent behaviour/budgets** or **export/product forks** should
 > go through `AskUserQuestion` before building (per `prd.md` §7/§12).
+
+## Phase 5 — Reporting & Analytics (building, per devdocs/SPEC.md)
+
+- [x] **Custom reports** (058, rock 5.1) — a saved, user-defined report over the
+      existing read model. `report` (workspace-scoped): a *definition* only —
+      `source (tasks|time|flow|financial)`, the **reused saved-view (015) filter**
+      JSONB, `group_by`, `metric`, `viz (bar|line|table)`, `visibility
+      (private|shared)`, and an optional `board_id` (NULL = the whole workspace,
+      the portfolio 040). Results are never stored: a pure `runReport(spec, facts)`
+      folds them at read time (`lib/report.ts`) — derive-don't-store. The
+      source-specific half (`server/repository.ts` `gatherFacts`) reads tasks via
+      the shared `taskColumns()` join, the time ledger (027), or the flow replay
+      (analytics cycle time), tags each fact with its bucket label, and applies the
+      **same `taskMatchesFilter` predicate** the board bar uses — extracted from the
+      client `board-filter-bar.tsx` into a pure `board/lib/filter.ts` (re-exported,
+      so no caller changed) so server and client share one source of truth for
+      "does this task match". Metric×source and group_by×source legality lives in
+      two maps (`METRICS_BY_SOURCE`/`GROUP_BYS_BY_SOURCE`) the API validates against
+      **and** the builder derives its dropdowns from, so the form can only compose a
+      legal report. Charts are net-new generic `bar|line|table` primitives in the
+      Insights inline-SVG language (`0 0 100 40`, `fill-primary`, `<title>`
+      tooltips) — the reusable extraction SPEC 5.1 named (Insights' own charts were
+      bespoke/non-exported). Gates: reads viewer+ (agents may read shared reports);
+      a **private** report is authored at **member** and is owner-only (invisible +
+      un-runnable to others, 404 not 403); a **shared** report is authored at
+      **admin** — the §7.4 blast-radius rule; re-sharing a private report re-checks
+      admin. `GET/POST /api/workspaces/[id]/reports`, `PATCH/DELETE /api/reports/[id]`,
+      `GET /api/reports/[id]/run`. 19 tests (13 pure: count/sum/avg-cycle folds,
+      day-vs-value ordering, cent/minute rounding, compat maps; 6 DB: count-by-status,
+      estimate-by-priority, filter-before-aggregate, dup-name conflict, private
+      hidden/un-runnable + member-can't-share, incompatible-metric update rejected).
+      tsc/eslint clean. **Flips the Custom reports scoreboard row.**
+
+- [x] **Financial reports** (rock 5.2) — the ⛔-adjacent business layer, built from
+      our own data: `source: "financial"`, `metric: "sum:spend"` rolls each time
+      entry's minutes × the board's flat `hourly_rate` (042) into spend via budget's
+      pure `costOf` — the same money math the budget rollup uses, no new number
+      stored. Group by board, member, or day; scope one board or the whole portfolio.
+      Single-currency scope surfaces the board `currency`; a mixed-currency portfolio
+      returns null rather than a misleading symbol. It is just a source in 5.1's
+      builder, so it inherits the filter, gates, viz, and pure-fold pipeline whole —
+      no separate slice. (No per-member/role rate history exists yet; a time-varying
+      rate model is a stated follow-up.) **Flips the Financial reports scoreboard row.**
+
+Wired into the app shell as a header **Reports** dialog (`reports-dialog.tsx`,
+beside Portfolio), mounting `ReportsPanel` lazily on open with the current
+workspace's boards. tsc/eslint/build clean (all three report routes compile).

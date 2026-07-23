@@ -10,6 +10,7 @@ import type { BoardData } from "@/features/board/types";
 import { listLabels } from "@/features/labels/server/repository";
 import { BoardSwitcher } from "@/features/workspaces/components/board-switcher";
 import { PortfolioButton } from "@/features/workspaces/components/portfolio-dialog";
+import { ReportsButton } from "@/features/reports/components/reports-dialog";
 import { ProgramsButton } from "@/features/programs/components/programs-dialog";
 import { ScaledAgileButton } from "@/features/teams/components/scaled-agile-dialog";
 import { AuthzError } from "@/features/workspaces/server/authz";
@@ -121,6 +122,12 @@ export default async function Home({
             canManage={canDeleteColumns}
           />
           <PortfolioButton workspaceId={data.board.workspaceId} />
+          <ReportsButton
+            workspaceId={data.board.workspaceId}
+            boards={boards
+              .filter((b) => b.workspaceId === data.board.workspaceId)
+              .map((b) => ({ id: b.id, name: b.name }))}
+          />
           <NotificationBell workspaceId={data.board.workspaceId} />
           <ThemeToggle />
           <UserMenu user={session.user} />

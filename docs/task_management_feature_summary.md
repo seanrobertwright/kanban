@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-22):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **102 ✅ / 30 ❌ / 8 ⛔** — the **Workflow & Automation** area
+**Implementation status (2026-07-23):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **104 ✅ / 28 ❌ / 8 ⛔** — the **Workflow & Automation** area
 (15/15) is now fully ✅, closed by the Phase 1 build on the automation engine
 (045): the trigger→conditions→actions rule engine and its twelve rocks
 (no-code + conditional branching, state transitions, recurring/scheduled, SLAs,
@@ -151,7 +151,7 @@ These features determine whether leaders and teams can understand progress, bott
 | Feature | Summary |
 |---|---|
 | ✅ Dashboards | Configurable visual summary pages. |
-| ❌ Custom reports | User-defined reports across projects, teams, or fields. |
+| ✅ Custom reports | User-defined reports across projects, teams, or fields. Saved `report` (058, rock 5.1) over the existing read model: source (tasks/time/flow/financial) + reused saved-view filter + group_by + metric + viz, folded by a pure `runReport`, cross-board via the portfolio query. Private (member) or shared (admin), rendered by generic bar/line/table charts in the header Reports dialog. |
 | ✅ Charts | Native visual charts. |
 | ✅ Time tracking | Capturing time spent on work. |
 | ✅ Timesheets | Timesheet entry, review, or approval. |
@@ -161,7 +161,7 @@ These features determine whether leaders and teams can understand progress, bott
 | ✅ Cumulative flow | Flow metric showing work distribution across states over time. |
 | ✅ Workload reports | Reporting on team or individual load. |
 | ✅ Portfolio rollups | Aggregated reporting across projects, programs, or portfolios. |
-| ❌ Financial reports | Budget, spend, billing, profitability, or cost reporting. |
+| ✅ Financial reports | Budget, spend, billing, profitability, or cost reporting. Rock 5.2 as a `source: financial` in 5.1's builder: logged minutes × the board's `hourly_rate` (042) via budget's pure `costOf`, grouped by board/member/day across one board or the portfolio (single-currency scope surfaces the board currency). |
 | ✅ Export | CSV, spreadsheet, BI, or data export capability. |
 | ✅ Saved filters | Reusable filtered views and query definitions. |
 
