@@ -14,6 +14,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
 import * as api from "../client/api";
+import { draftAutomation } from "../lib/draft";
 import * as slaApi from "@/features/sla/client/api";
 import type { SlaPolicy } from "@/features/sla/types";
 import {
@@ -150,6 +151,10 @@ export function AutomationsDialog({
         )}
 
         {canManage && (
+          <WorkflowDraft boardId={boardId} columns={columns} onCreated={reload} />
+        )}
+
+        {canManage && (
           <CreateRule
             boardId={boardId}
             columns={columns}
@@ -179,6 +184,12 @@ export function AutomationsDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function WorkflowDraft({ boardId, columns, onCreated }: { boardId:number; columns:AutomationsColumn[]; onCreated:()=>Promise<void> }) {
+  const [prompt,setPrompt]=useState(""); const [error,setError]=useState<string|null>(null); const [busy,setBusy]=useState(false);
+  async function create(){const draft=draftAutomation(prompt,columns); if(!draft){setError("Try: ‘When a PR merges, move it to Done’ or ‘When CI fails, comment: investigate’.");return;} setBusy(true);setError(null);try{await api.createAutomation(boardId,draft);await onCreated();setPrompt("");}catch(e){setError(e instanceof Error?e.message:"Could not save draft");}finally{setBusy(false);}}
+  return <section className="grid gap-2 rounded-lg border border-dashed p-3"><p className="text-sm font-medium">Describe an automation</p><Textarea value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="When a PR merges, move it to Done" /><p className="text-xs text-muted-foreground">Creates a disabled draft for an admin to inspect and enable. It never activates a rule automatically.</p>{error&&<p className="text-xs text-destructive">{error}</p>}<Button size="sm" disabled={busy||!prompt.trim()} onClick={()=>void create()}>{busy?"Drafting…":"Create review draft"}</Button></section>;
 }
 
 /** Human-readable summaries so a saved rule reads back as a sentence. */
