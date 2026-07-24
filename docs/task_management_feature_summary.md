@@ -5,12 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-23):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **114 ✅ / 18 ❌ / 8 ⛔** — the **Workflow & Automation** area
-(15/15) is now fully ✅, closed by the Phase 1 build on the automation engine
-(045): the trigger→conditions→actions rule engine and its twelve rocks
-(no-code + conditional branching, state transitions, recurring/scheduled, SLAs,
-notification rules, forms routing, request intake, workflow templates, incident
-workflows, custom scripts, and inbound connectors). — the **Core Work Items** area (14/14), the **Planning & Views** area (16/16), and the **Agile & Product** area (14/14) are all fully ✅, closed by the 2026-07-22 rocks sweep (Forms/intake 039; Program/initiative hierarchy 040; Resource + Capacity planning 041; Budget/financial planning 042; Product discovery + Feedback intake 043; Teams + Scaled Agile/SAFe 044). **Phase 1 (Workflow & Automation)** is now building on the automation engine (045): No-code automations + Conditional branching are ✅ (the recipe builder + AND/OR predicate tree in the board Automations dialog).
+**Implementation status (2026-07-24):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **126 ✅ / 6 ❌ / 8 ⛔**. Workflow & Automation (15/15), Core Work Items (14/14), Planning & Views (16/16), Agile & Product (14/14), Enterprise & Security (16/16), and Developer & DevOps (13/13) are fully ✅. Phase 7 adds the five first-party integrations below; Phase 8 plugins/extensions and the remaining AI rocks are the open implementation work.
 
 ## Scoring Scale
 
@@ -171,20 +166,20 @@ These features matter most for large organizations, regulated environments, and 
 
 | Feature | Summary |
 |---|---|
-| ❌ SSO/SAML | Enterprise single sign-on support. |
-| ❌ SCIM/user provisioning | Automated user lifecycle management. |
+| ✅ SSO/SAML | Enterprise single sign-on support. Workspace-owned OIDC/SAML providers with hardened response validation are configured in the admin console. |
+| ✅ SCIM/user provisioning | Automated user lifecycle management. Workspace-scoped SCIM bearer tokens provision, deactivate, and restore members. |
 | ✅ RBAC | Role-based access control. |
-| ❌ Granular permissions | Fine-grained permissions at workspace, project, object, field, or action level. |
+| ✅ Granular permissions | Fine-grained permissions at workspace, project, object, field, or action level. Board, field, and action grants layer on top of workspace roles. |
 | ✅ Audit logs | Administrative and security event logging. |
 | ⛔ Data residency | Control over where data is stored or processed. *(Inherent to self-hosting — a deployment choice, not application code.)* |
 | ⛔ SOC 2 | SOC 2 compliance or attestation. *(A third-party audit, not application code.)* |
 | ⛔ ISO 27001 | ISO 27001 certification or alignment. *(A third-party certification, not application code.)* |
 | ⛔ HIPAA/regulated support | Support for healthcare or other regulated compliance needs. *(A compliance program + BAA, not application code.)* |
 | ✅ Encryption | Encryption in transit and at rest. App-level AES-256-GCM secret box (6.5, `shared/crypto/secret-box.ts`) encrypts third-party credentials at rest — pulled forward ahead of Phase 2's git-host secret; transport TLS is deployment-terminated (documented). |
-| ❌ Admin console | Centralized administration controls. |
-| ❌ Retention/legal hold | Retention policies, legal hold, or compliance preservation. |
-| ❌ eDiscovery | Search/export for legal or compliance discovery. |
-| ❌ IP allowlisting | Network access restriction by IP range. |
+| ✅ Admin console | Centralized administration controls for members, permissions, identity, retention, legal holds, IP policy, and integrations. |
+| ✅ Retention/legal hold | Retention policies, legal hold, or compliance preservation. Activity retention sweeps respect task/comment/document/attachment holds. |
+| ✅ eDiscovery | Search/export for legal or compliance discovery. Workspace-scoped task, comment, document, and audit discovery export. |
+| ✅ IP allowlisting | Network access restriction by IPv4 CIDR range, deployed behind an explicitly trusted proxy header. |
 | ✅ On-prem/self-hosted option | Ability to run outside the vendor's SaaS cloud. |
 | ⛔ Published uptime/SLA | Public service availability commitment or SLA. *(An operational commitment by whoever hosts the deployment, not application code.)* |
 
@@ -214,11 +209,11 @@ These features capture whether the platform can connect to the broader operating
 
 | Feature | Summary |
 |---|---|
-| ❌ Slack integration | Native or supported Slack connectivity. |
-| ❌ Microsoft Teams integration | Native or supported Teams connectivity. |
-| ❌ Email integration | Email notifications, task creation, or conversation linking. |
-| ❌ Google Workspace | Integration with Google Drive, Calendar, Gmail, or Workspace identity/content. |
-| ❌ Microsoft 365 | Integration with Outlook, Teams, SharePoint, OneDrive, Planner, or Microsoft identity/content. |
+| ✅ Slack integration | OAuth installation, automation delivery, signed `/task create` commands, Events API ingress, and task link unfurls. |
+| ✅ Microsoft Teams integration | Encrypted incoming-webhook delivery plus signed Bot Framework `create <title>` task creation. |
+| ✅ Email integration | SMTP automation delivery and signed inbound board mail that creates tasks or task comments for verified workspace members. |
+| ✅ Google Workspace | OAuth with encrypted refresh tokens; Drive reference links and idempotent primary-calendar synchronization for task start/due dates. |
+| ✅ Microsoft 365 | OAuth with encrypted refresh tokens; OneDrive/SharePoint reference links and Outlook calendar synchronization for task start/due dates. |
 | ⛔ Zapier | Zapier connector support. *(A native connector lives in Zapier's hosted catalog; our generic webhooks + n8n-compatible API already make us usable from it.)* |
 | ⛔ Make | Make connector support. *(A native connector lives in Make's hosted catalog; covered in practice by our generic webhooks + REST API.)* |
 | ✅ n8n | n8n connector support or practical API/webhook compatibility. |
