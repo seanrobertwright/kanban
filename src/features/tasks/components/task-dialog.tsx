@@ -14,6 +14,7 @@ import { CommentThread } from "@/features/comments/components/comment-thread";
 import { CustomFieldsSection } from "@/features/custom-fields/components/custom-fields-section";
 import { TimeSection } from "@/features/time/components/time-section";
 import { DevelopmentSection } from "@/features/git/components/development-section";
+import { TaskIntegrationsSection } from "@/features/integrations/components/task-integrations-section";
 import { SubtaskList } from "./subtask-list";
 import { LabelPicker } from "@/features/labels/components/label-picker";
 import type { Label as LabelData } from "@/features/labels/types";
@@ -906,6 +907,7 @@ export function TaskDialog({
                 taskId={task.id}
                 taskTitle={task.title}
               />
+              <TaskIntegrationsSection key={`integrations-${task.id}`} taskId={task.id} />
               {/* An agent run's review sits above the thread: it is what a human
                   came to this task to resolve when the agent has proposed work.
                   Renders nothing when the task has never had a run. Accepting or

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { query } from "@/shared/db/client";
 import { AuthzError, requireTaskRole } from "@/features/workspaces/server/authz";
+import { assertNotOnLegalHold } from "@/features/admin/server/legal-holds";
 import type { Principal } from "@/features/auth/server/principal";
 import type { Attachment } from "../types";
 import { deleteObject, getObjectStream, putObject } from "./storage";
@@ -20,9 +21,13 @@ async function requireAttachmentRole(
   actor: string | Principal,
   attachmentId: number,
   role: "viewer" | "member"
-): Promise<{ taskId: number; key: string }> {
-  const rows = await query<{ taskId: number; key: string }>(
-    `SELECT task_id AS "taskId", key FROM attachment WHERE id = $1`,
+): Promise<{ taskId: number; key: string; workspaceId: string }> {
+  const rows = await query<{ taskId: number; key: string; workspaceId: string }>(
+    `SELECT a.task_id AS "taskId", a.key, b.workspace_id AS "workspaceId"
+       FROM attachment a
+       JOIN task t ON t.id = a.task_id
+       JOIN board b ON b.id = t.board_id
+      WHERE a.id = $1`,
     [attachmentId]
   );
   const row = rows[0];
@@ -124,12 +129,14 @@ export async function deleteAttachment(
   attachmentId: number
 ): Promise<boolean> {
   let key: string;
+  let workspaceId: string;
   try {
-    ({ key } = await requireAttachmentRole(userId, attachmentId, "member"));
+    ({ key, workspaceId } = await requireAttachmentRole(userId, attachmentId, "member"));
   } catch (error) {
     if (error instanceof AuthzError && error.kind === "not_found") return false;
     throw error;
   }
+  await assertNotOnLegalHold(workspaceId!, "attachment", attachmentId);
   await query(`DELETE FROM attachment WHERE id = $1`, [attachmentId]);
   await deleteObject(key).catch(() => {});
   return true;

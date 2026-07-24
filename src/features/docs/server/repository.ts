@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import type { Principal } from "@/features/auth/server/principal";
 import { query, queryOne, withTransaction } from "@/shared/db/client";
 import { AuthzError, requireWorkspaceRole } from "@/features/workspaces/server/authz";
+import { assertDocDeletionNotHeld } from "@/features/admin/server/legal-holds";
 import { createTask } from "@/features/tasks/server/repository";
 import type { Task } from "@/features/tasks/types";
 import type { CreateDocInput, Doc, DocRevision, UpdateDocInput } from "../types";
@@ -141,7 +142,8 @@ export async function updateDoc(userId: string, id: number, input: UpdateDocInpu
 }
 
 export async function deleteDoc(userId: string, id: number): Promise<boolean> {
-  await requireDoc(userId, id, "admin");
+  const doc = await requireDoc(userId, id, "admin");
+  await assertDocDeletionNotHeld(doc.workspaceId, id);
   await query(`DELETE FROM doc WHERE id = $1`, [id]);
   return true;
 }

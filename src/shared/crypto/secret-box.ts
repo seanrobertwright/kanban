@@ -22,11 +22,9 @@ import {
  * makes tampering a hard decryption failure rather than silent corruption — the
  * property plaintext storage (the 025 webhook-secret precedent) cannot offer.
  *
- * This deliberately does NOT retrofit the existing plaintext secrets (the 025
- * webhook signing key). That key signs *outbound* payloads and authorizes
- * nothing inbound, and 025 documented that trade; migrating it is its own commit.
- * What ships here is the primitive plus its first consumer's readiness — new
- * inbound credentials use it from day one.
+ * Legacy webhook signing keys are migrated online at Node startup. New keys are
+ * encrypted on creation; the rollout preserves delivery while converting every
+ * pre-encryption row without requiring plaintext key material in SQL.
  */
 
 // AES-256-GCM: a 32-byte key, a 12-byte IV (GCM's standard nonce length), and a

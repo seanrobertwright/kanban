@@ -30,6 +30,7 @@ import { ThemeToggle } from "@/shared/theme/theme-toggle";
 import { DocsButton } from "@/features/docs/components/docs-dialog";
 import { ChatButton } from "@/features/chat/components/chat-dialog";
 import { WhiteboardsButton } from "@/features/whiteboards/components/whiteboards-dialog";
+import { AdminConsoleButton } from "@/features/admin/components/admin-console-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -137,6 +138,7 @@ export default async function Home({
               .filter((b) => b.workspaceId === data.board.workspaceId)
               .map((b) => ({ id: b.id, name: b.name }))}
           />
+          <AdminConsoleButton workspace={workspace} currentUserId={session.user.id} boards={boards.filter((b) => b.workspaceId === data.board.workspaceId)} />
           <NotificationBell workspaceId={data.board.workspaceId} />
           <ThemeToggle />
           <UserMenu user={session.user} />

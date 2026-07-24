@@ -8,6 +8,7 @@ import {
   principalActor,
 } from "@/features/auth/server/principal";
 import type { Principal } from "@/features/auth/server/principal";
+import { assertTaskDeletionNotHeld } from "@/features/admin/server/legal-holds";
 import {
   assertLabelsInWorkspace,
   setTaskLabels,
@@ -1394,6 +1395,7 @@ export async function deleteTask(
   const { boardId, workspaceId } = await requireTaskRole(actor, id, "member");
 
   return withTransaction(async (client) => {
+    await assertTaskDeletionNotHeld(workspaceId, id);
     const before = await selectTask(client, id);
     if (!before) return false;
 

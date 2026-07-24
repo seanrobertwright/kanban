@@ -225,7 +225,7 @@ function summarizeAction(a: Action, columns: AutomationsColumn[], labels: Automa
     case "assign":
       return a.assignee ? `assign to ${a.assignee.id}` : "unassign";
     case "notify":
-      return `notify ${a.target === "assignee" ? "assignee" : a.target.id}`;
+      return `notify ${a.target === "assignee" ? "assignee" : a.target.type === "slack" ? `Slack #${a.target.channelId}` : a.target.type === "teams" ? "Teams channel" : a.target.type === "email" ? a.target.to : a.target.id}`;
     case "create_task":
       return `create task "${a.title}"`;
     case "script":

@@ -44,11 +44,13 @@ export async function listBoardFields(
   actor: string | Principal,
   boardId: number
 ): Promise<CustomField[]> {
-  await requireBoardRole(actor, boardId, "viewer");
+  const { role } = await requireBoardRole(actor, boardId, "viewer");
   return query<CustomField>(
     `SELECT ${fieldColumns()} FROM custom_field
-      WHERE board_id = $1 ORDER BY position, id`,
-    [boardId]
+      WHERE board_id = $1
+        AND ($2::workspace_role IN ('owner','admin') OR NOT EXISTS(SELECT 1 FROM custom_field_access_policy p WHERE p.field_id=custom_field.id) OR EXISTS(SELECT 1 FROM custom_field_access_policy p WHERE p.field_id=custom_field.id AND p.role=$2::workspace_role AND p.can_view))
+      ORDER BY position, id`,
+    [boardId, role]
   );
 }
 
@@ -150,15 +152,26 @@ export async function getTaskFields(
   actor: string | Principal,
   taskId: number
 ): Promise<TaskCustomField[]> {
-  const { boardId } = await requireTaskRole(actor, taskId, "viewer");
+  const { boardId, role } = await requireTaskRole(actor, taskId, "viewer");
   return query<TaskCustomField>(
     `SELECT ${fieldColumns("cf.")}, cfv.value
        FROM custom_field cf
        LEFT JOIN custom_field_value cfv
          ON cfv.field_id = cf.id AND cfv.task_id = $2
       WHERE cf.board_id = $1
+        AND ($3::workspace_role IN ('owner','admin')
+             OR NOT EXISTS(
+               SELECT 1 FROM custom_field_access_policy p
+               WHERE p.field_id = cf.id
+             )
+             OR EXISTS(
+               SELECT 1 FROM custom_field_access_policy p
+               WHERE p.field_id = cf.id
+                 AND p.role = $3::workspace_role
+                 AND p.can_view
+             ))
       ORDER BY cf.position, cf.id`,
-    [boardId, taskId]
+    [boardId, taskId, role]
   );
 }
 
@@ -205,7 +218,7 @@ export async function setTaskFieldValues(
   taskId: number,
   values: CustomFieldValueInput[]
 ): Promise<TaskCustomField[]> {
-  const { boardId, workspaceId } = await requireTaskRole(userId, taskId, "member");
+  const { boardId, workspaceId, role } = await requireTaskRole(userId, taskId, "member");
   // Human-only path: the value editor is the task dialog's section, driven by a
   // member session — no agent tool writes custom fields, so the actor is always
   // the calling user. See the 036-follow-up note in the module header.
@@ -223,6 +236,16 @@ export async function setTaskFieldValues(
       const field = fields.get(fieldId);
       if (!field) {
         throw new AuthzError("not_found", "That field is not on this task's board");
+      }
+      if (role !== "owner" && role !== "admin") {
+        const policy = await client.query<{ configured: boolean; canEdit: boolean | null }>(
+          `SELECT EXISTS(SELECT 1 FROM custom_field_access_policy WHERE field_id=$1) AS configured,
+                  (SELECT can_edit FROM custom_field_access_policy WHERE field_id=$1 AND role=$2) AS "canEdit"`,
+          [fieldId, role]
+        );
+        if (policy.rows[0].configured && policy.rows[0].canEdit !== true) {
+          throw new AuthzError("forbidden", "Your role cannot edit this custom field");
+        }
       }
       const coerced = coerceValue(field, value);
       const before = current.get(fieldId) ?? null;

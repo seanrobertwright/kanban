@@ -170,6 +170,37 @@ export async function applyEffects(
         await createComment(by, { taskId, body: effect.body });
         break;
       case "notify": {
+        if (typeof effect.target === "object" && effect.target.type === "slack") {
+          const workspace = await query<{ workspaceId: string }>(
+            `SELECT b.workspace_id AS "workspaceId" FROM task t
+              JOIN board_column c ON c.id=t.column_id JOIN board b ON b.id=c.board_id
+             WHERE t.id=$1`,
+            [taskId]
+          );
+          if (!workspace[0]) break;
+          const { postSlackMessage } = await import("@/features/integrations/server/repository");
+          await postSlackMessage(workspace[0].workspaceId, effect.target.channelId,
+            effect.message?.trim() || `Task #${taskId} triggered an automation.`);
+          break;
+        }
+        if (typeof effect.target === "object" && effect.target.type === "teams") {
+          const workspace = await query<{ workspaceId: string }>(`SELECT b.workspace_id AS "workspaceId" FROM task t JOIN board_column c ON c.id=t.column_id JOIN board b ON b.id=c.board_id WHERE t.id=$1`, [taskId]);
+          if (!workspace[0]) break;
+          const { postTeamsMessage } = await import("@/features/integrations/server/repository");
+          await postTeamsMessage(workspace[0].workspaceId, effect.target.connectionId, effect.message?.trim() || `Task #${taskId} triggered an automation.`);
+          break;
+        }
+        if (typeof effect.target === "object" && effect.target.type === "email") {
+          const taskContext = await query<{ workspaceId: string; boardId: number }>(
+            `SELECT b.workspace_id AS "workspaceId", b.id AS "boardId" FROM task t
+              JOIN board_column c ON c.id=t.column_id JOIN board b ON b.id=c.board_id WHERE t.id=$1`, [taskId]
+          );
+          if (!taskContext[0]) break;
+          const { sendWorkspaceEmail } = await import("@/features/integrations/server/email");
+          await sendWorkspaceEmail({ workspaceId: taskContext[0].workspaceId, boardId: taskContext[0].boardId, taskId, to: effect.target.to,
+            text: effect.message?.trim() || `Task #${taskId} triggered an automation.` });
+          break;
+        }
         // The bell has no notification table (016) — it derives from the activity
         // log + comment mentions (024). So a notify posts a comment that
         // @-mentions the target, which surfaces as "mentioned you on" in their

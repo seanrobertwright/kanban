@@ -140,7 +140,12 @@ export type Action =
  * mentions (016/024) — so a notify posts a comment that @-mentions the target,
  * which is exactly the "mentioned you on" the bell already surfaces.
  */
-export type NotifyTarget = "assignee" | { type: "human"; id: string };
+export type NotifyTarget =
+  | "assignee"
+  | { type: "human"; id: string }
+  | { type: "slack"; channelId: string }
+  | { type: "teams"; connectionId: number }
+  | { type: "email"; to: string };
 
 interface ActionBase {
   onlyIf?: Condition;

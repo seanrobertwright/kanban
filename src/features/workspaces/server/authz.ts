@@ -2,6 +2,7 @@ import { queryOne } from "@/shared/db/client";
 import { asPrincipal } from "@/features/auth/server/principal";
 import type { Principal } from "@/features/auth/server/principal";
 import type { WorkspaceRole } from "../types";
+import { enforceWorkspaceNetwork, NetworkAccessError } from "@/features/admin/server/ip-enforcement";
 
 export const ROLE_RANK: Record<WorkspaceRole, number> = {
   guest: -1,
@@ -53,11 +54,62 @@ function assertRank(role: WorkspaceRole, min: WorkspaceRole, what: string) {
   return role;
 }
 
+export type ObjectSubject = "board" | "custom_field" | "action";
+export type Capability = "read" | "write" | "manage" | "view" | "edit" | "execute";
+
+/**
+ * The ACL's one decision point. Workspace roles remain the default policy;
+ * grants only add a narrowly-scoped capability, never weaken an existing role.
+ * That makes rollout safe: an empty permission_grant table is byte-for-byte the
+ * authorization behavior the product had before this migration.
+ */
+export async function can(
+  principal: Principal,
+  workspaceId: string,
+  workspaceRole: WorkspaceRole,
+  subjectType: ObjectSubject,
+  subjectId: string,
+  capability: Capability
+): Promise<boolean> {
+  const directUserId = principal.kind === "human" ? principal.userId : null;
+  const row = await queryOne<{ allowed: boolean }>(
+    `SELECT EXISTS(
+       SELECT 1 FROM permission_grant
+        WHERE workspace_id = $1 AND subject_type = $2 AND subject_id = $3
+          AND capability = $4
+          AND ((principal_type = 'workspace_role' AND principal_id = $5)
+            OR (principal_type = 'user' AND principal_id = $6))
+     ) AS allowed`,
+    [workspaceId, subjectType, subjectId, capability, workspaceRole, directUserId]
+  );
+  return row?.allowed ?? false;
+}
+
+function boardCapability(min: WorkspaceRole): Capability {
+  if (min === "viewer") return "read";
+  if (min === "member") return "write";
+  return "manage";
+}
+
+async function assertBoardAccess(
+  principal: Principal,
+  role: WorkspaceRole,
+  workspaceId: string,
+  boardId: number,
+  min: WorkspaceRole,
+  what: string
+) {
+  if (ROLE_RANK[role] >= ROLE_RANK[min]) return;
+  if (await can(principal, workspaceId, role, "board", String(boardId), boardCapability(min))) return;
+  assertRank(role, min, what);
+}
+
 /**
  * Maps an AuthzError to its HTTP response. Rethrows anything else, so a genuine
  * bug surfaces as a 500 instead of being disguised as a permission failure.
  */
 export function authzErrorResponse(error: unknown): Response {
+  if (error instanceof NetworkAccessError) return Response.json({ error: error.message }, { status: 403 });
   if (error instanceof AuthzError) {
     return Response.json(
       { error: error.message },
@@ -109,6 +161,7 @@ export async function requireWorkspaceRole(
     [workspaceId, p.kind === "human" ? p.userId : p.agentId]
   );
   if (!row) throw new AuthzError("not_found", "Workspace not found");
+  await enforceWorkspaceNetwork(workspaceId);
   return assertRank(row.role, min, "act in this workspace");
 }
 
@@ -117,7 +170,8 @@ export async function requireBoardRole(
   boardId: number,
   min: WorkspaceRole
 ): Promise<{ role: WorkspaceRole; workspaceId: string }> {
-  const { join, id } = membershipJoin(asPrincipal(principal));
+  const p = asPrincipal(principal);
+  const { join, id } = membershipJoin(p);
   const row = await queryOne<{ role: WorkspaceRole; workspaceId: string }>(
     `SELECT wm.role, b.workspace_id AS "workspaceId"
        FROM board b
@@ -126,8 +180,30 @@ export async function requireBoardRole(
     [boardId, id]
   );
   if (!row) throw new AuthzError("not_found", "Board not found");
-  assertRank(row.role, min, "act on this board");
+  await enforceWorkspaceNetwork(row.workspaceId);
+  await assertBoardAccess(p, row.role, row.workspaceId, boardId, min, "act on this board");
   return row;
+}
+
+/** A named high-impact action can be delegated without promoting the recipient
+ * to workspace admin. The normal admin role remains the safe default. */
+export async function requireBoardAction(
+  principal: string | Principal,
+  boardId: number,
+  actionId: string
+): Promise<{ role: WorkspaceRole; workspaceId: string }> {
+  const p = asPrincipal(principal);
+  const { join, id } = membershipJoin(p);
+  const row = await queryOne<{ role: WorkspaceRole; workspaceId: string }>(
+    `SELECT wm.role, b.workspace_id AS "workspaceId"
+       FROM board b ${join} WHERE b.id = $1`,
+    [boardId, id]
+  );
+  if (!row) throw new AuthzError("not_found", "Board not found");
+  await enforceWorkspaceNetwork(row.workspaceId);
+  if (ROLE_RANK[row.role] >= ROLE_RANK.admin) return row;
+  if (await can(p, row.workspaceId, row.role, "action", actionId, "execute")) return row;
+  throw new AuthzError("forbidden", "Your role cannot execute this administrative action");
 }
 
 /**
@@ -148,7 +224,8 @@ export async function requireColumnRole(
   columnId: number,
   min: WorkspaceRole
 ): Promise<ColumnAccess> {
-  const { join, id } = membershipJoin(asPrincipal(principal));
+  const p = asPrincipal(principal);
+  const { join, id } = membershipJoin(p);
   const row = await queryOne<ColumnAccess>(
     `SELECT wm.role, bc.board_id AS "boardId", b.workspace_id AS "workspaceId"
        FROM board_column bc
@@ -158,7 +235,8 @@ export async function requireColumnRole(
     [columnId, id]
   );
   if (!row) throw new AuthzError("not_found", "Column not found");
-  assertRank(row.role, min, "act on this column");
+  await enforceWorkspaceNetwork(row.workspaceId);
+  await assertBoardAccess(p, row.role, row.workspaceId, row.boardId, min, "act on this column");
   return row;
 }
 
@@ -167,7 +245,8 @@ export async function requireTaskRole(
   taskId: number,
   min: WorkspaceRole
 ): Promise<ColumnAccess> {
-  const { join, id } = membershipJoin(asPrincipal(principal));
+  const p = asPrincipal(principal);
+  const { join, id } = membershipJoin(p);
   const row = await queryOne<ColumnAccess>(
     `SELECT wm.role, bc.board_id AS "boardId", b.workspace_id AS "workspaceId"
        FROM task t
@@ -178,6 +257,7 @@ export async function requireTaskRole(
     [taskId, id]
   );
   if (!row) throw new AuthzError("not_found", "Task not found");
-  assertRank(row.role, min, "modify this task");
+  await enforceWorkspaceNetwork(row.workspaceId);
+  await assertBoardAccess(p, row.role, row.workspaceId, row.boardId, min, "modify this task");
   return row;
 }

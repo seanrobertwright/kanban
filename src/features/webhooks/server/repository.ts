@@ -6,6 +6,7 @@ import {
   requireWorkspaceRole,
 } from "@/features/workspaces/server/authz";
 import type { Webhook } from "../types";
+import { encryptSecret } from "@/shared/crypto/secret-box";
 
 /**
  * Webhook management (025). Admin-gated throughout, agent management's
@@ -106,7 +107,7 @@ export async function createWebhook(
     `INSERT INTO workspace_webhook (workspace_id, url, secret, events)
      VALUES ($1, $2, $3, $4)
      RETURNING ${WEBHOOK_COLUMNS}`,
-    [workspaceId, input.url, secret, input.events ?? []]
+    [workspaceId, input.url, encryptSecret(secret), input.events ?? []]
   ))!;
   return { webhook, secret };
 }

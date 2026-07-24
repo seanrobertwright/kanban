@@ -6,6 +6,7 @@ import type { Principal } from "@/features/auth/server/principal";
 import { query, queryOne, withTransaction } from "@/shared/db/client";
 import {
   AuthzError,
+  requireBoardAction,
   requireBoardRole,
 } from "@/features/workspaces/server/authz";
 import type {
@@ -62,7 +63,7 @@ export async function createAutomationRule(
   boardId: number,
   input: CreateAutomationRuleInput
 ): Promise<AutomationRule> {
-  await requireBoardRole(userId, boardId, "admin");
+  await requireBoardAction(userId, boardId, "automation.manage");
   return withTransaction(async (client) => {
     // A schedule.tick rule is due immediately on creation; an event rule has no
     // schedule (NULL). now() is stated in SQL rather than passed as a param.
@@ -99,7 +100,8 @@ async function requireRule(
     [id]
   );
   if (!row) throw new AuthzError("not_found", "Automation not found");
-  await requireBoardRole(userId, row.boardId, min);
+  if (min === "admin") await requireBoardAction(userId, row.boardId, "automation.manage");
+  else await requireBoardRole(userId, row.boardId, min);
   return { boardId: row.boardId };
 }
 

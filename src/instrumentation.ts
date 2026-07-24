@@ -15,4 +15,8 @@ export async function register(): Promise<void> {
     "@/features/agents/server/drainer"
   );
   startRunDrainer();
+  const { startRetentionSweeper } = await import("@/features/admin/server/retention-sweeper");
+  startRetentionSweeper();
+  const { encryptLegacyWebhookSecrets } = await import("@/features/webhooks/server/secret-migration");
+  await encryptLegacyWebhookSecrets();
 }

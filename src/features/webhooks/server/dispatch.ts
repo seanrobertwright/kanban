@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 
 import { query } from "@/shared/db/client";
+import { decryptSecret, isEncrypted } from "@/shared/crypto/secret-box";
 
 /**
  * Delivery — the activity stream crossing the process boundary (025).
@@ -37,6 +38,13 @@ interface WebhookRow {
   id: number;
   url: string;
   secret: string;
+}
+
+function deliverySecret(value: string): string {
+  // Legacy rows are rewritten at startup. Refuse to interpret malformed v1
+  // values as plaintext: an AEAD failure must fail closed, not silently sign
+  // with attacker-controlled bytes.
+  return isEncrypted(value) ? decryptSecret(value) : value;
 }
 
 export function queueDelivery(activityId: string): void {
@@ -82,7 +90,7 @@ export async function deliverActivity(activityId: string): Promise<void> {
             "content-type": "application/json",
             "x-kanban-event": entry.action,
             // GitHub's convention, which every consumer library speaks.
-            "x-kanban-signature-256": `sha256=${createHmac("sha256", hook.secret)
+            "x-kanban-signature-256": `sha256=${createHmac("sha256", deliverySecret(hook.secret))
               .update(body)
               .digest("hex")}`,
           },

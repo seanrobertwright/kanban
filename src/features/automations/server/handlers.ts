@@ -143,13 +143,20 @@ function readAction(v: unknown): Action | { error: string } {
       return v as Action;
     case "notify": {
       const t = o.target;
-      const ok =
-        t === "assignee" ||
-        (!!t &&
-          typeof t === "object" &&
-          (t as Record<string, unknown>).type === "human" &&
-          typeof (t as Record<string, unknown>).id === "string");
-      if (!ok) return { error: "notify needs target 'assignee' or {type:'human', id}" };
+        const ok =
+          t === "assignee" ||
+          (!!t &&
+            typeof t === "object" &&
+            (((t as Record<string, unknown>).type === "human" &&
+              typeof (t as Record<string, unknown>).id === "string") ||
+             ((t as Record<string, unknown>).type === "slack" &&
+              typeof (t as Record<string, unknown>).channelId === "string") ||
+             ((t as Record<string, unknown>).type === "teams" &&
+              Number.isInteger((t as Record<string, unknown>).connectionId)) ||
+             ((t as Record<string, unknown>).type === "email" &&
+              typeof (t as Record<string, unknown>).to === "string" &&
+              /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((t as Record<string, unknown>).to as string))));
+        if (!ok) return { error: "notify needs assignee, a human, Slack, Teams, or an email address" };
       if (o.message !== undefined && typeof o.message !== "string")
         return { error: "notify message must be a string" };
       return v as Action;

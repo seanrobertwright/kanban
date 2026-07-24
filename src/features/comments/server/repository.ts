@@ -14,6 +14,7 @@ import {
   requireTaskRole,
 } from "@/features/workspaces/server/authz";
 import type { WorkspaceRole } from "@/features/workspaces/types";
+import { assertNotOnLegalHold } from "@/features/admin/server/legal-holds";
 import type {
   Comment,
   CommentEntry,
@@ -416,6 +417,7 @@ export async function deleteComment(
   }
 
   return withTransaction(async (client) => {
+    await assertNotOnLegalHold(workspaceId, "comment", id);
     const { rowCount } = await client.query(`DELETE FROM comment WHERE id = $1`, [
       id,
     ]);
