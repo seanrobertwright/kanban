@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Rajdhani', -apple-system, sans-serif; -webkit-font-smoothing: antialiased; color: #d6ecf5; background: #04060c; }
+  a { color: #00e5ff; text-decoration: none; }
+  a:hover { color: #7af2ff; text-shadow: 0 0 8px rgba(0,229,255,0.6); }
+  ::-webkit-scrollbar { height: 10px; width: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.18); border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0,229,255,0.4); background-clip: content-box; }
+  @keyframes slideIn { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes popIn { from { transform: scale(0.97) translateY(6px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+  @keyframes gridpan { from { background-position: 0 0; } to { background-position: 40px 40px; } }
+  .krow:hover { background: rgba(0,229,255,0.06) !important; }
+  .kcard:hover { border-color: rgba(0,229,255,0.55) !important; box-shadow: 0 0 0 1px rgba(0,229,255,0.25), 0 6px 22px rgba(0,229,255,0.16) !important; transform: translateY(-1px); }
+  .navi:hover { background: rgba(0,229,255,0.08) !important; color: #eafcff !important; }
+  .cmd:hover, .cmd[data-active="1"] { background: rgba(0,229,255,0.1) !important; }
+  .iconbtn:hover { background: rgba(0,229,255,0.1) !important; color: #eafcff !important; }
+  ::placeholder { color: #4a6577; }
+</style>
+</helmet>
+<div style="display:flex;height:100vh;width:100%;overflow:hidden;font-size:14px;background:#04060c;background-image:linear-gradient(rgba(0,229,255,0.045) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.045) 1px,transparent 1px);background-size:40px 40px;animation:gridpan 8s linear infinite;letter-spacing:0.2px;">
+
+  <!-- SIDEBAR -->
+  <aside style="width:236px;flex-shrink:0;background:rgba(6,10,18,0.92);border-right:1px solid rgba(0,229,255,0.16);display:flex;flex-direction:column;backdrop-filter:blur(6px);box-shadow:inset -1px 0 0 rgba(0,229,255,0.08);">
+    <div style="padding:16px 14px 12px;display:flex;align-items:center;gap:10px;">
+      <div style="width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,#00e5ff,#0577b8);display:flex;align-items:center;justify-content:center;color:#04060c;font-family:'Orbitron',sans-serif;font-weight:900;font-size:15px;box-shadow:0 0 14px rgba(0,229,255,0.6);">K</div>
+      <div style="font-family:'Orbitron',sans-serif;font-weight:700;font-size:15px;letter-spacing:2px;color:#eafcff;text-shadow:0 0 10px rgba(0,229,255,0.5);">KANBAN</div>
+      <svg style="margin-left:auto;color:#4a6577" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 9l4-4 4 4M16 15l-4 4-4-4"/></svg>
+    </div>
+
+    <div class="navi iconbtn" onClick="{{ openPalette }}" style="margin:2px 10px 8px;padding:8px 10px;border-radius:6px;background:rgba(0,229,255,0.04);border:1px solid rgba(0,229,255,0.2);display:flex;align-items:center;gap:8px;color:#6b8a9c;cursor:pointer;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+      <span style="flex:1;">Search / run command</span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:11px;background:rgba(0,229,255,0.1);border:1px solid rgba(0,229,255,0.25);border-radius:4px;padding:1px 5px;color:#00e5ff;">⌘K</span>
+    </div>
+
+    <nav style="padding:2px 10px;display:flex;flex-direction:column;gap:1px;">
+      <div class="navi" style="padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:9px;cursor:pointer;color:#9fc3d3;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0h6"/></svg>
+        My work
+      </div>
+      <div class="navi" style="padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:9px;cursor:pointer;color:#9fc3d3;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+        Inbox
+        <span style="margin-left:auto;background:#00e5ff;color:#04060c;font-size:10px;font-weight:700;border-radius:9px;padding:1px 6px;box-shadow:0 0 10px rgba(0,229,255,0.6);">7</span>
+      </div>
+      <div class="navi" style="padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:9px;cursor:pointer;color:#9fc3d3;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        Goals &amp; OKRs
+      </div>
+    </nav>
+
+    <div style="padding:16px 18px 6px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:400;letter-spacing:2px;color:#3f6478;text-transform:uppercase;">// Workspaces</div>
+    <nav style="padding:0 10px;display:flex;flex-direction:column;gap:1px;overflow-y:auto;flex:1;">
+      <sc-for list="{{ projects }}" as="p" hint-placeholder-count="5">
+        <div class="navi" style="padding:8px 10px;border-radius:6px;display:flex;align-items:center;gap:9px;cursor:pointer;color:#9fc3d3;">
+          <span style="width:8px;height:8px;border-radius:2px;background:{{ p.color }};flex-shrink:0;box-shadow:0 0 8px {{ p.color }};"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ p.name }}</span>
+          <span style="color:#4a6577;font-family:'Share Tech Mono',monospace;font-size:11px;">{{ p.count }}</span>
+        </div>
+      </sc-for>
+    </nav>
+
+    <div class="navi" onClick="{{ openLogin }}" title="Lock screen" style="padding:10px;border-top:1px solid rgba(0,229,255,0.14);display:flex;align-items:center;gap:9px;cursor:pointer;">
+      <div style="width:28px;height:28px;border-radius:6px;background:#ff4fd8;color:#04060c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;box-shadow:0 0 10px rgba(255,79,216,0.6);">JR</div>
+      <div style="flex:1;line-height:1.2;">
+        <div style="font-weight:600;font-size:13px;color:#d6ecf5;">Jordan Reyes</div>
+        <div style="color:#5b7a8a;font-size:11px;font-family:'Share Tech Mono',monospace;">PROGRAM · PRO</div>
+      </div>
+      <svg style="color:#4a6577" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main style="flex:1;display:flex;flex-direction:column;min-width:0;">
+    <header style="padding:14px 20px 0;border-bottom:1px solid rgba(0,229,255,0.16);background:rgba(4,7,14,0.6);backdrop-filter:blur(4px);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#5b7a8a;font-family:'Share Tech Mono',monospace;">
+          <span style="width:9px;height:9px;border-radius:2px;background:#00e5ff;box-shadow:0 0 8px #00e5ff;"></span>
+          <span>Mobile App</span>
+          <span style="color:#2f4a5a;">/</span>
+          <span style="color:#eafcff;">SPRINT 24 · PAYMENTS</span>
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;margin-right:4px;">
+            <div style="width:26px;height:26px;border-radius:6px;background:#ff4fd8;color:#04060c;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #04060c;">JR</div>
+            <div style="width:26px;height:26px;border-radius:6px;background:#39ff9e;color:#04060c;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #04060c;margin-left:-8px;">MK</div>
+            <div style="width:26px;height:26px;border-radius:6px;background:#ff9445;color:#04060c;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #04060c;margin-left:-8px;">AL</div>
+            <div style="width:26px;height:26px;border-radius:6px;background:rgba(0,229,255,0.12);color:#7fb0c4;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;border:2px solid #04060c;margin-left:-8px;">+4</div>
+          </div>
+          <button class="iconbtn" onClick="{{ openPalette }}" style="display:flex;align-items:center;gap:7px;padding:7px 13px;border-radius:6px;border:1px solid rgba(255,79,216,0.4);background:rgba(255,79,216,0.06);cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:13.5px;color:#ff8fe6;font-weight:600;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg>
+            Ask AI
+          </button>
+          <button style="display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;border:1px solid #00e5ff;background:rgba(0,229,255,0.12);color:#00e5ff;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:13.5px;font-weight:700;letter-spacing:0.5px;box-shadow:0 0 14px rgba(0,229,255,0.35);text-transform:uppercase;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+            New
+          </button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:2px;">
+        <sc-for list="{{ views }}" as="v" hint-placeholder-count="5">
+          <div class="navi" onClick="{{ v.onClick }}" style="{{ v.tabStyle }}">
+            <span style="{{ v.iconStyle }}" data-om-raster>{{ v.icon }}</span>
+            {{ v.label }}
+          </div>
+        </sc-for>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:4px;">
+          <button class="iconbtn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;border:1px solid transparent;background:transparent;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:13px;color:#6b8a9c;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18M6 12h12M10 20h4"/></svg>Filter</button>
+          <button class="iconbtn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;border:1px solid transparent;background:transparent;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:13px;color:#6b8a9c;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v16M7 20l-3-3M7 4l3 3M17 20V4M17 4l3 3M17 20l-3-3"/></svg>Sort</button>
+          <button class="iconbtn" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:6px;border:1px solid transparent;background:transparent;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:13px;color:#6b8a9c;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Group: Status</button>
+        </div>
+      </div>
+      <div style="height:12px;"></div>
+    </header>
+
+    <!-- BOARD VIEW -->
+    <sc-if value="{{ showBoard }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;overflow:auto;padding:16px 20px;">
+      <div style="display:flex;gap:14px;height:100%;align-items:flex-start;min-width:min-content;">
+        <sc-for list="{{ columns }}" as="col" hint-placeholder-count="5">
+          <section style="width:290px;flex-shrink:0;display:flex;flex-direction:column;max-height:100%;">
+            <div style="display:flex;align-items:center;gap:8px;padding:2px 4px 10px;">
+              <span style="width:9px;height:9px;border-radius:2px;background:{{ col.color }};box-shadow:0 0 8px {{ col.color }};"></span>
+              <span style="font-weight:700;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:#c5e6f2;font-family:'Rajdhani',sans-serif;">{{ col.name }}</span>
+              <span style="color:#4a6577;font-family:'Share Tech Mono',monospace;font-size:12px;">{{ col.count }}</span>
+              <span style="{{ col.wipStyle }}">{{ col.wipLabel }}</span>
+              <svg style="margin-left:auto;color:#4a6577;cursor:pointer" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px;overflow-y:auto;padding:2px;">
+              <sc-for list="{{ col.tasks }}" as="t" hint-placeholder-count="3">
+                <div class="kcard" onClick="{{ t.onClick }}" style="background:linear-gradient(180deg,rgba(10,18,28,0.95),rgba(7,12,20,0.95));border:1px solid rgba(0,229,255,0.18);border-radius:10px;padding:12px;cursor:pointer;transition:all .13s ease;">
+                  <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+                    <sc-for list="{{ t.labels }}" as="l" hint-placeholder-count="2">
+                      <span style="{{ l.style }}">{{ l.name }}</span>
+                    </sc-for>
+                  </div>
+                  <div style="font-weight:600;font-size:14px;line-height:1.35;margin-bottom:10px;color:#e3f3fa;">{{ t.title }}</div>
+                  <sc-if value="{{ t.hasProgress }}" hint-placeholder-val="{{ true }}">
+                    <div style="margin-bottom:10px;">
+                      <div style="display:flex;justify-content:space-between;font-size:11px;color:#5b7a8a;margin-bottom:4px;font-family:'Share Tech Mono',monospace;">
+                        <span>SUBTASKS</span><span>{{ t.progressLabel }}</span>
+                      </div>
+                      <div style="height:5px;background:rgba(0,229,255,0.08);border-radius:3px;overflow:hidden;">
+                        <div style="{{ t.progressBarStyle }}"></div>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="{{ t.priStyle }}" data-om-raster>{{ t.priIcon }} {{ t.priority }}</span>
+                    <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#00e5ff;background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.2);border-radius:4px;padding:1px 6px;">{{ t.points }}</span>
+                    <sc-if value="{{ t.hasPr }}" hint-placeholder-val="{{ true }}">
+                      <span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#39ff9e;font-family:'Share Tech Mono',monospace;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M6 9v6M18 9a9 9 0 00-9-9"/></svg>{{ t.pr }}</span>
+                    </sc-if>
+                    <div style="margin-left:auto;display:flex;align-items:center;gap:9px;color:#5b7a8a;">
+                      <span style="display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-family:'Share Tech Mono',monospace;">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>{{ t.comments }}</span>
+                      <div style="width:22px;height:22px;border-radius:5px;background:{{ t.assigneeColor }};color:#04060c;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">{{ t.assignee }}</div>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- LIST VIEW -->
+    <sc-if value="{{ showList }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;overflow:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13.5px;">
+        <thead>
+          <tr style="text-align:left;color:#5b7a8a;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;font-family:'Share Tech Mono',monospace;">
+            <th style="padding:11px 20px;font-weight:400;border-bottom:1px solid rgba(0,229,255,0.16);">Task</th>
+            <th style="padding:11px 12px;font-weight:400;border-bottom:1px solid rgba(0,229,255,0.16);">Status</th>
+            <th style="padding:11px 12px;font-weight:400;border-bottom:1px solid rgba(0,229,255,0.16);">Priority</th>
+            <th style="padding:11px 12px;font-weight:400;border-bottom:1px solid rgba(0,229,255,0.16);">Pts</th>
+            <th style="padding:11px 12px;font-weight:400;border-bottom:1px solid rgba(0,229,255,0.16);">Assignee</th>
+            <th style="padding:11px 12px;font-weight:400;border-bottom:1px solid rgba(0,229,255,0.16);">Due</th>
+          </tr>
+        </thead>
+        <tbody>
+          <sc-for list="{{ rows }}" as="t" hint-placeholder-count="8">
+            <tr class="krow" onClick="{{ t.onClick }}" style="cursor:pointer;transition:background .1s;">
+              <td style="padding:12px 20px;border-bottom:1px solid rgba(0,229,255,0.07);font-weight:600;color:#e3f3fa;">{{ t.title }}</td>
+              <td style="padding:12px 12px;border-bottom:1px solid rgba(0,229,255,0.07);"><span style="{{ t.statusPill }}">{{ t.status }}</span></td>
+              <td style="padding:12px 12px;border-bottom:1px solid rgba(0,229,255,0.07);"><span style="{{ t.priStyle }}" data-om-raster>{{ t.priIcon }} {{ t.priority }}</span></td>
+              <td style="padding:12px 12px;border-bottom:1px solid rgba(0,229,255,0.07);font-family:'Share Tech Mono',monospace;color:#00e5ff;">{{ t.points }}</td>
+              <td style="padding:12px 12px;border-bottom:1px solid rgba(0,229,255,0.07);color:#9fc3d3;">
+                <span style="display:inline-flex;align-items:center;gap:7px;">
+                  <span style="width:22px;height:22px;border-radius:5px;background:{{ t.assigneeColor }};color:#04060c;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">{{ t.assignee }}</span>{{ t.assigneeName }}
+                </span>
+              </td>
+              <td style="padding:12px 12px;border-bottom:1px solid rgba(0,229,255,0.07);color:#5b7a8a;font-family:'Share Tech Mono',monospace;">{{ t.due }}</td>
+            </tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+    </sc-if>
+
+    <!-- TIMELINE / GANTT VIEW -->
+    <sc-if value="{{ showTimeline }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;overflow:auto;padding:18px 22px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        <div style="font-family:'Orbitron',sans-serif;font-weight:700;font-size:13px;letter-spacing:2px;color:#c5e6f2;text-transform:uppercase;">Sprint 24 · Timeline</div>
+        <div style="display:flex;align-items:center;gap:14px;margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:11px;color:#6b8a9c;">
+          <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:16px;height:6px;border-radius:3px;background:linear-gradient(90deg,#ff4d5e,#ff9445);box-shadow:0 0 8px rgba(255,77,94,0.5);"></span>CRITICAL PATH</span>
+          <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:16px;height:6px;border-radius:3px;background:linear-gradient(90deg,#00e5ff,#0577b8);"></span>ON TRACK</span>
+        </div>
+      </div>
+      <div style="min-width:920px;border:1px solid rgba(0,229,255,0.14);border-radius:10px;overflow:hidden;background:rgba(6,10,18,0.5);">
+        <div style="display:flex;border-bottom:1px solid rgba(0,229,255,0.14);">
+          <div style="width:220px;flex-shrink:0;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;color:#4a6577;text-transform:uppercase;">Task</div>
+          <div style="flex:1;display:flex;">
+            <sc-for list="{{ dayCols }}" as="d" hint-placeholder-count="14"><div style="{{ d.style }}">{{ d.label }}</div></sc-for>
+          </div>
+        </div>
+        <sc-for list="{{ timelineRows }}" as="r" hint-placeholder-count="7">
+          <div class="krow" style="display:flex;align-items:center;height:46px;border-bottom:1px solid rgba(0,229,255,0.06);">
+            <div style="width:220px;flex-shrink:0;padding:0 12px;display:flex;align-items:center;gap:8px;overflow:hidden;">
+              <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:#00e5ff;flex-shrink:0;">{{ r.key }}</span>
+              <span style="font-size:13px;color:#c5e6f2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.title }}</span>
+            </div>
+            <div style="{{ r.trackStyle }}">
+              <div style="{{ r.barStyle }}">{{ r.points }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- DASHBOARD VIEW -->
+    <sc-if value="{{ showDashboard }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;overflow:auto;padding:20px 22px;">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px;">
+        <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+          <div style="background:linear-gradient(180deg,rgba(10,18,28,0.95),rgba(7,12,20,0.95));border:1px solid rgba(0,229,255,0.18);border-radius:10px;padding:16px;">
+            <div style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#5b7a8a;margin-bottom:10px;">{{ s.label }}</div>
+            <div style="font-family:'Orbitron',sans-serif;font-weight:700;font-size:28px;color:{{ s.color }};text-shadow:0 0 14px {{ s.glow }};line-height:1;">{{ s.value }}</div>
+            <div style="font-size:12.5px;color:#6b8a9c;margin-top:7px;">{{ s.sub }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-bottom:14px;">
+        <div style="background:linear-gradient(180deg,rgba(10,18,28,0.95),rgba(7,12,20,0.95));border:1px solid rgba(0,229,255,0.18);border-radius:10px;padding:16px 18px;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#5b7a8a;">Sprint Burndown</div>
+          <svg viewBox="0 0 320 150" style="width:100%;height:160px;margin-top:8px;">
+            <line x1="2" y1="130" x2="318" y2="130" stroke="rgba(0,229,255,0.16)" stroke-width="1"/>
+            <line x1="2" y1="8" x2="2" y2="130" stroke="rgba(0,229,255,0.16)" stroke-width="1"/>
+            <polyline fill="none" stroke="#5b7a8a" stroke-dasharray="4 4" stroke-width="1.5" points="2,15 316,128"/>
+            <polyline fill="none" stroke="#00e5ff" stroke-width="2.5" points="2,15 42,28 82,36 122,52 162,58 202,80 242,92 282,108 316,118" style="filter:drop-shadow(0 0 5px #00e5ff)"/>
+          </svg>
+        </div>
+        <div style="background:linear-gradient(180deg,rgba(10,18,28,0.95),rgba(7,12,20,0.95));border:1px solid rgba(0,229,255,0.18);border-radius:10px;padding:16px 18px;">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#5b7a8a;margin-bottom:14px;">Project Rollup</div>
+          <sc-for list="{{ projectsRoll }}" as="p" hint-placeholder-count="5">
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;"><span style="color:#c5e6f2;">{{ p.name }}</span><span style="font-family:'Share Tech Mono',monospace;color:{{ p.color }};">{{ p.pct }}%</span></div>
+              <div style="height:6px;background:rgba(0,229,255,0.08);border-radius:3px;overflow:hidden;"><div style="{{ p.barStyle }}"></div></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:linear-gradient(180deg,rgba(10,18,28,0.95),rgba(7,12,20,0.95));border:1px solid rgba(0,229,255,0.18);border-radius:10px;overflow:hidden;">
+        <div style="padding:14px 18px 10px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#5b7a8a;">At Risk · Needs Attention</div>
+        <sc-for list="{{ atRisk }}" as="a" hint-placeholder-count="2">
+          <div class="krow" onClick="{{ a.onClick }}" style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-top:1px solid rgba(0,229,255,0.06);cursor:pointer;">
+            <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#00e5ff;">{{ a.key }}</span>
+            <span style="font-size:13.5px;color:#c5e6f2;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ a.title }}</span>
+            <span style="{{ a.pill }}">{{ a.tag }}</span>
+            <span style="font-size:12px;color:#6b8a9c;font-family:'Share Tech Mono',monospace;">{{ a.reason }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+  </main>
+
+  <!-- TASK DETAIL SLIDE-OVER -->
+  <sc-if value="{{ panelOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeTask }}" style="position:fixed;inset:0;background:rgba(2,4,10,0.6);z-index:40;animation:fadeIn .12s ease;backdrop-filter:blur(2px);"></div>
+  <div style="position:fixed;top:0;right:0;bottom:0;width:min(560px,92vw);background:#060a12;z-index:41;border-left:1px solid rgba(0,229,255,0.3);box-shadow:-8px 0 40px rgba(0,229,255,0.12);display:flex;flex-direction:column;animation:slideIn .18s cubic-bezier(.2,.7,.3,1);">
+    <div style="padding:16px 22px;border-bottom:1px solid rgba(0,229,255,0.16);display:flex;align-items:center;gap:10px;">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:12px;color:#00e5ff;background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.2);padding:3px 8px;border-radius:5px;">{{ sel.key }}</span>
+      <span style="{{ sel.statusPill }}">{{ sel.status }}</span>
+      <div style="margin-left:auto;display:flex;gap:4px;">
+        <button class="iconbtn" style="width:30px;height:30px;border-radius:6px;border:none;background:transparent;cursor:pointer;color:#5b7a8a;display:flex;align-items:center;justify-content:center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+        <button class="iconbtn" onClick="{{ closeTask }}" style="width:30px;height:30px;border-radius:6px;border:none;background:transparent;cursor:pointer;color:#5b7a8a;display:flex;align-items:center;justify-content:center;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:22px;">
+      <h1 style="font-size:22px;font-weight:700;line-height:1.25;letter-spacing:0.2px;margin-bottom:18px;color:#eafcff;">{{ sel.title }}</h1>
+
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:11px 16px;font-size:13.5px;margin-bottom:22px;align-items:center;">
+        <div style="color:#5b7a8a;font-family:'Share Tech Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Assignee</div>
+        <div style="display:flex;align-items:center;gap:8px;color:#c5e6f2;"><span style="width:22px;height:22px;border-radius:5px;background:{{ sel.assigneeColor }};color:#04060c;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">{{ sel.assignee }}</span>{{ sel.assigneeName }}</div>
+        <div style="color:#5b7a8a;font-family:'Share Tech Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Priority</div>
+        <div><span style="{{ sel.priStyle }}" data-om-raster>{{ sel.priIcon }} {{ sel.priority }}</span></div>
+        <div style="color:#5b7a8a;font-family:'Share Tech Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Story points</div>
+        <div style="font-family:'Share Tech Mono',monospace;color:#00e5ff;">{{ sel.points }}</div>
+        <div style="color:#5b7a8a;font-family:'Share Tech Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Sprint</div>
+        <div style="color:#c5e6f2;">Sprint 24 · Payments</div>
+        <div style="color:#5b7a8a;font-family:'Share Tech Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Due date</div>
+        <div style="color:#c5e6f2;">{{ sel.due }}</div>
+        <div style="color:#5b7a8a;font-family:'Share Tech Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:1px;">Labels</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <sc-for list="{{ sel.labels }}" as="l" hint-placeholder-count="2"><span style="{{ l.style }}">{{ l.name }}</span></sc-for>
+        </div>
+      </div>
+
+      <div style="background:linear-gradient(135deg,rgba(255,79,216,0.08),rgba(0,229,255,0.06));border:1px solid rgba(255,79,216,0.28);border-radius:10px;padding:14px 16px;margin-bottom:22px;">
+        <div style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#ff8fe6;margin-bottom:8px;font-family:'Share Tech Mono',monospace;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg>
+          AI Summary
+        </div>
+        <div style="font-size:14px;line-height:1.55;color:#c5e6f2;">{{ sel.aiSummary }}</div>
+      </div>
+
+      <div style="font-family:'Share Tech Mono',monospace;font-weight:400;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;color:#5b7a8a;">Description</div>
+      <div style="font-size:14px;line-height:1.6;color:#c5e6f2;margin-bottom:24px;">{{ sel.desc }}</div>
+
+      <div style="font-family:'Share Tech Mono',monospace;font-weight:400;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;color:#5b7a8a;">Subtasks · {{ sel.progressLabel }}</div>
+      <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:24px;">
+        <sc-for list="{{ sel.subtasks }}" as="s" hint-placeholder-count="3">
+          <div class="krow" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;">
+            <span style="{{ s.box }}">{{ s.check }}</span>
+            <span style="{{ s.textStyle }}">{{ s.title }}</span>
+            <span style="margin-left:auto;width:20px;height:20px;border-radius:5px;background:{{ s.color }};color:#04060c;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;">{{ s.who }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="font-family:'Share Tech Mono',monospace;font-weight:400;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;color:#5b7a8a;">Linked development</div>
+      <div style="display:flex;flex-direction:column;gap:7px;">
+        <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid rgba(57,255,158,0.25);background:rgba(57,255,158,0.04);border-radius:8px;font-size:13px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#39ff9e" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M6 9v6M18 9a9 9 0 00-9-9"/></svg>
+          <span style="font-family:'Share Tech Mono',monospace;color:#39ff9e;">#4821</span>
+          <span style="color:#c5e6f2;">Add tokenized card vault</span>
+          <span style="margin-left:auto;font-size:10px;color:#39ff9e;background:rgba(57,255,158,0.12);padding:2px 8px;border-radius:4px;font-weight:700;font-family:'Share Tech Mono',monospace;">MERGED</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid rgba(255,148,69,0.25);background:rgba(255,148,69,0.04);border-radius:8px;font-size:13px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ff9445" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M6 9v6M18 9a9 9 0 00-9-9"/></svg>
+          <span style="font-family:'Share Tech Mono',monospace;color:#ff9445;">#4830</span>
+          <span style="color:#c5e6f2;">Payment retry logic</span>
+          <span style="margin-left:auto;font-size:10px;color:#ff9445;background:rgba(255,148,69,0.12);padding:2px 8px;border-radius:4px;font-weight:700;font-family:'Share Tech Mono',monospace;">IN REVIEW</span>
+        </div>
+      </div>
+    </div>
+    <div style="padding:12px 22px;border-top:1px solid rgba(0,229,255,0.16);display:flex;align-items:center;gap:10px;">
+      <div style="width:26px;height:26px;border-radius:6px;background:#ff4fd8;color:#04060c;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">JR</div>
+      <input placeholder="Leave a comment or @mention…" style="flex:1;background:rgba(0,229,255,0.04);border:1px solid rgba(0,229,255,0.2);border-radius:7px;padding:9px 12px;font-family:'Rajdhani',sans-serif;font-size:14px;outline:none;color:#d6ecf5;" />
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- COMMAND PALETTE -->
+  <sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closePalette }}" style="position:fixed;inset:0;background:rgba(2,4,10,0.65);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding-top:12vh;animation:fadeIn .1s ease;backdrop-filter:blur(3px);">
+    <div onClick="{{ stop }}" style="width:min(620px,92vw);background:#070c15;border:1px solid rgba(0,229,255,0.35);border-radius:12px;box-shadow:0 24px 70px rgba(0,229,255,0.18),0 0 0 1px rgba(0,229,255,0.1);overflow:hidden;animation:popIn .16s cubic-bezier(.2,.7,.3,1);">
+      <div style="display:flex;align-items:center;gap:11px;padding:16px 18px;border-bottom:1px solid rgba(0,229,255,0.16);">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ff4fd8" stroke-width="2"><path d="M12 3l1.9 5.3L19 10l-5.1 1.7L12 17l-1.9-5.3L5 10l5.1-1.7z"/></svg>
+        <input autofocus placeholder="Ask AI or type a command…" style="flex:1;background:transparent;border:none;outline:none;font-family:'Rajdhani',sans-serif;font-size:16px;color:#eafcff;" />
+        <span style="font-family:'Share Tech Mono',monospace;font-size:11px;background:rgba(0,229,255,0.08);border:1px solid rgba(0,229,255,0.2);border-radius:4px;padding:2px 6px;color:#5b7a8a;">esc</span>
+      </div>
+      <div style="padding:8px;max-height:52vh;overflow-y:auto;">
+        <div style="padding:6px 12px 4px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:400;letter-spacing:1.5px;color:#4a6577;text-transform:uppercase;">AI Actions</div>
+        <sc-for list="{{ aiCommands }}" as="c" hint-placeholder-count="3">
+          <div class="cmd" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;">
+            <span style="width:28px;height:28px;border-radius:7px;background:rgba(255,79,216,0.1);color:#ff8fe6;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid rgba(255,79,216,0.25);" data-om-raster>{{ c.icon }}</span>
+            <span style="font-size:14px;color:#e3f3fa;">{{ c.label }}</span>
+            <span style="margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:11px;color:#4a6577;">{{ c.hint }}</span>
+          </div>
+        </sc-for>
+        <div style="padding:10px 12px 4px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:400;letter-spacing:1.5px;color:#4a6577;text-transform:uppercase;">Navigate &amp; Create</div>
+        <sc-for list="{{ navCommands }}" as="c" hint-placeholder-count="4">
+          <div class="cmd" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;">
+            <span style="width:28px;height:28px;border-radius:7px;background:rgba(0,229,255,0.08);color:#00e5ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid rgba(0,229,255,0.2);" data-om-raster>{{ c.icon }}</span>
+            <span style="font-size:14px;color:#e3f3fa;">{{ c.label }}</span>
+            <span style="margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:11px;color:#4a6577;">{{ c.hint }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- LOGIN SCREEN -->
+  <sc-if value="{{ loginOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;inset:0;z-index:60;background:#04060c;background-image:linear-gradient(rgba(0,229,255,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.06) 1px,transparent 1px);background-size:44px 44px;display:flex;align-items:center;justify-content:center;animation:fadeIn .2s ease;">
+    <div style="width:min(400px,92vw);background:rgba(6,10,18,0.92);border:1px solid rgba(0,229,255,0.3);border-radius:14px;padding:36px 32px;box-shadow:0 0 60px rgba(0,229,255,0.15);backdrop-filter:blur(8px);animation:popIn .2s ease;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:26px;">
+        <div style="width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,#00e5ff,#0577b8);display:flex;align-items:center;justify-content:center;color:#04060c;font-family:'Orbitron',sans-serif;font-weight:900;font-size:26px;box-shadow:0 0 24px rgba(0,229,255,0.6);">K</div>
+        <div style="font-family:'Orbitron',sans-serif;font-weight:700;font-size:20px;letter-spacing:4px;color:#eafcff;text-shadow:0 0 14px rgba(0,229,255,0.5);">KANBAN</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:1px;color:#5b7a8a;text-transform:uppercase;">Enter the grid</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <input placeholder="you@company.com" style="background:rgba(0,229,255,0.04);border:1px solid rgba(0,229,255,0.22);border-radius:8px;padding:12px 14px;font-family:'Rajdhani',sans-serif;font-size:15px;color:#d6ecf5;outline:none;" />
+        <input type="password" placeholder="Password" style="background:rgba(0,229,255,0.04);border:1px solid rgba(0,229,255,0.22);border-radius:8px;padding:12px 14px;font-family:'Rajdhani',sans-serif;font-size:15px;color:#d6ecf5;outline:none;" />
+        <button onClick="{{ closeLogin }}" style="margin-top:4px;padding:13px;border-radius:8px;border:1px solid #00e5ff;background:rgba(0,229,255,0.14);color:#00e5ff;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:15px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;box-shadow:0 0 18px rgba(0,229,255,0.35);">Sign In</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin:20px 0;color:#3f6478;font-family:'Share Tech Mono',monospace;font-size:10px;">
+        <div style="flex:1;height:1px;background:rgba(0,229,255,0.14);"></div>OR<div style="flex:1;height:1px;background:rgba(0,229,255,0.14);"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        <button onClick="{{ closeLogin }}" style="padding:11px;border-radius:8px;border:1px solid rgba(0,229,255,0.2);background:transparent;color:#c5e6f2;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;cursor:pointer;">Continue with SSO / SAML</button>
+        <button onClick="{{ closeLogin }}" style="padding:11px;border-radius:8px;border:1px solid rgba(0,229,255,0.2);background:transparent;color:#c5e6f2;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;cursor:pointer;">Continue with Google Workspace</button>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#00e5ff&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#00e5ff&quot;,&quot;#39ff9e&quot;,&quot;#ff4fd8&quot;,&quot;#ff9445&quot;,&quot;#bfa0ff&quot;]}}">
+class Component extends DCLogic {
+  state = { view: 'board', selId: null, palette: false };
+
+  componentDidMount() {
+    this._key = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.setState(s => ({ palette: !s.palette })); }
+      if (e.key === 'Escape') this.setState({ palette: false, selId: null });
+    };
+    window.addEventListener('keydown', this._key);
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this._key); }
+
+  labelStyle(bg, fg) { return `font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:400;letter-spacing:0.5px;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:${bg};color:${fg};border:1px solid ${fg}44;`; }
+  priMeta(p) {
+    const m = {
+      Urgent: { c: '#ff4d5e' }, High: { c: '#ff9445' },
+      Medium: { c: '#00e5ff' }, Low: { c: '#6b8a9c' }
+    }[p] || { c: '#6b8a9c' };
+    return `display:inline-flex;align-items:center;gap:4px;font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:400;text-transform:uppercase;color:${m.c};`;
+  }
+  priIcon(p) { return ({ Urgent: '▲', High: '▲', Medium: '■', Low: '▽' })[p] || '■'; }
+  statusPill(name) {
+    const c = { Backlog: ['rgba(107,138,156,0.15)', '#8faec0'], 'To Do': ['rgba(0,229,255,0.12)', '#00e5ff'], 'In Progress': ['rgba(255,148,69,0.14)', '#ff9445'], 'In Review': ['rgba(255,79,216,0.14)', '#ff8fe6'], Done: ['rgba(57,255,158,0.14)', '#39ff9e'] }[name] || ['rgba(107,138,156,0.15)', '#8faec0'];
+    return `font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:400;letter-spacing:0.5px;text-transform:uppercase;padding:3px 9px;border-radius:5px;background:${c[0]};color:${c[1]};border:1px solid ${c[1]}44;`;
+  }
+
+  data() {
+    const L = {
+      frontend: { name: 'Frontend', style: this.labelStyle('rgba(0,229,255,0.1)', '#00e5ff') },
+      api: { name: 'API', style: this.labelStyle('rgba(57,255,158,0.1)', '#39ff9e') },
+      design: { name: 'Design', style: this.labelStyle('rgba(255,79,216,0.1)', '#ff8fe6') },
+      bug: { name: 'Bug', style: this.labelStyle('rgba(255,77,94,0.1)', '#ff6b78') },
+      research: { name: 'Research', style: this.labelStyle('rgba(169,123,255,0.12)', '#bfa0ff') },
+      payments: { name: 'Payments', style: this.labelStyle('rgba(255,148,69,0.1)', '#ff9445') },
+    };
+    const cols = [
+      { name: 'Backlog', color: '#6b8a9c', tasks: [
+        { key: 'PAY-118', title: 'Support Apple Pay & Google Pay at checkout', labels: [L.payments, L.research], priority: 'Medium', points: '5', assignee: 'AL', assigneeName: 'Ana Lima', assigneeColor: '#ff9445', comments: 2, status: 'Backlog', due: 'Aug 12', done: 0, total: 4, pr: '', desc: 'Evaluate wallet SDK options and integration effort for native wallets.', aiSummary: 'Blocked on legal review of wallet terms. 2 of 3 vendors shortlisted; recommend Stripe wallet SDK based on integration cost.' },
+        { key: 'PAY-121', title: 'Refund dispute audit trail', labels: [L.api], priority: 'Low', points: '3', assignee: 'MK', assigneeName: 'Milo Kade', assigneeColor: '#39ff9e', comments: 0, status: 'Backlog', due: 'Aug 20', done: 0, total: 3, pr: '' },
+      ]},
+      { name: 'To Do', color: '#00e5ff', tasks: [
+        { key: 'PAY-104', title: 'Redesign card entry form with inline validation', labels: [L.frontend, L.design], priority: 'High', points: '8', assignee: 'JR', assigneeName: 'Jordan Reyes', assigneeColor: '#ff4fd8', comments: 5, status: 'To Do', due: 'Jul 28', done: 1, total: 6, pr: '' },
+        { key: 'PAY-109', title: 'Add 3-D Secure step-up authentication', labels: [L.api, L.payments], priority: 'Urgent', points: '13', assignee: 'MK', assigneeName: 'Milo Kade', assigneeColor: '#39ff9e', comments: 8, status: 'To Do', due: 'Jul 26', done: 0, total: 5, pr: '' },
+        { key: 'PAY-112', title: 'Empty state for saved payment methods', labels: [L.design], priority: 'Low', points: '2', assignee: 'AL', assigneeName: 'Ana Lima', assigneeColor: '#ff9445', comments: 1, status: 'To Do', due: 'Aug 2', done: 0, total: 2, pr: '' },
+      ]},
+      { name: 'In Progress', color: '#ff9445', wip: '3 / 4', tasks: [
+        { key: 'PAY-097', title: 'Tokenize stored cards & migrate vault', labels: [L.api, L.payments], priority: 'Urgent', points: '13', assignee: 'MK', assigneeName: 'Milo Kade', assigneeColor: '#39ff9e', comments: 12, status: 'In Progress', due: 'Jul 24', done: 4, total: 6, pr: '#4821', desc: 'Migrate stored PANs to tokenized vault; dual-write during cutover, then flip reads.', aiSummary: 'On track for Thu. Migration script tested on 12% of prod data with zero mismatches. Remaining risk: rollback path for failed dual-writes still unverified.' },
+        { key: 'PAY-101', title: 'Retry logic for failed charges', labels: [L.api], priority: 'High', points: '5', assignee: 'JR', assigneeName: 'Jordan Reyes', assigneeColor: '#ff4fd8', comments: 4, status: 'In Progress', due: 'Jul 25', done: 2, total: 4, pr: '#4830' },
+      ]},
+      { name: 'In Review', color: '#ff4fd8', tasks: [
+        { key: 'PAY-092', title: 'Checkout success & receipt screen', labels: [L.frontend, L.design], priority: 'High', points: '8', assignee: 'AL', assigneeName: 'Ana Lima', assigneeColor: '#ff9445', comments: 6, status: 'In Review', due: 'Jul 23', done: 5, total: 5, pr: '#4805' },
+        { key: 'PAY-088', title: 'Currency formatting edge cases', labels: [L.bug], priority: 'Medium', points: '3', assignee: 'MK', assigneeName: 'Milo Kade', assigneeColor: '#39ff9e', comments: 3, status: 'In Review', due: 'Jul 22', done: 3, total: 3, pr: '#4799' },
+      ]},
+      { name: 'Done', color: '#39ff9e', tasks: [
+        { key: 'PAY-080', title: 'Payment method selector component', labels: [L.frontend], priority: 'Medium', points: '5', assignee: 'JR', assigneeName: 'Jordan Reyes', assigneeColor: '#ff4fd8', comments: 2, status: 'Done', due: 'Jul 18', done: 4, total: 4, pr: '#4770' },
+        { key: 'PAY-076', title: 'PCI compliance checklist audit', labels: [L.research, L.payments], priority: 'High', points: '8', assignee: 'AL', assigneeName: 'Ana Lima', assigneeColor: '#ff9445', comments: 9, status: 'Done', due: 'Jul 15', done: 7, total: 7, pr: '' },
+      ]},
+    ];
+    return { cols };
+  }
+
+  enrichTask(t) {
+    const pct = t.total ? Math.round(t.done / t.total * 100) : 0;
+    return {
+      ...t,
+      onClick: () => this.setState({ selId: t.key }),
+      priStyle: this.priMeta(t.priority),
+      priIcon: this.priIcon(t.priority),
+      statusPill: this.statusPill(t.status),
+      hasProgress: t.total > 0 && t.status !== 'Done',
+      progressLabel: `${t.done}/${t.total}`,
+      progressBarStyle: `height:100%;width:${pct}%;background:${pct === 100 ? '#39ff9e' : '#00e5ff'};border-radius:3px;box-shadow:0 0 8px ${pct === 100 ? '#39ff9e' : '#00e5ff'};`,
+      hasPr: !!t.pr,
+    };
+  }
+
+  renderVals() {
+    const accent = this.props.accentColor || '#00e5ff';
+    const { cols } = this.data();
+    const view = this.state.view;
+
+    const viewDefs = [
+      { key: 'board', label: 'Board', icon: '▦' },
+      { key: 'list', label: 'List', icon: '≣' },
+      { key: 'timeline', label: 'Timeline', icon: '⧗' },
+      { key: 'dashboard', label: 'Dashboard', icon: '◉' },
+    ];
+    const views = viewDefs.map(v => {
+      const active = v.key === view;
+      return {
+        label: v.label, icon: v.icon,
+        onClick: () => this.setState({ view: v.key }),
+        iconStyle: `font-size:14px;line-height:1;color:${active ? accent : '#4a6577'};`,
+        tabStyle: `display:flex;align-items:center;gap:7px;padding:9px 14px;border-radius:6px 6px 0 0;cursor:pointer;font-weight:${active ? 700 : 500};font-size:13px;letter-spacing:0.5px;text-transform:uppercase;font-family:'Rajdhani',sans-serif;color:${active ? '#eafcff' : '#6b8a9c'};border-bottom:2px solid ${active ? accent : 'transparent'};margin-bottom:-1px;text-shadow:${active ? '0 0 10px ' + accent + '88' : 'none'};`,
+      };
+    });
+
+    const columns = cols.map((c) => ({
+      name: c.name, color: c.color, count: c.tasks.length,
+      wipLabel: c.wip ? `WIP ${c.wip}` : '',
+      wipStyle: c.wip ? `font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:0.5px;color:#ff9445;background:rgba(255,148,69,0.12);border:1px solid rgba(255,148,69,0.3);padding:1px 6px;border-radius:4px;` : 'display:none;',
+      tasks: c.tasks.map(t => this.enrichTask(t)),
+    }));
+
+    const flat = [];
+    cols.forEach(c => c.tasks.forEach(t => flat.push(this.enrichTask(t))));
+
+    const sel = this.state.selId ? flat.find(t => t.key === this.state.selId) : null;
+    let selView = null;
+    if (sel) {
+      const subs = [];
+      for (let i = 0; i < sel.total; i++) {
+        const done = i < sel.done;
+        subs.push({
+          title: ['Spec review', 'Implement service', 'Unit tests', 'Integration tests', 'QA pass', 'Docs update', 'Rollout'][i] || `Subtask ${i + 1}`,
+          check: done ? '✓' : '',
+          box: `width:18px;height:18px;border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#04060c;background:${done ? '#39ff9e' : 'transparent'};border:1.5px solid ${done ? '#39ff9e' : 'rgba(0,229,255,0.3)'};box-shadow:${done ? '0 0 8px rgba(57,255,158,0.5)' : 'none'};`,
+          textStyle: `font-size:13.5px;color:${done ? '#5b7a8a' : '#c5e6f2'};text-decoration:${done ? 'line-through' : 'none'};`,
+          who: sel.assignee, color: sel.assigneeColor,
+        });
+      }
+      selView = {
+        ...sel,
+        aiSummary: sel.aiSummary || 'This task is progressing normally. No blockers detected across linked PRs and subtasks.',
+        desc: sel.desc || 'Detailed acceptance criteria and edge cases are tracked in the linked spec. This work is part of the Sprint 24 Payments milestone.',
+        subtasks: subs,
+      };
+    }
+
+    return {
+      accent,
+      views,
+      showBoard: view === 'board',
+      showList: view === 'list',
+      showStub: view === 'timeline' || view === 'dashboard',
+      stubName: view === 'timeline' ? 'Timeline' : 'Dashboard',
+      columns,
+      rows: flat,
+      projects: [
+        { name: 'Mobile App', color: '#00e5ff', count: 42 },
+        { name: 'Web Platform', color: '#39ff9e', count: 28 },
+        { name: 'Design System', color: '#ff4fd8', count: 15 },
+        { name: 'Growth Experiments', color: '#ff9445', count: 9 },
+        { name: 'Infrastructure', color: '#bfa0ff', count: 33 },
+      ],
+      panelOpen: !!selView,
+      sel: selView || {},
+      closeTask: () => this.setState({ selId: null }),
+      paletteOpen: this.state.palette,
+      openPalette: () => this.setState({ palette: true }),
+      closePalette: () => this.setState({ palette: false }),
+      stop: (e) => e.stopPropagation(),
+      aiCommands: [
+        { icon: '✦', label: 'Summarize this sprint\u2019s progress & risks', hint: 'AI' },
+        { icon: '+', label: 'Generate subtasks from a description', hint: 'AI' },
+        { icon: '⧗', label: 'Auto-schedule my tasks by capacity', hint: 'AI' },
+      ],
+      navCommands: [
+        { icon: '+', label: 'Create new task', hint: 'C' },
+        { icon: '▦', label: 'Go to Board', hint: 'G B' },
+        { icon: '≣', label: 'Go to List', hint: 'G L' },
+        { icon: '⚑', label: 'Filter by assignee', hint: 'F' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
