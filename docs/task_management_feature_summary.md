@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-23):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **104 ✅ / 28 ❌ / 8 ⛔** — the **Workflow & Automation** area
+**Implementation status (2026-07-23):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **114 ✅ / 18 ❌ / 8 ⛔** — the **Workflow & Automation** area
 (15/15) is now fully ✅, closed by the Phase 1 build on the automation engine
 (045): the trigger→conditions→actions rule engine and its twelve rocks
 (no-code + conditional branching, state transitions, recurring/scheduled, SLAs,
@@ -129,20 +129,20 @@ These features show whether work is supported by shared context, decisions, docu
 
 | Feature | Summary |
 |---|---|
-| ❌ Docs/wiki | Structured documentation space connected to work. |
-| ❌ Rich text pages | Flexible pages with formatted text, embeds, and structured content. |
-| ❌ Real-time co-editing | Multiple users editing shared content simultaneously. |
+| ✅ Docs/wiki | Structured documentation space connected to work. |
+| ✅ Rich text pages | Flexible pages with formatted text, embeds, and structured content. |
+| ✅ Real-time co-editing | Multiple users editing shared content simultaneously. |
 | ✅ Mentions | `@mention` notifications for people, teams, or groups. |
-| ❌ Native chat | Built-in chat or messaging. |
-| ❌ Whiteboards | Visual collaboration canvas. |
-| ❌ Meeting notes | Dedicated support for agendas, notes, or action items. |
-| ❌ Decision logs | Capturing decisions and rationale. |
+| ✅ Native chat | Built-in chat or messaging. |
+| ✅ Whiteboards | Visual collaboration canvas. |
+| ✅ Meeting notes | Dedicated support for agendas, notes, or action items. |
+| ✅ Decision logs | Capturing decisions and rationale. |
 | ✅ File sharing | Managing shared files in or alongside work items. |
-| ❌ Guest/client access | Controlled access for external collaborators. |
+| ✅ Guest/client access | Controlled access for external collaborators. |
 | ✅ Discussions/forums | Threaded or forum-style team discussion. |
-| ❌ Knowledge base | More structured, reusable knowledge repository. |
+| ✅ Knowledge base | More structured, reusable knowledge repository. |
 | ✅ Comment resolution | Ability to resolve, close, or track comment threads. |
-| ❌ Public sharing | Shareable public pages, boards, forms, portals, or views. |
+| ✅ Public sharing | Shareable public pages, boards, forms, portals, or views. |
 
 ## 6. Reporting & Analytics
 

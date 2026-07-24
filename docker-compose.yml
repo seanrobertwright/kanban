@@ -116,6 +116,26 @@ services:
       retries: 5
       start_period: 20s
 
+  realtime:
+    build:
+      context: .
+      target: builder
+    command: node realtime/server.mjs
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      DATABASE_URL: postgres://kanban:kanban_dev_password@postgres:5432/kanban
+      REALTIME_PORT: 1234
+    ports:
+      - "1234:1234"
+
 volumes:
   kanban_pgdata:
   kanban_minio:

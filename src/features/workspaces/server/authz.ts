@@ -4,6 +4,7 @@ import type { Principal } from "@/features/auth/server/principal";
 import type { WorkspaceRole } from "../types";
 
 export const ROLE_RANK: Record<WorkspaceRole, number> = {
+  guest: -1,
   viewer: 0,
   member: 1,
   admin: 2,

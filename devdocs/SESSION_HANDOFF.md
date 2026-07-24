@@ -1,4 +1,40 @@
-# Session Handoff — Feature Breadth Sweep
+# Session Handoff — Phase 3 Complete
+
+**Date:** 2026-07-23
+
+## Phase 3 delivery
+
+Phase 3 Knowledge & Collaboration is now delivered in migrations **056–061**:
+
+- Docs, wiki hierarchy, meeting and decision templates, revisions, Markdown rendering,
+  published full-text search, and promoting meeting action items into board tasks.
+- A self-hosted Yjs + y-websocket service (`npm run realtime`) with HMAC-scoped,
+  expiring document tickets, durable PostgreSQL update logs and snapshots, and guest
+  object-share checks.
+- Native polling chat channels/messages, private-channel membership enforcement, and
+  threaded message storage.
+- Self-hosted Excalidraw whiteboards persisted as scene JSON, including task-card
+  elements linked with their task id.
+- Guest workspace role plus per-doc/board/form object shares and revocable, expiring,
+  unguessable public document/board read links.
+
+## Verification
+
+`npx tsc --noEmit`, targeted Phase 3 tests (8), `npm run build`, and the full suite
+all pass: **91 test files / 689 tests**. The repository-wide eslint command remains
+blocked by pre-existing errors in generated design-synthesis material and legacy
+components; Phase 3 lint issues were cleaned where surfaced.
+
+## Run notes
+
+Apply migrations with `npm run db:migrate`; `npm run realtime` loads `.env.local`
+automatically, or accepts the same `DATABASE_URL` and `BETTER_AUTH_SECRET` as the
+Next app through its environment. Set
+`NEXT_PUBLIC_REALTIME_URL` when the websocket service is not at `ws://localhost:1234`.
+
+---
+
+# Prior Handoff — Feature Breadth Sweep
 
 **Date:** 2026-07-19 · **Branch:** master
 

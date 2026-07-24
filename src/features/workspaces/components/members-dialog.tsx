@@ -18,9 +18,10 @@ import { Label } from "@/shared/ui/label";
 import * as api from "../client/api";
 import type { Invitation, Member, WorkspaceMembership, WorkspaceRole } from "../types";
 
-const ROLES: WorkspaceRole[] = ["owner", "admin", "member", "viewer"];
+const ROLES: WorkspaceRole[] = ["owner", "admin", "member", "viewer", "guest"];
 
 const ROLE_HINT: Record<WorkspaceRole, string> = {
+  guest: "Only objects explicitly shared with them",
   owner: "Full control, including members and deletion",
   admin: "Manage boards and members",
   member: "Create and edit tasks",

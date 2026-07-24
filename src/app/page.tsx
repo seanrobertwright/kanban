@@ -27,6 +27,9 @@ import {
 import { listSavedViews } from "@/features/views/server/repository";
 import { listTemplates } from "@/features/templates/server/repository";
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
+import { DocsButton } from "@/features/docs/components/docs-dialog";
+import { ChatButton } from "@/features/chat/components/chat-dialog";
+import { WhiteboardsButton } from "@/features/whiteboards/components/whiteboards-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -113,6 +116,12 @@ export default async function Home({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <DocsButton
+            workspaceId={data.board.workspaceId}
+            canManage={canEdit}
+          />
+          <ChatButton workspaceId={data.board.workspaceId} canEdit={canEdit} />
+          <WhiteboardsButton boardId={data.board.id} canEdit={canEdit} />
           <ProgramsButton
             workspaceId={data.board.workspaceId}
             canManage={canDeleteColumns}

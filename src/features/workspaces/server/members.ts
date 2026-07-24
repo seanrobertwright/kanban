@@ -8,7 +8,7 @@ import {
 import { AuthzError, requireWorkspaceRole, ROLE_RANK } from "./authz";
 import type { Invitation, Member, WorkspaceRole } from "../types";
 
-const ROLES: WorkspaceRole[] = ["owner", "admin", "member", "viewer"];
+const ROLES: WorkspaceRole[] = ["owner", "admin", "member", "viewer", "guest"];
 
 export function isWorkspaceRole(value: unknown): value is WorkspaceRole {
   return typeof value === "string" && ROLES.includes(value as WorkspaceRole);

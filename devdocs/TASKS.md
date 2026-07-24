@@ -689,6 +689,16 @@ tsc/eslint/build clean per feature.
       throw, non-member + unknown-connection refused). tsc/eslint/build clean.
       **Flips the Repository browsing scoreboard row** (102 ✅ / 30 ❌).
 
+## Phase 3 — complete
+
+**Knowledge & Collaboration (3.0–3.10) is complete.** Docs/wiki supports page,
+meeting, and decision templates, Markdown rendering, revisions, published search,
+and meeting-action promotion. A separate Yjs WebSocket process persists CRDT update
+logs and compacted snapshots. Native polling chat, self-hosted Excalidraw boards with
+task cards, guest object shares, and revocable tokenized public document/board pages
+are available. Migrations 056–061 are applied locally; run `npm run realtime` beside
+the app for collaborative editing.
+
 ## Phase 2 — complete
 
 **All ten Phase 2 rocks (2.0–2.10) plus the pulled-forward 6.5 have shipped.** The

@@ -1,0 +1,7 @@
+import { getSessionFromRequest, unauthorized } from "@/features/auth/server/session";
+import { authzErrorResponse } from "@/features/workspaces/server/authz";
+import { createWhiteboard,listWhiteboards,updateWhiteboard } from "./repository";
+const bad=(error:string)=>Response.json({error},{status:400});
+export async function list(request:Request,id:string){const s=await getSessionFromRequest(request);const boardId=Number(id);if(!s)return unauthorized();if(!Number.isInteger(boardId))return bad("Invalid board id");try{return Response.json(await listWhiteboards(s.user.id,boardId));}catch(e){return authzErrorResponse(e);}}
+export async function create(request:Request,id:string){const s=await getSessionFromRequest(request);const boardId=Number(id);const p=await request.json().catch(()=>null);if(!s)return unauthorized();if(!Number.isInteger(boardId)||!p||typeof p.title!=="string"||!p.title.trim())return bad("title is required");try{return Response.json(await createWhiteboard(s.user.id,boardId,p.title),{status:201});}catch(e){return authzErrorResponse(e);}}
+export async function update(request:Request,id:string){const s=await getSessionFromRequest(request);const whiteboardId=Number(id);const p=await request.json().catch(()=>null);if(!s)return unauthorized();if(!Number.isInteger(whiteboardId)||!p||!Array.isArray(p.scene))return bad("scene must be an array");try{return Response.json(await updateWhiteboard(s.user.id,whiteboardId,p.scene));}catch(e){return authzErrorResponse(e);}}

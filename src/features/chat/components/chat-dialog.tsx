@@ -1,0 +1,23 @@
+"use client";
+
+import { MessageCircle, Send } from "lucide-react";
+import { useEffect, useState } from "react";
+import { RichText } from "@/shared/ui/rich-text";
+import { Button } from "@/shared/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { Input } from "@/shared/ui/input";
+import { Textarea } from "@/shared/ui/textarea";
+import type { Channel, ChatMessage } from "../types";
+
+async function json<T>(response:Response):Promise<T>{if(!response.ok){const b=await response.json().catch(()=>null);throw new Error(b?.error??"Request failed");}return response.json();}
+export function ChatButton({workspaceId,canEdit}:{workspaceId:string;canEdit:boolean}){const[open,setOpen]=useState(false);return <><Button variant="ghost" size="sm" className="text-muted-foreground" onClick={()=>setOpen(true)}><MessageCircle/> Chat</Button><ChatDialog workspaceId={workspaceId} canEdit={canEdit} open={open} onOpenChange={setOpen}/></>}
+function ChatDialog({workspaceId,canEdit,open,onOpenChange}:{workspaceId:string;canEdit:boolean;open:boolean;onOpenChange:(v:boolean)=>void}){
+ const[channels,setChannels]=useState<Channel[]>([]);const[selected,setSelected]=useState<Channel|null>(null);const[messages,setMessages]=useState<ChatMessage[]>([]);const[body,setBody]=useState("");const[name,setName]=useState("");const[error,setError]=useState<string|null>(null);
+ async function loadChannels(){const next=await json<Channel[]>(await fetch(`/api/workspaces/${workspaceId}/channels`,{cache:"no-store"}));setChannels(next);setSelected(current=>next.find(x=>x.id===current?.id)??next[0]??null);}
+ async function loadMessages(id:number){setMessages(await json<ChatMessage[]>(await fetch(`/api/channels/${id}/messages`,{cache:"no-store"})));}
+ useEffect(()=>{if(!open)return;const t=setTimeout(()=>void loadChannels().catch(e=>setError(e.message)),0);return()=>clearTimeout(t);},[open,workspaceId]);
+ useEffect(()=>{if(!selected)return;const first=setTimeout(()=>void loadMessages(selected.id).catch(e=>setError(e.message)),0);const t=setInterval(()=>void loadMessages(selected.id).catch(()=>{}),5000);return()=>{clearTimeout(first);clearInterval(t);};},[selected?.id]);
+ async function create(){if(!name.trim())return;try{const c=await json<Channel>(await fetch(`/api/workspaces/${workspaceId}/channels`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})}));setChannels(x=>[...x,c]);setSelected(c);setName("");}catch(e){setError(e instanceof Error?e.message:"Could not create channel");}}
+ async function send(){if(!selected||!body.trim())return;try{const m=await json<ChatMessage>(await fetch(`/api/channels/${selected.id}/messages`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({body})}));setMessages(x=>[...x,m]);setBody("");}catch(e){setError(e instanceof Error?e.message:"Could not send message");}}
+ return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Chat</DialogTitle><DialogDescription>Workspace channels. Messages poll every five seconds.</DialogDescription></DialogHeader>{error&&<p role="alert" className="text-sm text-destructive">{error}</p>}<div className="grid min-h-80 grid-cols-[10rem_1fr] gap-3"><aside className="grid content-start gap-1 border-r pr-3">{channels.map(c=><button key={c.id} className={`rounded px-2 py-1 text-left text-sm ${selected?.id===c.id?"bg-muted font-medium":"hover:bg-muted"}`} onClick={()=>setSelected(c)}># {c.name}</button>)}{canEdit&&<div className="mt-2 flex gap-1"><Input aria-label="Channel name" value={name} onChange={e=>setName(e.target.value)} placeholder="new-channel"/><Button size="sm" onClick={()=>void create()}>Add</Button></div>}</aside><section className="flex min-w-0 flex-col gap-2">{selected?<><div className="min-h-56 flex-1 space-y-3 overflow-y-auto rounded border p-3">{messages.length?messages.map(m=><article key={m.id} className={m.parentId?"ml-5 border-l pl-3":""}><p className="text-xs text-muted-foreground">{m.authorId} · {new Date(m.createdAt).toLocaleTimeString()}</p><RichText text={m.body}/></article>):<p className="text-sm text-muted-foreground">No messages yet.</p>}</div>{canEdit&&<div className="flex gap-2"><Textarea aria-label="Message" value={body} onChange={e=>setBody(e.target.value)} className="min-h-14" placeholder="Write a message…"/><Button size="sm" onClick={()=>void send()}><Send/> Send</Button></div>}</>:<p className="text-sm text-muted-foreground">Create a channel.</p>}</section></div></DialogContent></Dialog>;
+}
