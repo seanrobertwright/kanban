@@ -5,7 +5,7 @@ Companion workbook: `task_management_systems_comparison.xlsx`
 
 This document summarizes the 140 feature criteria used in the task management systems comparison workbook. The features are grouped into 10 capability areas so the workbook can be read as both a vendor comparison and a reference model for what modern task, project, workflow, and AI-native work systems can provide.
 
-**Implementation status (2026-07-24):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **126 ✅ / 6 ❌ / 8 ⛔**. Workflow & Automation (15/15), Core Work Items (14/14), Planning & Views (16/16), Agile & Product (14/14), Enterprise & Security (16/16), and Developer & DevOps (13/13) are fully ✅. Phase 7 adds the five first-party integrations below; Phase 8 plugins/extensions and the remaining AI rocks are the open implementation work.
+**Implementation status (2026-07-24):** each feature row below is marked against this repository's kanban app — ✅ means native support is implemented and tested in this codebase; ❌ means not yet implemented but buildable (specced in `../devdocs/SPEC.md`); ⛔ means **out of scope** — it cannot be delivered as application code in this repo, because it is a third-party certification (SOC 2, ISO 27001, HIPAA), an operational/hosting commitment (published uptime/SLA, data residency), or another platform's hosted catalog (a native Zapier/Make connector, an app marketplace). Current tally: **132 ✅ / 0 ❌ / 8 ⛔**. All ten capability areas are now fully resolved: every buildable feature is ✅ and the remaining eight rows are ⛔. This includes the Phase 8 local plugin/extension framework (migration 071) and all AI & Agentic rocks.
 
 ## Scoring Scale
 
@@ -218,7 +218,7 @@ These features capture whether the platform can connect to the broader operating
 | ⛔ Make | Make connector support. *(A native connector lives in Make's hosted catalog; covered in practice by our generic webhooks + REST API.)* |
 | ✅ n8n | n8n connector support or practical API/webhook compatibility. |
 | ⛔ Marketplace/apps | Vendor or ecosystem app marketplace. *(Requires a central hosted app catalog; N/A for a single-tenant self-hosted product.)* |
-| ❌ Plugin/extensions | Extension model, power-ups, packs, plugins, or add-ons. |
+| ✅ Plugin/extensions | Extension model, power-ups, packs, plugins, or add-ons. Local extension framework (8.1, migration 071): a workspace-installed **manifest** (`https`-only URL, validated `name`, versioned) registers third-party UI into named slots (`task_panel`, `board_action`, `card_badge`, `custom_field_renderer`) with capability-gated data access (`task.read`). The extension's UI is sandboxed and its reads mediated by the scoped bridge (the two-door discipline applied to third-party code). Managed at `/api/workspaces/[id]/extensions`, surfaced per task at `/api/tasks/[id]/extensions`. Owner installs. |
 | ✅ BI/data export | Data export or BI integration for analytics. |
 
 ## 10. AI & Agentic
@@ -231,12 +231,12 @@ These features measure how far a system has moved beyond passive task tracking i
 | ✅ AI task creation | Creating tasks from prompts, notes, messages, meetings, or documents. |
 | ✅ AI project generation | Generating project plans, workflows, subtasks, or structures from goals. |
 | ✅ AI prioritization | AI-assisted ranking, triage, scoring, or prioritization. |
-| ❌ AI scheduling | AI-based calendar, deadline, workload, or task scheduling. |
-| ❌ Risk prediction | AI-assisted risk, delay, blocker, or delivery prediction. |
-| ❌ AI search/Q&A | Natural-language search or question answering over workspace knowledge. |
-| ❌ AI workflow builder | AI-assisted creation of workflows, automations, apps, or processes. |
+| ✅ AI scheduling | AI-based calendar, deadline, workload, or task scheduling. `proposeSchedule` (4.1, `board/lib/schedule-proposal.ts`) runs the critical-path scheduler over member capacity and returns proposed `start_date`/`due_date` per task with reasons, as a reviewable changeset the human explicitly applies (served at `/api/board/[id]/schedule`). The deterministic core keeps every date explainable. |
+| ✅ Risk prediction | AI-assisted risk, delay, blocker, or delivery prediction. `assessRisk` (4.2, `board/lib/risk.ts`) derives a low/medium/high level per task from age-in-column, overdue slope, and blocking edges over the analytics replay — pure and unit-tested, no model needed for the signal — surfaced as a risk chip in Insights. |
+| ✅ AI search/Q&A | Natural-language search or question answering over workspace knowledge. Workspace Q&A (4.3, `POST /api/workspaces/[id]/knowledge-query`) retrieves authorized task, comment, and published-document evidence with PostgreSQL full-text search, produces a deterministic cited answer, and exposes sources in the Ask dialog. The retrieval boundary is viewer authorization for the requested workspace; a future embeddings provider can sit behind this same citation contract. |
+| ✅ AI workflow builder | AI-assisted creation of workflows, automations, apps, or processes. `draftAutomation` (4.4, `automations/lib/draft.ts`) turns a natural-language prompt + the board's columns into a valid `automation_rule` (trigger + conditions + actions), presented in the Automations builder for an admin to review and enable — generation, never silent activation. Composes Phase 1's engine. |
 | ✅ Configurable AI agents | User-configurable agents that can take actions or perform specialized work. |
-| ❌ Meeting notes to tasks | Extracting action items from meetings or transcripts. |
+| ✅ Meeting notes to tasks | Extracting action items from meetings or transcripts. `extractMeetingActions` (4.5, `docs/lib/meeting-actions.ts`) parses a meeting doc (3.4) into reviewable action candidates with owner + due-date hints; a member explicitly promotes an item through the normal `createTask` gate, with the created task noting its source meeting doc. |
 | ✅ Automated status updates | AI-generated status reports, summaries, or progress updates. |
 | ✅ Human/agent resource planning | Planning work across both human contributors and AI/agent capacity. |
 | ✅ AI governance/admin controls | Admin controls for AI access, permissions, data use, or governance. |

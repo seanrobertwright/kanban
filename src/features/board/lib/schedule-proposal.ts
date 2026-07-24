@@ -4,7 +4,18 @@ export interface SchedulableTask { id: number; title: string; estimate: number |
 export interface ScheduleProposal { taskId: number; startDate: string; dueDate: string; reasons: string[]; }
 
 /** Deterministic proposal only: dependencies win, then each assignee is sequenced. */
-export function proposeSchedule(tasks: SchedulableTask[], edges: { taskId: number; dependsOnId: number }[], start = new Date().toISOString().slice(0, 10)): ScheduleProposal[] {
+/**
+ * `weeklyPointsByAssignee` makes the otherwise deterministic plan capacity
+ * aware. A task's estimate remains its point demand; the member's weekly budget
+ * turns that demand into a calendar duration. Missing/zero capacity deliberately
+ * preserves the legacy one-point-per-day proposal rather than inventing a budget.
+ */
+export function proposeSchedule(
+  tasks: SchedulableTask[],
+  edges: { taskId: number; dependsOnId: number }[],
+  start = new Date().toISOString().slice(0, 10),
+  weeklyPointsByAssignee: ReadonlyMap<string, number> = new Map()
+): ScheduleProposal[] {
   const byId = new Map(tasks.map(t => [t.id, t]));
   const blockers = new Map<number, number[]>();
   for (const edge of edges) if (byId.has(edge.taskId) && byId.has(edge.dependsOnId)) (blockers.get(edge.taskId) ?? blockers.set(edge.taskId, []).get(edge.taskId)!).push(edge.dependsOnId);
@@ -14,7 +25,13 @@ export function proposeSchedule(tasks: SchedulableTask[], edges: { taskId: numbe
     visiting.add(task.id); let date = task.startDate && task.startDate > start ? task.startDate : start; const reasons: string[] = [];
     for (const id of blockers.get(task.id) ?? []) { const end = visit(byId.get(id)!, visiting); if (end >= date) { date = addDays(end, 1); reasons.push(`after dependency #${id}`); } }
     const lane = task.assigneeId ? lanes.get(task.assigneeId) : undefined; if (lane && lane >= date) { date = addDays(lane, 1); reasons.push("after assignee's planned work"); }
-    const days = Math.max(1, task.estimate ?? 1); const dueDate = addDays(date, days - 1); ends.set(task.id, dueDate); if (task.assigneeId) lanes.set(task.assigneeId, dueDate); visiting.delete(task.id);
+    const estimate = Math.max(1, task.estimate ?? 1);
+    const weeklyPoints = task.assigneeId ? weeklyPointsByAssignee.get(task.assigneeId) : undefined;
+    const days = weeklyPoints && weeklyPoints > 0
+      ? Math.max(1, Math.ceil((estimate / weeklyPoints) * 7))
+      : estimate;
+    if (weeklyPoints && weeklyPoints > 0) reasons.push(`fits ${estimate} point${estimate === 1 ? "" : "s"} into ${weeklyPoints} points/week capacity`);
+    const dueDate = addDays(date, days - 1); ends.set(task.id, dueDate); if (task.assigneeId) lanes.set(task.assigneeId, dueDate); visiting.delete(task.id);
     out.push({ taskId: task.id, startDate: date, dueDate, reasons: reasons.length ? reasons : ["next available schedule slot"] }); return dueDate;
   };
   for (const task of tasks) visit(task); return out.sort((a,b) => a.startDate.localeCompare(b.startDate) || a.taskId-b.taskId);

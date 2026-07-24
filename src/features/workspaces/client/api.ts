@@ -8,6 +8,7 @@ import type {
 } from "../types";
 import type { AdminSummary, DiscoveryHit, IdentityProvider, IpAllowlistEntry, LegalHold, PermissionGrant, RetentionPolicy } from "@/features/admin/types";
 import type { IntegrationConnection } from "@/features/integrations/types";
+import type { ExtensionManifest, WorkspaceExtension } from "@/features/extensions/types";
 
 export interface MembersResponse {
   members: Member[];
@@ -133,3 +134,6 @@ export async function generateScimToken(workspaceId: string, providerId: string)
 export async function fetchIntegrations(workspaceId: string): Promise<IntegrationConnection[]> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/integrations`, { cache: "no-store" })); }
 export async function addTeamsWebhook(workspaceId: string, input: { channelId: string; webhookUrl: string; name?: string }): Promise<IntegrationConnection> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/integrations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })); }
 export async function removeIntegration(workspaceId: string, connectionId: number): Promise<void> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/integrations/${connectionId}`, { method: "DELETE" })); }
+export async function fetchExtensions(workspaceId: string): Promise<WorkspaceExtension[]> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/extensions`, { cache: "no-store" })); }
+export async function installExtension(workspaceId: string, manifest: ExtensionManifest): Promise<WorkspaceExtension> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/extensions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(manifest) })); }
+export async function removeExtension(workspaceId: string, id: number): Promise<void> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/extensions/${id}`, { method: "DELETE" })); }

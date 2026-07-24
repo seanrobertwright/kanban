@@ -31,6 +31,8 @@ import { DocsButton } from "@/features/docs/components/docs-dialog";
 import { ChatButton } from "@/features/chat/components/chat-dialog";
 import { WhiteboardsButton } from "@/features/whiteboards/components/whiteboards-dialog";
 import { AdminConsoleButton } from "@/features/admin/components/admin-console-dialog";
+import { BoardExtensionActions } from "@/features/extensions/components/board-extension-actions";
+import { KnowledgeButton } from "@/features/knowledge/components/knowledge-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -117,6 +119,8 @@ export default async function Home({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <BoardExtensionActions workspaceId={data.board.workspaceId} />
+          <KnowledgeButton workspaceId={data.board.workspaceId} />
           <DocsButton
             workspaceId={data.board.workspaceId}
             canManage={canEdit}

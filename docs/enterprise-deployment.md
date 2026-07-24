@@ -97,3 +97,18 @@ Drive metadata read plus Calendar write access. Microsoft requires
 Task endpoints create Drive/OneDrive/SharePoint reference links and synchronize
 start/due dates to the connected user's primary calendar. They do not proxy or
 store third-party file bytes, and calendar syncs are idempotent per task.
+
+## Local extensions
+
+Extensions are installed per workspace by an owner through Enterprise controls;
+there is no hosted marketplace. An install manifest requires an HTTPS `url`, a
+stable `name`, one or more named slots (`task_panel`, `board_action`,
+`card_badge`, or `custom_field_renderer`), and explicitly granted capabilities.
+The current bridge exposes only `task.read` and returns the current task only
+after the signed-in viewer has passed the normal task authorization check.
+
+Extension UIs run in sandboxed iframes without same-origin or popup privileges.
+The host accepts bridge messages only from the installed extension's exact
+origin and iframe window. Treat every extension URL as active third-party code:
+review and control it like any other vendor, and remove its manifest to disable
+it immediately for the workspace.

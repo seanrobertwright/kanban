@@ -40,6 +40,7 @@ import {
 import { LabelChip } from "@/features/labels/components/label-chip";
 import type { Label as LabelData } from "@/features/labels/types";
 import { formatDueDate, useToday } from "@/shared/lib/due-date";
+import { TaskExtensionPanels } from "@/features/extensions/components/task-extension-panels";
 import { PRIORITY_LABELS, RECURRENCE_LABELS, TASK_TYPE_LABELS } from "../types";
 import type { Task, TaskPriority, TaskType } from "../types";
 
@@ -211,6 +212,7 @@ export function TaskCard({
           <PriorityDot priority={task.priority} />
           <TypeMark type={task.type} />
           <RiskMark task={task} />
+          <TaskExtensionPanels taskId={task.id} slot="card_badge" compact />
           {task.title}
         </CardTitle>
         {(onEdit || onDelete) && (
