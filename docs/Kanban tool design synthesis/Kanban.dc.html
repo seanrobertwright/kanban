@@ -438,7 +438,7 @@
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#00e5ff&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#00e5ff&quot;,&quot;#39ff9e&quot;,&quot;#ff4fd8&quot;,&quot;#ff9445&quot;,&quot;#bfa0ff&quot;]}}">
 class Component extends DCLogic {
-  state = { view: 'board', selId: null, palette: false };
+  state = { view: 'board', selId: null, palette: false, login: false };
 
   componentDidMount() {
     this._key = (e) => {
@@ -513,6 +513,58 @@ class Component extends DCLogic {
     };
   }
 
+  timelineData(flat, accent) {
+    const days = ['M','T','W','T','F','S','S','M','T','W','T','F','S','S'];
+    const todayIdx = 4;
+    const dayCols = days.map((d, i) => ({
+      label: d,
+      style: `flex:1;text-align:center;padding:8px 0;font-family:'Share Tech Mono',monospace;font-size:10px;color:${i === todayIdx ? '#00e5ff' : '#4a6577'};border-left:1px solid rgba(0,229,255,${i === todayIdx ? '0.3' : '0.05'});${i === todayIdx ? 'background:rgba(0,229,255,0.06);' : ''}`,
+    }));
+    const spans = [
+      { start: 0, len: 5, crit: false }, { start: 1, len: 4, crit: true }, { start: 2, len: 6, crit: true },
+      { start: 3, len: 3, crit: false }, { start: 5, len: 4, crit: false }, { start: 6, len: 5, crit: true },
+      { start: 8, len: 4, crit: false },
+    ];
+    const timelineRows = flat.slice(0, 7).map((t, i) => {
+      const s = spans[i] || { start: i % 6, len: 3, crit: false };
+      const left = (s.start / 14) * 100, width = (s.len / 14) * 100;
+      const grad = s.crit ? 'linear-gradient(90deg,#ff4d5e,#ff9445)' : 'linear-gradient(90deg,#0577b8,#00e5ff)';
+      const glow = s.crit ? 'rgba(255,77,94,0.5)' : 'rgba(0,229,255,0.45)';
+      return {
+        key: t.key, title: t.title, points: t.points,
+        trackStyle: 'flex:1;position:relative;height:100%;display:flex;align-items:center;',
+        barStyle: `position:absolute;left:${left}%;width:${width}%;height:22px;border-radius:5px;background:${grad};box-shadow:0 0 12px ${glow};display:flex;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;color:#04060c;`,
+      };
+    });
+    return { dayCols, timelineRows };
+  }
+
+  dashboardData(flat) {
+    const stats = [
+      { label: 'Sprint Velocity', value: '68', sub: '+12 vs last sprint', color: '#00e5ff', glow: 'rgba(0,229,255,0.5)' },
+      { label: 'Completed', value: '41%', sub: '28 / 68 points', color: '#39ff9e', glow: 'rgba(57,255,158,0.5)' },
+      { label: 'In Progress', value: '3', sub: 'WIP limit 4', color: '#ff9445', glow: 'rgba(255,148,69,0.5)' },
+      { label: 'At Risk', value: '2', sub: 'blocked / overdue', color: '#ff4d5e', glow: 'rgba(255,77,94,0.5)' },
+    ];
+    const projectsRoll = [
+      { name: 'Mobile App', pct: 62, color: '#00e5ff' },
+      { name: 'Web Platform', pct: 48, color: '#39ff9e' },
+      { name: 'Design System', pct: 81, color: '#ff4fd8' },
+      { name: 'Growth Experiments', pct: 33, color: '#ff9445' },
+      { name: 'Infrastructure', pct: 57, color: '#bfa0ff' },
+    ].map(p => ({ ...p, barStyle: `height:100%;width:${p.pct}%;background:${p.color};border-radius:3px;box-shadow:0 0 8px ${p.color};` }));
+    const risk = [
+      { key: 'PAY-097', title: 'Tokenize stored cards & migrate vault', tag: 'BLOCKED', reason: 'rollback path', c: '#ff4d5e' },
+      { key: 'PAY-109', title: 'Add 3-D Secure step-up authentication', tag: 'OVERDUE', reason: 'due Jul 26', c: '#ff9445' },
+    ];
+    const atRisk = risk.map(a => ({
+      ...a,
+      onClick: () => this.setState({ selId: a.key, view: 'board' }),
+      pill: `font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:0.5px;padding:2px 8px;border-radius:4px;background:${a.c}22;color:${a.c};border:1px solid ${a.c}55;`,
+    }));
+    return { stats, projectsRoll, atRisk };
+  }
+
   renderVals() {
     const accent = this.props.accentColor || '#00e5ff';
     const { cols } = this.data();
@@ -571,10 +623,15 @@ class Component extends DCLogic {
       views,
       showBoard: view === 'board',
       showList: view === 'list',
-      showStub: view === 'timeline' || view === 'dashboard',
-      stubName: view === 'timeline' ? 'Timeline' : 'Dashboard',
+      showTimeline: view === 'timeline',
+      showDashboard: view === 'dashboard',
       columns,
       rows: flat,
+      ...this.timelineData(flat, accent),
+      ...this.dashboardData(flat),
+      loginOpen: this.state.login,
+      openLogin: () => this.setState({ login: true }),
+      closeLogin: () => this.setState({ login: false }),
       projects: [
         { name: 'Mobile App', color: '#00e5ff', count: 42 },
         { name: 'Web Platform', color: '#39ff9e', count: 28 },
