@@ -52,7 +52,7 @@ interface LabelChipProps {
 export function LabelChip({ name, color = "slate" }: LabelChipProps) {
   return (
     <span
-      className={`inline-flex max-w-full items-center truncate rounded px-1.5 py-0.5 text-[10px] font-medium leading-4 ${
+      className={`inline-flex max-w-full items-center truncate rounded px-1.5 py-0.5 text-[10px] font-medium leading-4 dark:border dark:border-current/25 dark:font-mono dark:font-normal dark:tracking-[0.5px] dark:uppercase ${
         CHIP_STYLES[color] ?? CHIP_STYLES.slate
       }`}
     >

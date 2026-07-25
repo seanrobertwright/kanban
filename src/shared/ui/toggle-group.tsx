@@ -36,7 +36,7 @@ function ToggleGroupItem({
     <TogglePrimitive
       data-slot="toggle-group-item"
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground select-none outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-pressed:bg-background data-pressed:text-foreground data-pressed:shadow-sm data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4",
+        "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground select-none outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-pressed:bg-background data-pressed:text-foreground data-pressed:shadow-sm data-disabled:pointer-events-none data-disabled:opacity-50 dark:tracking-wide dark:uppercase dark:data-pressed:bg-primary/12 dark:data-pressed:text-primary dark:data-pressed:shadow-[0_0_10px_rgba(0,229,255,0.25)] [&_svg]:pointer-events-none [&_svg]:size-4",
         className
       )}
       {...props}

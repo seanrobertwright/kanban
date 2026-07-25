@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -123,6 +123,20 @@ export function BoardColumn({
 
   const overLimit = column.wipLimit !== null && tasks.length > column.wipLimit;
 
+  // The design synthesis gives every column a glowing identity dot. Colours
+  // are presentation, not data: the done column is always green, the rest
+  // draw a stable accent from the neon family by column id.
+  const COLUMN_ACCENTS = [
+    "var(--neon-cyan)",
+    "var(--neon-orange)",
+    "var(--neon-magenta)",
+    "var(--neon-purple)",
+    "var(--neon-green)",
+  ];
+  const accent = isDone
+    ? "var(--neon-green)"
+    : COLUMN_ACCENTS[column.id % COLUMN_ACCENTS.length];
+
   return (
     <section className="flex w-72 shrink-0 flex-col rounded-xl border bg-muted/50">
       <header className="flex items-center justify-between gap-1 px-3 py-2.5">
@@ -146,7 +160,20 @@ export function BoardColumn({
           />
         ) : (
           <>
-            <h2 className="flex items-center gap-1 truncate text-sm font-semibold" title={column.title}>
+            <h2
+              className="flex items-center gap-1.5 truncate text-[13px] font-bold tracking-[0.08em] uppercase"
+              title={column.title}
+            >
+              <span
+                className="glow-sm size-2 shrink-0 rounded-xs"
+                style={
+                  {
+                    background: accent,
+                    "--glow-color": accent,
+                  } as CSSProperties
+                }
+                aria-hidden
+              />
               {/* The completion column (020). The check marks it at a glance; the
                   label carries the meaning for anyone who cannot see the icon, and
                   the title says what dropping a recurring card here does. */}
@@ -182,9 +209,9 @@ export function BoardColumn({
                  sr-only text says it for anyone who cannot see the colour. */
               <span
                 className={cn(
-                  "rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums",
+                  "px-1 font-mono text-xs tabular-nums",
                   overLimit
-                    ? "font-medium text-destructive"
+                    ? "rounded-sm border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 font-medium text-destructive"
                     : "text-muted-foreground"
                 )}
                 title={

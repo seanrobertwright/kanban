@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-rajdhani);
+  --font-mono: var(--font-share-tech-mono);
+  --font-heading: var(--font-orbitron);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,6 +39,12 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-neon-cyan: var(--neon-cyan);
+  --color-neon-magenta: var(--neon-magenta);
+  --color-neon-green: var(--neon-green);
+  --color-neon-orange: var(--neon-orange);
+  --color-neon-red: var(--neon-red);
+  --color-neon-purple: var(--neon-purple);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,75 +54,92 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Theme inspired by dynamous.ai: near-black navy surfaces, electric
-   blue (#0080ff) primary, Inter, 12px radius, soft blue glow. */
+/* Neon-grid theme (docs/Kanban tool design synthesis): near-black #04060c
+   surfaces over an animated cyan grid floor, electric cyan #00e5ff primary,
+   magenta #ff4fd8 reserved for AI surfaces, and a fixed accent family
+   (green/orange/red/purple) for status. Rajdhani UI text, Share Tech Mono
+   data/labels, Orbitron brand headings. */
 :root {
-  --background: oklch(0.99 0.002 260);
-  --foreground: oklch(0.15 0.012 265);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.012 265);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.012 265);
-  --primary: oklch(0.586 0.217 259);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.96 0.01 255);
-  --secondary-foreground: oklch(0.25 0.03 262);
-  --muted: oklch(0.96 0.008 255);
-  --muted-foreground: oklch(0.52 0.022 260);
-  --accent: oklch(0.94 0.028 252);
-  --accent-foreground: oklch(0.42 0.15 259);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.918 0.012 255);
-  --input: oklch(0.918 0.012 255);
-  --ring: oklch(0.586 0.217 259);
-  --chart-1: oklch(0.586 0.217 259);
-  --chart-2: oklch(0.707 0.14 255);
-  --chart-3: oklch(0.51 0.2 270);
-  --chart-4: oklch(0.62 0.17 240);
-  --chart-5: oklch(0.44 0.16 265);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.98 0.005 258);
-  --sidebar-foreground: oklch(0.15 0.012 265);
-  --sidebar-primary: oklch(0.586 0.217 259);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.94 0.028 252);
-  --sidebar-accent-foreground: oklch(0.42 0.15 259);
-  --sidebar-border: oklch(0.918 0.012 255);
-  --sidebar-ring: oklch(0.586 0.217 259);
+  /* The light theme keeps usable, softened counterparts of the same hues so
+     the toggle still works; the design language itself is dark-first. */
+  --background: #f4f9fb;
+  --foreground: #10222c;
+  --card: #ffffff;
+  --card-foreground: #10222c;
+  --popover: #ffffff;
+  --popover-foreground: #10222c;
+  --primary: #0092a8;
+  --primary-foreground: #ffffff;
+  --secondary: #e3eff4;
+  --secondary-foreground: #1d3844;
+  --muted: #e8f1f5;
+  --muted-foreground: #52707e;
+  --accent: #d9edf3;
+  --accent-foreground: #086476;
+  --destructive: #d4374a;
+  --border: #d3e3ea;
+  --input: #d3e3ea;
+  --ring: #0092a8;
+  --chart-1: #0092a8;
+  --chart-2: #0d9b62;
+  --chart-3: #c0399f;
+  --chart-4: #c96a1c;
+  --chart-5: #7a5bd6;
+  --neon-cyan: #0092a8;
+  --neon-magenta: #c0399f;
+  --neon-green: #0d9b62;
+  --neon-orange: #c96a1c;
+  --neon-red: #d4374a;
+  --neon-purple: #7a5bd6;
+  --radius: 0.5rem;
+  --sidebar: #eaf3f7;
+  --sidebar-foreground: #10222c;
+  --sidebar-primary: #0092a8;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #d9edf3;
+  --sidebar-accent-foreground: #086476;
+  --sidebar-border: #d3e3ea;
+  --sidebar-ring: #0092a8;
 }
 
 .dark {
-  --background: oklch(0.135 0.016 268);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.185 0.022 267);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.175 0.022 267);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.586 0.217 259);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.23 0.03 265);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.215 0.024 266);
-  --muted-foreground: oklch(0.68 0.024 258);
-  --accent: oklch(0.26 0.055 262);
-  --accent-foreground: oklch(0.84 0.07 252);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.586 0.217 259);
-  --chart-1: oklch(0.586 0.217 259);
-  --chart-2: oklch(0.707 0.14 255);
-  --chart-3: oklch(0.51 0.2 270);
-  --chart-4: oklch(0.62 0.17 240);
-  --chart-5: oklch(0.44 0.16 265);
-  --sidebar: oklch(0.165 0.02 267);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.586 0.217 259);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.26 0.055 262);
-  --sidebar-accent-foreground: oklch(0.84 0.07 252);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.586 0.217 259);
+  --background: #04060c;
+  --foreground: #d6ecf5;
+  --card: #0a121c;
+  --card-foreground: #e3f3fa;
+  --popover: #070c15;
+  --popover-foreground: #d6ecf5;
+  --primary: #00e5ff;
+  --primary-foreground: #04060c;
+  --secondary: rgba(0, 229, 255, 0.07);
+  --secondary-foreground: #c5e6f2;
+  --muted: rgba(0, 229, 255, 0.05);
+  --muted-foreground: #6b8a9c;
+  --accent: rgba(0, 229, 255, 0.1);
+  --accent-foreground: #eafcff;
+  --destructive: #ff4d5e;
+  --border: rgba(0, 229, 255, 0.16);
+  --input: rgba(0, 229, 255, 0.22);
+  --ring: #00e5ff;
+  --chart-1: #00e5ff;
+  --chart-2: #39ff9e;
+  --chart-3: #ff4fd8;
+  --chart-4: #ff9445;
+  --chart-5: #bfa0ff;
+  --neon-cyan: #00e5ff;
+  --neon-magenta: #ff4fd8;
+  --neon-green: #39ff9e;
+  --neon-orange: #ff9445;
+  --neon-red: #ff4d5e;
+  --neon-purple: #bfa0ff;
+  --sidebar: rgba(6, 10, 18, 0.92);
+  --sidebar-foreground: #9fc3d3;
+  --sidebar-primary: #00e5ff;
+  --sidebar-primary-foreground: #04060c;
+  --sidebar-accent: rgba(0, 229, 255, 0.08);
+  --sidebar-accent-foreground: #eafcff;
+  --sidebar-border: rgba(0, 229, 255, 0.16);
+  --sidebar-ring: #00e5ff;
 }
 
 @layer base {
@@ -125,24 +148,80 @@
   }
   body {
     @apply bg-background text-foreground;
+    letter-spacing: 0.2px;
   }
   html {
     @apply font-sans;
   }
-  /* Soft blue hero glow + faint indigo grid, echoing dynamous.ai */
+  /* The animated grid floor: two 1px cyan lattices panning diagonally one
+     cell every 8s. background-attachment keeps it still under scroll; the
+     animation provides the drift. */
   .dark body {
     background-image:
-      radial-gradient(
-        ellipse 90% 55% at 50% -25%,
-        oklch(0.45 0.17 262 / 22%),
-        transparent 70%
-      ),
-      linear-gradient(to right, oklch(0.6 0.12 275 / 4%) 1px, transparent 1px),
-      linear-gradient(oklch(0.6 0.12 275 / 4%) 1px, transparent 1px);
+      linear-gradient(rgba(0, 229, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 229, 255, 0.045) 1px, transparent 1px);
     background-size:
-      100% 100%,
-      44px 44px,
-      44px 44px;
-    background-attachment: fixed;
+      40px 40px,
+      40px 40px;
+    animation: gridpan 8s linear infinite;
   }
+  @keyframes gridpan {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: 40px 40px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dark body {
+      animation: none;
+    }
+  }
+  .dark ::placeholder {
+    color: #4a6577;
+  }
+  /* Slim neon scrollbars (WebKit; Firefox falls back to scrollbar-color). */
+  .dark ::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+  .dark ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(0, 229, 255, 0.18);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 229, 255, 0.4);
+    background-clip: content-box;
+  }
+  .dark * {
+    scrollbar-color: rgba(0, 229, 255, 0.25) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+/* Design-language utilities, shared by the shell and feature components. */
+@utility font-heading {
+  font-family: var(--font-heading);
+}
+@utility text-glow {
+  text-shadow: 0 0 10px color-mix(in srgb, currentColor 55%, transparent);
+}
+@utility glow-sm {
+  box-shadow: 0 0 8px color-mix(in srgb, var(--glow-color, var(--primary)) 45%, transparent);
+}
+@utility glow {
+  box-shadow: 0 0 14px color-mix(in srgb, var(--glow-color, var(--primary)) 55%, transparent);
+}
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-weight: 400;
 }

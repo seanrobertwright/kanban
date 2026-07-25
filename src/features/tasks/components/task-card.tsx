@@ -206,7 +206,7 @@ export function TaskCard({
     return field ? [{ field, value: v.value }] : [];
   });
   return (
-    <Card className="cursor-grab gap-1 py-3 active:cursor-grabbing">
+    <Card className="cursor-grab gap-1 py-3 transition-all duration-150 active:cursor-grabbing hover:-translate-y-px dark:hover:shadow-[0_0_0_1px_rgba(0,229,255,0.25),0_6px_22px_rgba(0,229,255,0.16)] dark:hover:ring-primary/55">
       <CardHeader className="px-3">
         <CardTitle className="flex items-center gap-1.5 text-sm leading-snug">
           <PriorityDot priority={task.priority} />
@@ -422,7 +422,7 @@ export function TaskCard({
                 unestimated is the default state of most cards. */}
             {task.estimate != null && (
               <span
-                className="rounded-full border px-1.5 text-xs tabular-nums text-muted-foreground"
+                className="rounded-full border px-1.5 text-xs tabular-nums text-muted-foreground dark:rounded-sm dark:border-primary/25 dark:bg-primary/10 dark:font-mono dark:text-[11px] dark:text-primary"
                 title={`Estimate: ${task.estimate} point${
                   task.estimate === 1 ? "" : "s"
                 }`}
