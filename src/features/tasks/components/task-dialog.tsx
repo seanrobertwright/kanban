@@ -399,7 +399,10 @@ export function TaskDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      {/* A right slide-over, not a centered popup (the design synthesis panel):
+          the board stays visible behind the task being edited. Overrides the
+          DialogContent centering + zoom with edge-anchoring + a slide. */}
+      <DialogContent className="top-0 right-0 left-auto h-dvh max-h-dvh w-[min(560px,92vw)] max-w-none translate-x-0 translate-y-0 rounded-none border-l sm:max-w-none data-open:zoom-in-100 data-closed:zoom-out-100 data-open:slide-in-from-right-16 data-closed:slide-out-to-right-16">
         <form onSubmit={handleSubmit} className="grid gap-4">
           <DialogHeader>
             {/* Only a subtask has a parent to go back to. The button carries the

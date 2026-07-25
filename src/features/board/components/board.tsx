@@ -27,6 +27,7 @@ import {
   Inbox,
   Landmark,
   Layers,
+  LayoutDashboard,
   LayoutTemplate,
   Lightbulb,
   List,
@@ -95,6 +96,8 @@ import {
 } from "./board-filter-bar";
 import { BacklogView } from "./backlog-view";
 import { CalendarView } from "./calendar-view";
+import { DashboardView } from "./dashboard-view";
+import { CommandPalette, type PaletteCommand } from "./command-palette";
 import { GanttView } from "./gantt-view";
 import { TimelineView } from "./timeline-view";
 import { RoadmapView } from "./roadmap-view";
@@ -561,8 +564,73 @@ export function Board({
     }
   }
 
+  // The ⌘K palette's verbs. Everything here reuses state the board already
+  // owns — a command is just a named setState — so the palette adds reach,
+  // not a second way of doing anything.
+  const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    const views: [BoardViewMode, string][] = [
+      ["board", "Go to Board"],
+      ["list", "Go to List"],
+      ["calendar", "Go to Calendar"],
+      ["timeline", "Go to Timeline"],
+      ["gantt", "Go to Gantt"],
+      ["backlog", "Go to Backlog"],
+      ["roadmap", "Go to Roadmap"],
+      ["dashboard", "Go to Dashboard"],
+    ];
+    const panels: [string, () => void][] = [
+      ["Templates", () => setTemplatesOpen(true)],
+      ["Labels", () => setLabelsOpen(true)],
+      ["Sprints", () => setSprintsOpen(true)],
+      ["Milestones", () => setMilestonesOpen(true)],
+      ["Releases", () => setReleasesOpen(true)],
+      ["Epics", () => setEpicsOpen(true)],
+      ["Objectives", () => setObjectivesOpen(true)],
+      ["Custom fields", () => setFieldsOpen(true)],
+      ["Insights", () => setInsightsOpen(true)],
+      ["Schedule", () => setScheduleOpen(true)],
+      ["Timesheet", () => setTimesheetOpen(true)],
+      ["Forms", () => setFormsOpen(true)],
+      ["Automations", () => setAutomationsOpen(true)],
+      ["Requests", () => setRequestsOpen(true)],
+      ["Capacity", () => setCapacityOpen(true)],
+      ["Budget", () => setBudgetOpen(true)],
+      ["Discovery", () => setDiscoveryOpen(true)],
+    ];
+    return [
+      ...(canEdit && cols.length > 0
+        ? [
+            {
+              id: "new-task",
+              label: "Create new task",
+              group: "Create",
+              hint: "first column",
+              run: () => setDialog({ columnId: cols[0].id }),
+            },
+          ]
+        : []),
+      ...views.map(([mode, label]) => ({
+        id: `view-${mode}`,
+        label,
+        group: "Views",
+        run: () => setView(mode),
+      })),
+      ...panels.map(([label, run]) => ({
+        id: `panel-${label}`,
+        label: `Open ${label}`,
+        group: "Panels",
+        run,
+      })),
+    ];
+  }, [canEdit, cols]);
+
   return (
     <>
+      <CommandPalette
+        commands={paletteCommands}
+        tasks={visibleTaskList}
+        onOpenTask={(task) => setDialog({ columnId: task.columnId, task })}
+      />
       {error && (
         <p
           role="alert"
@@ -626,6 +694,9 @@ export function Board({
             </ToggleGroupItem>
             <ToggleGroupItem value="roadmap">
               <MapIcon /> Roadmap
+            </ToggleGroupItem>
+            <ToggleGroupItem value="dashboard">
+              <LayoutDashboard /> Dashboard
             </ToggleGroupItem>
           </ToggleGroup>
           <Button
@@ -845,6 +916,13 @@ export function Board({
           milestones={milestones}
           epics={epics}
           onOpenMilestones={() => setMilestonesOpen(true)}
+        />
+      ) : view === "dashboard" ? (
+        <DashboardView
+          columns={cols}
+          itemsByColumn={visibleItems}
+          doneColumnId={doneColumnId}
+          onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
         />
       ) : (
         <DndContext
