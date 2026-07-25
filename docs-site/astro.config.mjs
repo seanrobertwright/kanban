@@ -37,6 +37,12 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Guide',
+					// Ten capability-area pages, ordered by their frontmatter
+					// `sidebar.order` (work items → planning → agile → … → AI).
+					items: [{ autogenerate: { directory: 'guide' } }],
+				},
+				{
 					label: 'Agents',
 					items: [
 						{ label: 'Agent HTTP API', slug: 'agents/http-api' },
