@@ -1,0 +1,41 @@
+/* The app's neon-grid design language (docs/Kanban tool design synthesis),
+   applied to Starlight's theme tokens: near-black blue surfaces, electric
+   cyan accent, and a faint grid floor in dark mode. */
+
+:root[data-theme='dark'] {
+	--sl-color-accent-low: #043a44;
+	--sl-color-accent: #00b8cc;
+	--sl-color-accent-high: #7af2ff;
+	--sl-color-bg: #04060c;
+	--sl-color-bg-nav: #060a12;
+	--sl-color-bg-sidebar: #060a12;
+	--sl-color-hairline: rgba(0, 229, 255, 0.16);
+	--sl-color-hairline-light: rgba(0, 229, 255, 0.1);
+	--sl-color-hairline-shade: rgba(0, 229, 255, 0.16);
+	--sl-color-text: #d6ecf5;
+	--sl-color-white: #eafcff;
+}
+
+:root[data-theme='dark'] body {
+	background-image:
+		linear-gradient(rgba(0, 229, 255, 0.035) 1px, transparent 1px),
+		linear-gradient(90deg, rgba(0, 229, 255, 0.035) 1px, transparent 1px);
+	background-size: 40px 40px;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #d9edf3;
+	--sl-color-accent: #0092a8;
+	--sl-color-accent-high: #086476;
+}
+
+/* Site title gets the brand treatment. */
+.site-title {
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	font-weight: 700;
+}
+:root[data-theme='dark'] .site-title {
+	color: #eafcff;
+	text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
