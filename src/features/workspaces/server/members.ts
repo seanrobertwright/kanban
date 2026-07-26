@@ -6,6 +6,7 @@ import {
   unassignFromWorkspace,
 } from "@/features/tasks/server/repository";
 import { AuthzError, requireWorkspaceRole, ROLE_RANK } from "./authz";
+import { sendInvitationEmail } from "./invitation-email";
 import type { Invitation, Member, WorkspaceRole } from "../types";
 
 const ROLES: WorkspaceRole[] = ["owner", "admin", "member", "viewer", "guest"];
@@ -144,6 +145,25 @@ export async function inviteMember(
                created_at AS "createdAt", expires_at AS "expiresAt"`,
     [randomUUID(), workspaceId, normalized, role, actorId]
   );
+
+  // Delivery is best-effort: the invitation row is the source of truth (they
+  // still join via redeemInvitations on their next sign-in), so an SMTP outage
+  // logs rather than voiding an invite that already exists. When SMTP is not
+  // configured at all, sendInvitationEmail is a silent no-op — the old behavior.
+  const workspace = await queryOne<{ name: string }>(
+    `SELECT name FROM workspace WHERE id = $1`,
+    [workspaceId]
+  );
+  try {
+    await sendInvitationEmail({
+      to: normalized,
+      workspaceName: workspace?.name ?? "a workspace",
+      role,
+    });
+  } catch (error) {
+    console.error("Invitation email failed", error);
+  }
+
   return invitation!;
 }
 

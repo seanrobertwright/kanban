@@ -33,7 +33,9 @@ import {
  *
  * The signing secret never leaves this module in the clear except on the ingress
  * path that must verify with it: CONNECTION_COLUMNS omits it, and it is stored
- * encrypted (6.5) and decrypted only in connectionForIngress.
+ * encrypted (6.5) and decrypted only in connectionForIngress. The optional
+ * browse access token (078) follows the same discipline: entered on connect,
+ * stored encrypted, omitted from every read, decrypted only by the browse proxy.
  */
 
 const CONNECTION_COLUMNS = `id, workspace_id AS "workspaceId", provider,
@@ -71,7 +73,15 @@ export async function listConnections(
 export async function createConnection(
   userId: string,
   workspaceId: string,
-  input: { provider: unknown; externalRepo?: string; installId?: string | null }
+  input: {
+    provider: unknown;
+    externalRepo?: string;
+    installId?: string | null;
+    /** Provider access token for browsing (078): a GitHub/GitLab PAT or a
+     *  Bitbucket "username:app-password". Stored encrypted, never read back.
+     *  Omitted on a rotate, the existing token is kept (COALESCE below). */
+    accessToken?: string | null;
+  }
 ): Promise<{ connection: RepoConnection; secret: string }> {
   await requireWorkspaceRole(userId, workspaceId, "admin");
   if (!isGitProvider(input.provider)) {
@@ -83,15 +93,25 @@ export async function createConnection(
   }
 
   const secret = `ghw_${randomBytes(32).toString("hex")}`;
+  const token = input.accessToken?.trim();
   const connection = (await queryOne<RepoConnection>(
     `INSERT INTO repo_connection
-       (workspace_id, provider, external_repo, install_id, secret, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6)
+       (workspace_id, provider, external_repo, install_id, secret, access_token, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (workspace_id, provider, external_repo)
      DO UPDATE SET secret = EXCLUDED.secret, install_id = EXCLUDED.install_id,
+                   access_token = COALESCE(EXCLUDED.access_token, repo_connection.access_token),
                    active = true, created_by = EXCLUDED.created_by
      RETURNING ${CONNECTION_COLUMNS}`,
-    [workspaceId, input.provider, repo, input.installId ?? null, encryptSecret(secret), userId]
+    [
+      workspaceId,
+      input.provider,
+      repo,
+      input.installId ?? null,
+      encryptSecret(secret),
+      token ? encryptSecret(token) : null,
+      userId,
+    ]
   ))!;
   return { connection, secret };
 }

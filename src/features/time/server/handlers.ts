@@ -5,7 +5,12 @@ import {
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import { addTimeEntry, deleteTimeEntry, listTaskTime } from "./repository";
-import { getBoardTimesheet } from "./timesheet";
+import {
+  getBoardTimesheet,
+  listTimesheetApprovals,
+  reviewTimesheet,
+  submitTimesheet,
+} from "./timesheet";
 
 // Reads take a principal (an agent reasoning about a task may read its
 // hours); writes take a session — minutes are a human's ledger, an agent's
@@ -39,12 +44,72 @@ export async function handleBoardTimesheet(request: Request, id: string) {
 
   const url = new URL(request.url);
   try {
-    return Response.json(
-      await getBoardTimesheet(principal, boardId, {
-        from: url.searchParams.get("from"),
-        to: url.searchParams.get("to"),
-      })
+    const sheet = await getBoardTimesheet(principal, boardId, {
+      from: url.searchParams.get("from"),
+      to: url.searchParams.get("to"),
+    });
+    // The verdicts ride down with the grid they annotate (083). One response
+    // rather than two round trips, because a grid rendered before its approval
+    // state arrives shows every week as unreviewed for a frame — which is a
+    // different claim from "not yet loaded".
+    const approvals = await listTimesheetApprovals(
+      principal,
+      boardId,
+      sheet.from,
+      sheet.to
     );
+    return Response.json({ ...sheet, approvals });
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/**
+ * `POST /api/board/:id/timesheet/approvals` — submit your own week, or (as an
+ * admin) record a verdict on someone's.
+ *
+ * One endpoint with a `verdict` discriminator rather than three, because the
+ * three write the same row and differ only in who may do it — which the
+ * repository already decides. Session-only, never a principal: signing off
+ * hours is a human act, and an agent token must not make it.
+ */
+export async function handleReviewTimesheet(request: Request, id: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") return badRequest("Invalid JSON body");
+  const { week, verdict, userId, note } = body as Record<string, unknown>;
+
+  if (typeof week !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(week)) {
+    return badRequest("week must be a YYYY-MM-DD date within the week");
+  }
+  if (note !== undefined && typeof note !== "string") {
+    return badRequest("note must be a string");
+  }
+
+  try {
+    if (verdict === "submitted") {
+      return Response.json(await submitTimesheet(session.user.id, boardId, week));
+    }
+    if (verdict === "approved" || verdict === "rejected") {
+      if (typeof userId !== "string" || !userId) {
+        return badRequest("userId is required to review someone's week");
+      }
+      return Response.json(
+        await reviewTimesheet(
+          session.user.id,
+          boardId,
+          userId,
+          week,
+          verdict,
+          (note as string | undefined) ?? ""
+        )
+      );
+    }
+    return badRequest("verdict must be submitted, approved, or rejected");
   } catch (error) {
     return authzErrorResponse(error);
   }

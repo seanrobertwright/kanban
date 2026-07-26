@@ -21,6 +21,7 @@ import { assertObjectiveOnBoard } from "@/features/objectives/server/repository"
 import {
   AuthzError,
   ROLE_RANK,
+  requireBoardRole,
   requireColumnRole,
   requireTaskRole,
 } from "@/features/workspaces/server/authz";
@@ -30,6 +31,9 @@ import type {
   MoveTaskInput,
   RecurrenceFrequency,
   Task,
+  TaskPriority,
+  TaskSearchInput,
+  TaskSearchResult,
   UpdateTaskInput,
 } from "../types";
 
@@ -456,6 +460,112 @@ export async function listSubtasks(
       ORDER BY bc.position, bc.id, t.position`,
     [taskId]
   );
+}
+
+/**
+ * Search one board's tasks by text and filters, newest first, one page at a time.
+ *
+ * The app had no search of any kind before this. Every reader — the board, the
+ * list view, an agent over MCP — pulled whole columns and filtered client-side,
+ * which is survivable for a human looking at a screen and is not survivable for
+ * a model that pays for every task it reads. This is the endpoint that lets a
+ * caller ask a question instead of downloading a board.
+ *
+ * "viewer" on the *board*, once, rather than per task: every row returned is
+ * proven to be on this board by the join, so one board-level check covers the
+ * whole page. That is also what keeps the search from being an oracle — a
+ * caller who cannot see the board gets the board's own 404, never a hit count.
+ *
+ * The WHERE is assembled from the present filters only, each as a bound
+ * parameter. Nothing here interpolates a caller's value into SQL; `text` in
+ * particular goes in as a parameter and has its LIKE metacharacters escaped, so
+ * a search for "100%" is a search for "100%" and not for "100 anything".
+ *
+ * Keyset pagination on `t.id DESC`, not OFFSET: a board is being edited while
+ * an agent pages through it, and OFFSET would skip or repeat rows as ids are
+ * inserted. `nextCursor` is the last id of a full page, null once the page came
+ * back short — the caller loops on the cursor and never needs to know the page
+ * size the server settled on.
+ */
+export async function searchTasks(
+  actor: string | Principal,
+  boardId: number,
+  input: TaskSearchInput = {}
+): Promise<TaskSearchResult> {
+  await requireBoardRole(actor, boardId, "viewer");
+
+  // Clamped, not trusted: the cap is what stops one call from being the whole
+  // board again, which is the thing this function exists to avoid.
+  const limit = Math.min(Math.max(Math.trunc(input.limit ?? 50), 1), 200);
+
+  const where: string[] = ["bc.board_id = $1"];
+  const params: unknown[] = [boardId];
+  const bind = (value: unknown) => `$${params.push(value)}`;
+
+  if (input.text?.trim()) {
+    // ESCAPE '\' with the three LIKE metacharacters neutralised, so the pattern
+    // means what the caller typed. Without this a description search for "_"
+    // matches every task that has any character at all.
+    const escaped = input.text.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+    const p = bind(`%${escaped}%`);
+    where.push(`(t.title ILIKE ${p} ESCAPE '\\' OR t.description ILIKE ${p} ESCAPE '\\')`);
+  }
+  if (input.columnId !== undefined) where.push(`t.column_id = ${bind(input.columnId)}`);
+  if (input.priority !== undefined) where.push(`t.priority = ${bind(input.priority)}`);
+  if (input.type !== undefined) where.push(`t.type = ${bind(input.type)}`);
+  if (input.milestoneId !== undefined)
+    where.push(`t.milestone_id = ${bind(input.milestoneId)}`);
+  if (input.sprintId !== undefined) where.push(`t.sprint_id = ${bind(input.sprintId)}`);
+  if (input.epicId !== undefined) where.push(`t.epic_id = ${bind(input.epicId)}`);
+  if (input.dueBefore !== undefined)
+    where.push(`t.due_date IS NOT NULL AND t.due_date < ${bind(input.dueBefore)}::date`);
+  if (input.dueAfter !== undefined)
+    where.push(`t.due_date IS NOT NULL AND t.due_date > ${bind(input.dueAfter)}::date`);
+  if (input.assignee !== undefined) {
+    // The three-valued rule the input documents: null is "unassigned", and both
+    // peer columns must be empty for that to be true (011's CHECK pairs them).
+    if (input.assignee === null) {
+      where.push(`t.assignee_id IS NULL AND t.agent_id IS NULL`);
+    } else if (input.assignee.type === "human") {
+      where.push(`t.assignee_id = ${bind(input.assignee.id)}`);
+    } else {
+      where.push(`t.agent_id = ${bind(input.assignee.id)}`);
+    }
+  }
+  if (input.labelIds?.length) {
+    // A conjunction: as many labels matched as were asked for. HAVING COUNT over
+    // a DISTINCT set rather than one EXISTS per label, so the cost does not grow
+    // a subquery per filter term.
+    where.push(`(SELECT COUNT(DISTINCT tl.label_id) FROM task_label tl
+                  WHERE tl.task_id = t.id AND tl.label_id = ANY(${bind(input.labelIds)}))
+                = ${bind(input.labelIds.length)}`);
+  }
+  if (!input.includeSubtasks) where.push(`t.parent_id IS NULL`);
+  if (input.openOnly) {
+    // "Open" only means anything on a board that has named a done column; on one
+    // that has not, this narrows nothing rather than claiming everything is open.
+    where.push(`(b.done_column_id IS NULL OR t.column_id <> b.done_column_id)`);
+  }
+  if (input.cursor !== undefined) where.push(`t.id < ${bind(input.cursor)}`);
+
+  // One extra row is fetched to learn whether another page exists without a
+  // second COUNT over the same predicate.
+  const rows = await query<Task>(
+    `SELECT ${taskColumns("t")}
+       FROM task t
+       JOIN board_column bc ON bc.id = t.column_id
+       JOIN board b ON b.id = bc.board_id
+      WHERE ${where.join(" AND ")}
+      ORDER BY t.id DESC
+      LIMIT ${bind(limit + 1)}`,
+    params
+  );
+
+  const tasks = rows.slice(0, limit);
+  return {
+    tasks,
+    nextCursor: rows.length > limit ? tasks[tasks.length - 1].id : null,
+  };
 }
 
 export async function createTask(
@@ -1059,10 +1169,44 @@ async function lockTask(
  * 409-vs-403 line members.ts and columns.ts already draw — an invariant blocking
  * an allowed action, not a rank the caller lacks.
  */
+/** The lease length a claim gets when the caller names none (076). */
+export const DEFAULT_CLAIM_TTL_MINUTES = 60;
+
+/** A claimed task with its lease's expiry — what claimTask hands back, so the
+ *  claimant knows when its hold lapses without a second read. The expiry is not
+ *  on Task itself: nothing else renders it, and widening taskColumns for one
+ *  caller would touch every read. */
+export type ClaimedTask = Task & { claimExpiresAt: string | null };
+
+async function withLease(client: PoolClient, task: Task): Promise<ClaimedTask> {
+  const { rows } = await client.query<{ claimExpiresAt: string | null }>(
+    `SELECT claim_expires_at AS "claimExpiresAt" FROM task WHERE id = $1`,
+    [task.id]
+  );
+  return { ...task, claimExpiresAt: rows[0]?.claimExpiresAt ?? null };
+}
+
+/**
+ * Whether a task's claim has lapsed (076). Read inside the claiming
+ * transaction, on the connection holding the row lock, so the answer cannot
+ * change between the check and the act. A NULL expiry never lapses — that is a
+ * pre-076 hold, which keeps meaning "held until released".
+ */
+async function claimExpired(client: PoolClient, id: number): Promise<boolean> {
+  const { rows } = await client.query<{ expired: boolean }>(
+    `SELECT (claim_expires_at IS NOT NULL AND claim_expires_at < now())
+        AS expired
+       FROM task WHERE id = $1`,
+    [id]
+  );
+  return rows[0]?.expired ?? false;
+}
+
 export async function claimTask(
   actor: string | Principal,
-  id: number
-): Promise<Task | undefined> {
+  id: number,
+  ttlMinutes: number = DEFAULT_CLAIM_TTL_MINUTES
+): Promise<ClaimedTask | undefined> {
   const by = principalActor(asPrincipal(actor));
   const { boardId, workspaceId } = await requireTaskRole(actor, id, "member");
 
@@ -1071,15 +1215,32 @@ export async function claimTask(
     if (!before) return undefined;
 
     if (before.claimedBy) {
-      if (sameActor(before.claimedBy, by)) return before;
-      throw new AuthzError("conflict", "This task is already claimed");
+      if (sameActor(before.claimedBy, by)) {
+        // Re-claiming your own hold renews the lease (076) — the heartbeat a
+        // long-running agent sends. Still no log row: a renewal changes no
+        // state a snapshot carries, and the no-op rule holds.
+        await client.query(
+          `UPDATE task
+              SET claim_expires_at = now() + make_interval(mins => $2)
+            WHERE id = $1`,
+          [id, ttlMinutes]
+        );
+        return withLease(client, (await selectTask(client, id))!);
+      }
+      if (!(await claimExpired(client, id))) {
+        throw new AuthzError("conflict", "This task is already claimed");
+      }
+      // The hold lapsed: the lease is over and the task is claimable. Fall
+      // through to take it — the task.claimed row below carries the old holder
+      // in its `before` snapshot, which is the whole record of the takeover.
     }
 
     await client.query(
       `UPDATE task
-          SET claimed_by = $2, claimed_by_type = $3, claimed_at = now()
+          SET claimed_by = $2, claimed_by_type = $3, claimed_at = now(),
+              claim_expires_at = now() + make_interval(mins => $4)
         WHERE id = $1`,
-      [id, by.id, by.type]
+      [id, by.id, by.type, ttlMinutes]
     );
     const after = (await selectTask(client, id))!;
 
@@ -1092,7 +1253,7 @@ export async function claimTask(
       before: snapshot(before),
       after: snapshot(after),
     });
-    return after;
+    return withLease(client, after);
   });
 }
 
@@ -1136,7 +1297,8 @@ export async function releaseTask(
 
     await client.query(
       `UPDATE task
-          SET claimed_by = NULL, claimed_by_type = NULL, claimed_at = NULL
+          SET claimed_by = NULL, claimed_by_type = NULL, claimed_at = NULL,
+              claim_expires_at = NULL
         WHERE id = $1`,
       [id]
     );
@@ -1194,7 +1356,8 @@ export async function releaseClaimsOf(
 
   await client.query(
     `UPDATE task
-        SET claimed_by = NULL, claimed_by_type = NULL, claimed_at = NULL
+        SET claimed_by = NULL, claimed_by_type = NULL, claimed_at = NULL,
+              claim_expires_at = NULL
       WHERE id = ANY($1::int[])`,
     [rows.map((t) => t.id)]
   );
@@ -1309,7 +1472,8 @@ export async function releaseAgentClaims(
 
   await client.query(
     `UPDATE task
-        SET claimed_by = NULL, claimed_by_type = NULL, claimed_at = NULL
+        SET claimed_by = NULL, claimed_by_type = NULL, claimed_at = NULL,
+              claim_expires_at = NULL
       WHERE id = ANY($1::int[])`,
     [rows.map((t) => t.id)]
   );

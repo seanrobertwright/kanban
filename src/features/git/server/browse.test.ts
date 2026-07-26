@@ -5,10 +5,12 @@ import {
   ensurePersonalWorkspace,
   getDefaultBoard,
 } from "@/features/workspaces/server/repository";
-import { pool, query } from "@/shared/db/client";
-import { createConnection } from "./repository";
+import { pool, query, queryOne } from "@/shared/db/client";
+import { createConnection, listConnections } from "./repository";
 import { browseRepoTree, listRepoBranches, type FetchLike } from "./browse";
 import {
+  normalizeBitbucketBranches,
+  normalizeBitbucketTree,
   normalizeGithubTree,
   normalizeGitlabTree,
   normalizeGithubBranches,
@@ -41,6 +43,25 @@ describe("normalize repo tree (pure)", () => {
       { name: "go.mod", path: "go.mod", type: "blob" },
     ]);
     expect(entries.map((e) => `${e.name}:${e.type}`)).toEqual(["app:dir", "go.mod:file"]);
+  });
+
+  it("folds Bitbucket src listings ({values}, commit_directory|commit_file, path-derived names)", () => {
+    const entries = normalizeBitbucketTree({
+      values: [
+        { path: "src/app.ts", type: "commit_file", size: 42 },
+        { path: "src/lib", type: "commit_directory" },
+      ],
+    });
+    expect(entries.map((e) => `${e.name}:${e.type}`)).toEqual(["lib:dir", "app.ts:file"]);
+    expect(entries[1].size).toBe(42);
+    expect(entries[1].path).toBe("src/app.ts");
+    expect(normalizeBitbucketTree(null)).toEqual([]);
+  });
+
+  it("folds Bitbucket branch lists ({values})", () => {
+    expect(
+      normalizeBitbucketBranches({ values: [{ name: "main" }, { bogus: 1 }] })
+    ).toEqual([{ name: "main", protected: false }]);
   });
 
   it("folds branch lists", () => {
@@ -133,6 +154,118 @@ describe("repo browse proxy (db)", () => {
     await expect(
       browseRepoTree(alice, connectionId, {}, { fetchImpl: stub(null, false, 404) })
     ).rejects.toThrow(/404/);
+  });
+
+  it("bears the GitHub PAT as a bearer token", async () => {
+    await createConnection(alice, workspaceId, {
+      provider: "github",
+      externalRepo: "acme/app",
+      accessToken: "ghp_test_pat",
+    });
+    let headers: Record<string, string> = {};
+    const capturing: FetchLike = async (_url, init) => {
+      headers = init?.headers ?? {};
+      return { ok: true, status: 200, json: async () => [] };
+    };
+    await browseRepoTree(alice, connectionId, {}, { fetchImpl: capturing });
+    expect(headers.authorization).toBe("Bearer ghp_test_pat");
+  });
+
+  it("bears the GitLab token in PRIVATE-TOKEN", async () => {
+    const conn = await createConnection(alice, workspaceId, {
+      provider: "gitlab",
+      externalRepo: "acme/glapp",
+      accessToken: "glpat-test",
+    });
+    let headers: Record<string, string> = {};
+    let captured = "";
+    const capturing: FetchLike = async (url, init) => {
+      captured = url;
+      headers = init?.headers ?? {};
+      return { ok: true, status: 200, json: async () => [] };
+    };
+    await listRepoBranches(alice, conn.connection.id, { fetchImpl: capturing });
+    expect(headers["private-token"]).toBe("glpat-test");
+    expect(headers.authorization).toBeUndefined();
+    expect(captured).toContain("gitlab.com/api/v4/projects/acme%2Fglapp/repository/branches");
+  });
+
+  it("browses Bitbucket over the 2.0 src API with basic app-password auth", async () => {
+    const conn = await createConnection(alice, workspaceId, {
+      provider: "bitbucket",
+      externalRepo: "acme/bbapp",
+      accessToken: "user:app-password",
+    });
+    let headers: Record<string, string> = {};
+    let captured = "";
+    const capturing: FetchLike = async (url, init) => {
+      captured = url;
+      headers = init?.headers ?? {};
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          values: [{ path: "readme.md", type: "commit_file", size: 3 }],
+        }),
+      };
+    };
+    const entries = await browseRepoTree(
+      alice,
+      conn.connection.id,
+      { path: "docs", ref: "main" },
+      { fetchImpl: capturing }
+    );
+    expect(entries).toEqual([{ name: "readme.md", path: "readme.md", type: "file", size: 3 }]);
+    expect(captured).toBe(
+      "https://api.bitbucket.org/2.0/repositories/acme/bbapp/src/main/docs?pagelen=100"
+    );
+    expect(headers.authorization).toBe(
+      `Basic ${Buffer.from("user:app-password").toString("base64")}`
+    );
+
+    // Branch listing rides refs/branches and folds the {values} envelope.
+    const branchFetch: FetchLike = async (url) => {
+      captured = url;
+      return { ok: true, status: 200, json: async () => ({ values: [{ name: "main" }] }) };
+    };
+    const branches = await listRepoBranches(alice, conn.connection.id, {
+      fetchImpl: branchFetch,
+    });
+    expect(branches).toEqual([{ name: "main", protected: false }]);
+    expect(captured).toBe(
+      "https://api.bitbucket.org/2.0/repositories/acme/bbapp/refs/branches?pagelen=100"
+    );
+  });
+
+  it("stores the access token encrypted and never returns it from reads", async () => {
+    const row = await queryOne<{ accessToken: string | null }>(
+      `SELECT access_token AS "accessToken" FROM repo_connection
+        WHERE workspace_id = $1 AND provider = 'github' AND external_repo = 'acme/app'`,
+      [workspaceId]
+    );
+    expect(row?.accessToken).toBeTruthy();
+    expect(row?.accessToken?.startsWith("v1.")).toBe(true);
+    expect(row?.accessToken).not.toContain("ghp_test_pat");
+
+    const listed = await listConnections(alice, workspaceId);
+    for (const conn of listed) {
+      expect(JSON.stringify(conn)).not.toContain("ghp_test_pat");
+      expect(conn).not.toHaveProperty("accessToken");
+      expect(conn).not.toHaveProperty("secret");
+    }
+
+    // A rotate without a token keeps the stored one (COALESCE).
+    await createConnection(alice, workspaceId, {
+      provider: "github",
+      externalRepo: "acme/app",
+    });
+    let headers: Record<string, string> = {};
+    const capturing: FetchLike = async (_url, init) => {
+      headers = init?.headers ?? {};
+      return { ok: true, status: 200, json: async () => [] };
+    };
+    await browseRepoTree(alice, connectionId, {}, { fetchImpl: capturing });
+    expect(headers.authorization).toBe("Bearer ghp_test_pat");
   });
 
   it("refuses a non-member and an unknown connection", async () => {

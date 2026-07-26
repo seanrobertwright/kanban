@@ -1,4 +1,9 @@
-import type { TaskTime, TimeEntry, Timesheet } from "../types";
+import type {
+  TaskTime,
+  TimeEntry,
+  TimesheetApproval,
+  TimesheetWithApprovals,
+} from "../types";
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -33,7 +38,7 @@ export function addTimeEntry(
 export async function fetchBoardTimesheet(
   boardId: number,
   window: { from?: string; to?: string } = {}
-): Promise<Timesheet> {
+): Promise<TimesheetWithApprovals> {
   const qs = new URLSearchParams();
   if (window.from) qs.set("from", window.from);
   if (window.to) qs.set("to", window.to);
@@ -41,7 +46,29 @@ export async function fetchBoardTimesheet(
   const res = await fetch(`/api/board/${boardId}/timesheet${suffix}`, {
     cache: "no-store",
   });
-  return jsonOrThrow<Timesheet>(res);
+  return jsonOrThrow<TimesheetWithApprovals>(res);
+}
+
+/**
+ * Submit your own week, or record a verdict on someone's (083). `week` is any
+ * day in the week; the server files it under that week's Monday. `userId` is
+ * required for a verdict and meaningless for a submission — you may only ever
+ * submit your own.
+ */
+export function reviewTimesheet(
+  boardId: number,
+  body: {
+    week: string;
+    verdict: "submitted" | "approved" | "rejected";
+    userId?: string;
+    note?: string;
+  }
+): Promise<TimesheetApproval> {
+  return fetch(`/api/board/${boardId}/timesheet/approvals`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((res) => jsonOrThrow<TimesheetApproval>(res));
 }
 
 export async function deleteTimeEntry(id: number): Promise<void> {

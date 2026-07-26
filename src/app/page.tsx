@@ -30,7 +30,7 @@ import { ThemeToggle } from "@/shared/theme/theme-toggle";
 import { DocsButton } from "@/features/docs/components/docs-dialog";
 import { ChatButton } from "@/features/chat/components/chat-dialog";
 import { WhiteboardsButton } from "@/features/whiteboards/components/whiteboards-dialog";
-import { AdminConsoleButton } from "@/features/admin/components/admin-console-dialog";
+import { SettingsTrigger } from "@/features/settings/components/settings-dialog";
 import { CommandPaletteTrigger } from "@/features/board/components/command-palette";
 import { BoardExtensionActions } from "@/features/extensions/components/board-extension-actions";
 import { KnowledgeButton } from "@/features/knowledge/components/knowledge-dialog";
@@ -126,17 +126,28 @@ export default async function Home({
       .join("")
       .toUpperCase();
 
-  // The workspace tool cluster renders in the sidebar on wide screens and
-  // falls back into the header on small ones. Each *Button owns its dialog,
-  // which portals out of this container — so the width override below only
-  // ever reaches the trigger buttons themselves.
-  const tools = (
+  // The workspace tools, grouped by what they are rather than dumped in one
+  // flat list. Ten equally-weighted buttons under a single "// Tools" heading
+  // made the sidebar a menu of everything the app can do; three short named
+  // groups make it navigation, which is what a sidebar is for.
+  //
+  // Each *Button owns its dialog, which portals out of this container — so the
+  // width override on the nav only ever reaches the trigger buttons themselves.
+  const collaborate = (
     <>
-      <BoardExtensionActions workspaceId={data.board.workspaceId} />
       <KnowledgeButton workspaceId={data.board.workspaceId} />
       <DocsButton workspaceId={data.board.workspaceId} canManage={canEdit} />
-      <ChatButton workspaceId={data.board.workspaceId} canEdit={canEdit} />
+      <ChatButton
+        workspaceId={data.board.workspaceId}
+        canEdit={canEdit}
+        currentUserId={session.user.id}
+      />
       <WhiteboardsButton boardId={data.board.id} canEdit={canEdit} />
+    </>
+  );
+
+  const plan = (
+    <>
       <ProgramsButton
         workspaceId={data.board.workspaceId}
         canManage={canDeleteColumns}
@@ -152,12 +163,36 @@ export default async function Home({
           .filter((b) => b.workspaceId === data.board.workspaceId)
           .map((b) => ({ id: b.id, name: b.name }))}
       />
-      <AdminConsoleButton
-        workspace={workspace}
-        currentUserId={session.user.id}
-        boards={boards.filter((b) => b.workspaceId === data.board.workspaceId)}
-      />
     </>
+  );
+
+  const administer = (
+    <>
+      <BoardExtensionActions workspaceId={data.board.workspaceId} />
+      {/* One door to everything configurable — members, agents, webhooks and
+          administration for the workspace, and this board's vocabulary, rules
+          and plan. The panels live with the board's state, so the trigger only
+          fires an event (CommandPaletteTrigger's pattern). */}
+      <SettingsTrigger />
+    </>
+  );
+
+  // The small-screen fallback keeps them in one row — there is no room for
+  // headings in a wrapped header strip, and the grouping is a scanning aid that
+  // a six-inch screen cannot use anyway.
+  const tools = (
+    <>
+      {collaborate}
+      {plan}
+      {administer}
+    </>
+  );
+
+  /** A sidebar section heading. Plain small-caps, not a fake code comment. */
+  const NavLabel = ({ children }: { children: React.ReactNode }) => (
+    <div className="px-4 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+      {children}
+    </div>
   );
 
   return (
@@ -180,9 +215,7 @@ export default async function Home({
           <CommandPaletteTrigger />
         </div>
 
-        <div className="label-mono px-4 pt-2 pb-1 text-muted-foreground/70">
-          {"// Workspace"}
-        </div>
+        <NavLabel>Workspace</NavLabel>
         <div className="px-2">
           <BoardSwitcher
             workspaces={workspaces}
@@ -192,11 +225,13 @@ export default async function Home({
           />
         </div>
 
-        <div className="label-mono px-4 pt-4 pb-1 text-muted-foreground/70">
-          {"// Tools"}
-        </div>
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2 [&_[data-slot=button]]:w-full [&_[data-slot=button]]:justify-start">
-          {tools}
+        <nav className="flex flex-1 flex-col overflow-y-auto pb-2 [&_[data-slot=button]]:w-full [&_[data-slot=button]]:justify-start">
+          <NavLabel>Collaborate</NavLabel>
+          <div className="flex flex-col gap-0.5 px-2">{collaborate}</div>
+          <NavLabel>Plan</NavLabel>
+          <div className="flex flex-col gap-0.5 px-2">{plan}</div>
+          <NavLabel>Administer</NavLabel>
+          <div className="flex flex-col gap-0.5 px-2">{administer}</div>
         </nav>
 
         <div className="flex items-center gap-2 border-t border-sidebar-border p-3">
@@ -218,7 +253,7 @@ export default async function Home({
         <header className="flex flex-wrap items-center gap-3 border-b bg-background/60 px-5 py-3 backdrop-blur-sm">
           <div className="flex min-w-0 items-center gap-2 font-mono text-[13px]">
             <span
-              className="glow-sm size-2 shrink-0 rounded-xs bg-primary"
+              className="size-2 shrink-0 rounded-xs bg-primary"
               aria-hidden
             />
             <span className="truncate text-muted-foreground">
@@ -290,6 +325,11 @@ export default async function Home({
             initialObjectives={data.objectives}
             canEdit={canEdit}
             canDeleteColumns={canDeleteColumns}
+            currentUserId={session.user.id}
+            workspace={workspace}
+            boards={boards.filter(
+              (b) => b.workspaceId === data.board.workspaceId
+            )}
           />
         </div>
       </main>

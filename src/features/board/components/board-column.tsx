@@ -165,7 +165,7 @@ export function BoardColumn({
               title={column.title}
             >
               <span
-                className="glow-sm size-2 shrink-0 rounded-xs"
+                className="size-2 shrink-0 rounded-xs"
                 style={
                   {
                     background: accent,
@@ -326,6 +326,18 @@ export function BoardColumn({
               onDelete={canEdit ? onDeleteTask : undefined}
             />
           ))}
+          {/* An empty column was an unexplained gap between a heading and an
+              "Add task" button — legible as a bug rather than as a state. The
+              dashed area names it and, for someone who may edit, says what the
+              space is for: it is the drop target, which is otherwise invisible
+              until something is already being dragged over it. */}
+          {tasks.length === 0 && (
+            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+              {canEdit
+                ? "Drop a task here, or add one below."
+                : "Nothing in this column."}
+            </p>
+          )}
         </div>
       </SortableContext>
       {canEdit && (

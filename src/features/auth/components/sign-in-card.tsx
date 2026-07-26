@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Building2, Loader2 } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -10,6 +11,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/ui/card";
+import { Input } from "@/shared/ui/input";
+import { Label } from "@/shared/ui/label";
 import { authClient } from "../client/auth-client";
 
 function GitHubIcon() {
@@ -22,6 +25,10 @@ function GitHubIcon() {
 
 export function SignInCard() {
   const [pending, setPending] = useState(false);
+  const [ssoOpen, setSsoOpen] = useState(false);
+  const [ssoEmail, setSsoEmail] = useState("");
+  const [ssoPending, setSsoPending] = useState(false);
+  const [ssoError, setSsoError] = useState<string | null>(null);
 
   async function signIn() {
     setPending(true);
@@ -32,18 +39,80 @@ export function SignInCard() {
     }
   }
 
+  async function signInSSO(event: React.FormEvent) {
+    event.preventDefault();
+    const email = ssoEmail.trim();
+    if (!email || ssoPending) return;
+    setSsoPending(true);
+    setSsoError(null);
+    // The server's sso plugin resolves the email's domain to a registered
+    // provider and answers { url, redirect } — the client's redirect plugin
+    // then navigates for us. Only failures leave this branch.
+    const { error } = await authClient.signIn.sso({ email, callbackURL: "/" });
+    if (error) {
+      setSsoPending(false);
+      setSsoError(
+        error.status === 404
+          ? `No SSO provider is registered for ${email.split("@")[1] ?? "that domain"}. Ask your workspace owner to set one up, or sign in with GitHub.`
+          : (error.message ?? "SSO sign-in failed. Try again.")
+      );
+    }
+  }
+
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle>Sign in</CardTitle>
         <CardDescription>
-          Use your GitHub account to access the kanban board.
+          Use your GitHub account or your company&apos;s identity provider.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="grid gap-3">
         <Button className="w-full" onClick={signIn} disabled={pending}>
           <GitHubIcon /> {pending ? "Redirecting…" : "Continue with GitHub"}
         </Button>
+
+        {!ssoOpen ? (
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => setSsoOpen(true)}
+          >
+            <Building2 className="size-4" /> Sign in with SSO
+          </Button>
+        ) : (
+          <form onSubmit={signInSSO} className="grid gap-2 border-t pt-3">
+            <Label htmlFor="sso-email">Work email</Label>
+            <Input
+              id="sso-email"
+              type="email"
+              value={ssoEmail}
+              onChange={(e) => setSsoEmail(e.target.value)}
+              placeholder="you@company.com"
+              autoFocus
+            />
+            {ssoError && (
+              <p
+                role="alert"
+                className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+              >
+                {ssoError}
+              </p>
+            )}
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full"
+              disabled={ssoPending || !ssoEmail.trim()}
+            >
+              {ssoPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                "Continue with SSO"
+              )}
+            </Button>
+          </form>
+        )}
       </CardContent>
     </Card>
   );

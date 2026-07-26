@@ -212,7 +212,14 @@ export async function deleteForm(userId: string, id: number): Promise<boolean> {
 export async function submitForm(
   actor: string | Principal,
   id: number,
-  input: SubmitFormInput
+  input: SubmitFormInput,
+  /**
+   * Who the request_meta stamp names as the requester, when it is not the actor
+   * writing the task. The public intake door (§3.9) rides through here: the link
+   * minter's identity does the authorized write, but the Requests queue must
+   * read "public/anonymous", not the admin who created the link.
+   */
+  requester?: { type: string; id: string }
 ): Promise<Task> {
   // Read the form and resolve the destination column under one board-role check;
   // the actual write is createTask, which re-checks member on that column.
@@ -266,7 +273,7 @@ export async function submitForm(
 
   // Stamp the intake identity (1.8): which form it came through and who filed it.
   // Its presence is what marks the task as a request for the Requests queue.
-  const by = principalActor(asPrincipal(actor));
+  const by = requester ?? principalActor(asPrincipal(actor));
   await query(
     `UPDATE task SET request_meta = $2::jsonb WHERE id = $1`,
     [task.id, JSON.stringify({ source: form.name, requesterType: by.type, requesterId: by.id })]

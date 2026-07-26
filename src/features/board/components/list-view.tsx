@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, ListTree, X } from "lucide-react";
+import { Bot, FilterX, ListTree, Plus, X } from "lucide-react";
 
 import type { Actor } from "@/features/activity/types";
 import type { AgentSummary } from "@/features/agents/types";
@@ -27,7 +27,9 @@ import type { Member } from "@/features/workspaces/types";
 import { formatDueDate, useToday } from "@/shared/lib/due-date";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 import { Button } from "@/shared/ui/button";
+import { EmptyState } from "@/shared/ui/empty-state";
 import type { Column } from "../types";
+import { Select, SelectGroup, SelectItem } from "@/shared/ui/select";
 
 export interface BoardViewProps {
   columns: Column[];
@@ -54,13 +56,24 @@ interface ListViewProps extends BoardViewProps {
   canEdit: boolean;
   /** After a bulk write lands: the rows on screen are now stale. */
   onChanged: () => void;
+  /**
+   * Whether a board filter is narrowing what arrived. Empty-because-filtered
+   * and empty-because-nothing-exists want opposite next actions — clear the
+   * filter, or create the first task — and the rows alone cannot tell them
+   * apart, since both are a list of length zero.
+   */
+  filtering?: boolean;
+  /** Clear the filter, offered on the filtered empty state. */
+  onClearFilter?: () => void;
+  /** Create a task, offered on the genuinely-empty one. Absent for a viewer. */
+  onNewTask?: () => void;
 }
 
-/** The <select> placeholder — pick an action, not a value. */
+/** The picker's placeholder — pick an action, not a value. */
 const NOOP = "";
 
 const SELECT_CLASS =
-  "h-8 rounded-lg border border-input bg-transparent px-2.5 py-1 text-xs transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
+  "py-1 text-xs dark:bg-input/30";
 
 /**
  * The board's rows as a table. Same tasks the board renders (it is handed the
@@ -88,6 +101,9 @@ export function ListView({
   canEdit,
   onEditTask,
   onChanged,
+  filtering = false,
+  onClearFilter,
+  onNewTask,
 }: ListViewProps) {
   const today = useToday();
   // The board's fields in display order — a column each, after the fixed set.
@@ -157,10 +173,32 @@ export function ListView({
   }
 
   if (rows.length === 0) {
-    return (
-      <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        No tasks to show.
-      </p>
+    return filtering ? (
+      <EmptyState
+        icon={FilterX}
+        title="No tasks match this filter"
+        hint="The board is not empty — the current filter excludes everything on it."
+        action={
+          onClearFilter && (
+            <Button variant="outline" size="sm" onClick={onClearFilter}>
+              <FilterX /> Clear filter
+            </Button>
+          )
+        }
+      />
+    ) : (
+      <EmptyState
+        icon={ListTree}
+        title="Nothing on this board yet"
+        hint="Tasks created here show up as rows, with their column as the status cell. Tick several to edit them together."
+        action={
+          onNewTask && (
+            <Button size="sm" onClick={onNewTask}>
+              <Plus /> New task
+            </Button>
+          )
+        }
+      />
     );
   }
 
@@ -179,47 +217,46 @@ export function ListView({
           <span className="tabular-nums font-medium">
             {picked.length} selected
           </span>
-          <select
+          <Select
             aria-label="Move selected to column"
             className={SELECT_CLASS}
             value={NOOP}
             disabled={busy}
-            onChange={(e) => {
-              if (e.target.value !== NOOP)
-                void apply({ columnId: Number(e.target.value) });
+            onValueChange={(value) => {
+              if (value !== NOOP) void apply({ columnId: Number(value) });
             }}
           >
-            <option value={NOOP}>Move to…</option>
+            <SelectItem value={NOOP}>Move to…</SelectItem>
             {columns.map((column) => (
-              <option key={column.id} value={column.id}>
+              <SelectItem key={column.id} value={String(column.id)}>
                 {column.title}
-              </option>
+              </SelectItem>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             aria-label="Set priority for selected"
             className={SELECT_CLASS}
             value={NOOP}
             disabled={busy}
-            onChange={(e) => {
-              if (e.target.value !== NOOP)
-                void apply({ priority: e.target.value as TaskPriority });
+            onValueChange={(value) => {
+              if (value !== NOOP)
+                void apply({ priority: value as TaskPriority });
             }}
           >
-            <option value={NOOP}>Set priority…</option>
+            <SelectItem value={NOOP}>Set priority…</SelectItem>
             {[...PRIORITY_ORDER].reverse().map((value) => (
-              <option key={value} value={value}>
+              <SelectItem key={value} value={value}>
                 {PRIORITY_LABELS[value]}
-              </option>
+              </SelectItem>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             aria-label="Assign selected"
             className={SELECT_CLASS}
             value={NOOP}
             disabled={busy}
-            onChange={(e) => {
-              const v = e.target.value;
+            onValueChange={(value) => {
+              const v = value;
               if (v === NOOP) return;
               // "none" unassigns; otherwise the task dialog's "type:id"
               // encoding, decoded the same way.
@@ -233,27 +270,27 @@ export function ListView({
               void apply({ assignee });
             }}
           >
-            <option value={NOOP}>Assign to…</option>
-            <option value="none">Unassigned</option>
+            <SelectItem value={NOOP}>Assign to…</SelectItem>
+            <SelectItem value="none">Unassigned</SelectItem>
             {members.length > 0 && (
-              <optgroup label="People">
+              <SelectGroup label="People">
                 {members.map((member) => (
-                  <option key={member.userId} value={`human:${member.userId}`}>
+                  <SelectItem key={member.userId} value={`human:${member.userId}`}>
                     {member.name}
-                  </option>
+                  </SelectItem>
                 ))}
-              </optgroup>
+              </SelectGroup>
             )}
             {agents.length > 0 && (
-              <optgroup label="Agents">
+              <SelectGroup label="Agents">
                 {agents.map((agent) => (
-                  <option key={agent.id} value={`agent:${agent.id}`}>
+                  <SelectItem key={agent.id} value={`agent:${agent.id}`}>
                     {agent.name}
-                  </option>
+                  </SelectItem>
                 ))}
-              </optgroup>
+              </SelectGroup>
             )}
-          </select>
+          </Select>
           <Button
             variant="destructive"
             size="sm"

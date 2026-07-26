@@ -20,9 +20,10 @@ import type {
   SafBoard,
   TeamWithMembers,
 } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 const selectClass =
-  "h-7 rounded-md border bg-transparent px-1 text-xs text-foreground";
+  "h-7 rounded-md px-1 text-xs";
 
 /**
  * Teams + Scaled Agile / SAFe (044): the workspace read as its layer cake —
@@ -269,22 +270,22 @@ function BoardLine({
           {board.done}/{board.total}
         </span>
         {canManage ? (
-          <select
+          <Select
             aria-label={`Team for ${board.name}`}
             className={selectClass}
-            value={board.teamId ?? ""}
+            value={String(board.teamId ?? "")}
             disabled={busy}
-            onChange={(e) =>
-              onAssign(board.id, e.target.value ? Number(e.target.value) : null)
+            onValueChange={(value) =>
+              onAssign(board.id, value ? Number(value) : null)
             }
           >
-            <option value="">No team</option>
+            <SelectItem value="">No team</SelectItem>
             {teams.map((t) => (
-              <option key={t.id} value={t.id}>
+              <SelectItem key={t.id} value={String(t.id)}>
                 {t.name}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+          </Select>
         ) : (
           <span>{board.teamName ?? "no team"}</span>
         )}
@@ -389,13 +390,13 @@ function TeamRow({
         ))}
 
         {canManage && addable.length > 0 && (
-          <select
+          <Select
             aria-label={`Add member to ${team.name}`}
             className={selectClass}
             value=""
             disabled={busy}
-            onChange={(e) => {
-              const userId = e.target.value;
+            onValueChange={(value) => {
+              const userId = value;
               if (userId)
                 run(
                   () => api.addTeamMember(team.id, userId),
@@ -403,13 +404,13 @@ function TeamRow({
                 );
             }}
           >
-            <option value="">+ Add member…</option>
+            <SelectItem value="">+ Add member…</SelectItem>
             {addable.map((m) => (
-              <option key={m.userId} value={m.userId}>
+              <SelectItem key={m.userId} value={m.userId}>
                 {m.name}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+          </Select>
         )}
       </div>
     </div>

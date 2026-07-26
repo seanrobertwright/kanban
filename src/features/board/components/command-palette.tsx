@@ -31,6 +31,7 @@ const GROUP_GLYPHS: Record<string, string> = {
   Views: "▦",
   Create: "+",
   Panels: "▸",
+  Settings: "⚙",
   Tasks: "#",
 };
 

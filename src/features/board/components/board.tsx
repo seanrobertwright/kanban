@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -17,10 +17,10 @@ import { arrayMove } from "@dnd-kit/sortable";
 import {
   CalendarDays,
   ChartNoAxesColumn,
+  ChevronDown,
   ClipboardList,
   Clock,
   Columns3,
-  Download,
   Flag,
   GanttChartSquare,
   Gauge,
@@ -32,13 +32,20 @@ import {
   Lightbulb,
   List,
   Map as MapIcon,
+  MoreHorizontal,
   Plus,
+  Bot,
   Rocket,
+  Settings,
+  Share2,
+  Shield,
   SlidersHorizontal,
   Tag,
   Tags,
   Target,
+  Users,
   Waypoints,
+  Webhook,
   Zap,
 } from "lucide-react";
 
@@ -53,16 +60,32 @@ import {
 } from "@/features/tasks/components/task-dialog";
 import type { TaskDependencyEdge } from "@/features/dependencies/types";
 import type { Task } from "@/features/tasks/types";
-import type { Member } from "@/features/workspaces/types";
+import type {
+  Board as WorkspaceBoard,
+  Member,
+  WorkspaceMembership,
+} from "@/features/workspaces/types";
+import {
+  SettingsDialog,
+  openSettings,
+  type SettingsSection,
+} from "@/features/settings/components/settings-dialog";
+import { AdminConsoleDialog } from "@/features/admin/components/admin-console-dialog";
+import { MembersDialog } from "@/features/workspaces/components/members-dialog";
+import { AgentsDialog } from "@/features/agents/components/agents-dialog";
+import { WebhooksDialog } from "@/features/webhooks/components/webhooks-dialog";
 import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { Input } from "@/shared/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/shared/ui/toggle-group";
+import { useDensity } from "@/shared/ui/density";
 import * as boardApi from "../client/api";
 import { fetchBoard } from "../client/api";
 import type { Column } from "../types";
@@ -105,7 +128,79 @@ import { ListView } from "./list-view";
 import { SavedViews } from "@/features/views/components/saved-views";
 import type { BoardViewMode, SavedView } from "@/features/views/types";
 import { TemplatesDialog } from "@/features/templates/components/templates-dialog";
+import { ShareDialog } from "@/features/sharing/components/share-dialog";
 import type { TaskTemplate } from "@/features/templates/types";
+
+/**
+ * The lenses that get a tab, and the ones that get a dropdown.
+ *
+ * Eight equal-weight tabs said all eight views were equally likely, which is
+ * not true of any board anyone works: Board and List are where the day is
+ * spent, Timeline and Dashboard are the two people check. The other four are
+ * real views read occasionally, and the split is the design synthesis's
+ * (Board / List / Timeline / Dashboard visible, the rest tucked away).
+ *
+ * Tables rather than eight hand-written JSX blocks, because the same list is
+ * needed twice — once to render the tabs and once to ask whether the current
+ * view is a tab at all, which is what stops the ToggleGroup showing nothing
+ * selected while the board renders a Gantt.
+ */
+const PRIMARY_VIEWS = [
+  ["board", "Board", Columns3],
+  ["list", "List", List],
+  ["timeline", "Timeline", GanttChartSquare],
+  ["dashboard", "Dashboard", LayoutDashboard],
+] as const satisfies readonly (readonly [BoardViewMode, string, typeof Columns3])[];
+
+const MORE_VIEWS = [
+  ["calendar", "Calendar", CalendarDays],
+  ["gantt", "Gantt", Waypoints],
+  ["backlog", "Backlog", Inbox],
+  ["roadmap", "Roadmap", MapIcon],
+] as const satisfies readonly (readonly [BoardViewMode, string, typeof Columns3])[];
+
+/**
+ * The letter that follows `G` to reach each lens — Gmail's and Linear's chord,
+ * which is the convention people arrive already knowing.
+ *
+ * `k` is Backlog and `c` is Calendar because `b` and `g` were taken by Board and
+ * Gantt; the palette shows every binding (see chordHint), so the two that are
+ * not first-letter are discoverable rather than folklore.
+ */
+const VIEW_CHORDS: Record<string, BoardViewMode> = {
+  b: "board",
+  l: "list",
+  c: "calendar",
+  t: "timeline",
+  g: "gantt",
+  k: "backlog",
+  r: "roadmap",
+  d: "dashboard",
+};
+
+/** The chord for a view, as the palette prints it. Derived from the same table
+ *  the keydown handler reads, so a binding cannot exist without a hint. */
+function chordHint(mode: BoardViewMode): string | undefined {
+  const key = Object.keys(VIEW_CHORDS).find((k) => VIEW_CHORDS[k] === mode);
+  return key ? `G ${key.toUpperCase()}` : undefined;
+}
+
+/**
+ * Whether a keystroke belongs to whatever the user is typing in rather than to
+ * the board. Without this, `c` would open the New-task dialog in the middle of
+ * writing a comment containing the letter c.
+ */
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || !el.tagName) return false;
+  const tag = el.tagName.toLowerCase();
+  return (
+    tag === "input" ||
+    tag === "textarea" ||
+    tag === "select" ||
+    el.isContentEditable === true
+  );
+}
 
 type ItemsByColumn = Record<number, Task[]>;
 
@@ -181,6 +276,20 @@ interface BoardProps {
    * applied to people). The server enforces both — these only hide the UI.
    */
   canDeleteColumns: boolean;
+  /**
+   * Who is looking. The timesheet needs it — you may submit your own week and
+   * nobody else's, so a row has to know whether it is yours (083) — and so does
+   * the Settings surface's Members section.
+   */
+  currentUserId: string;
+  /**
+   * This member's standing in the workspace, and the workspace's other boards.
+   * Both exist for the Settings surface: its Workspace group hosts members,
+   * agents, webhooks and the admin console, and those panels are workspace-wide
+   * even though the door to them is on a board.
+   */
+  workspace: WorkspaceMembership;
+  boards: WorkspaceBoard[];
 }
 
 interface DialogState {
@@ -213,6 +322,9 @@ export function Board({
   initialObjectives,
   canEdit,
   canDeleteColumns,
+  currentUserId,
+  workspace,
+  boards,
 }: BoardProps) {
   // Columns are state now rather than a prop read straight through: they stopped
   // being seed data at M1 and the board edits them in place. page.tsx keys this
@@ -238,28 +350,29 @@ export function Board({
     [agents]
   );
   const [labels, setLabels] = useState<LabelData[]>(initialLabels);
-  const [labelsOpen, setLabelsOpen] = useState(false);
   const [templates, setTemplates] = useState<TaskTemplate[]>(initialTemplates);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
+  /**
+   * The open Settings section, or null for closed — one piece of state where
+   * there were ten `somethingOpen` booleans. Every configurable thing (the
+   * workspace's people and integrations, the board's vocabulary and rules, the
+   * plan's sprints and milestones) now lives behind this, which is what makes
+   * the overflow menu two groups shorter and stops a config panel from opening
+   * on top of another modal.
+   */
+  const [settingsSection, setSettingsSection] = useState<string | null>(null);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [timesheetOpen, setTimesheetOpen] = useState(false);
-  const [formsOpen, setFormsOpen] = useState(false);
-  const [automationsOpen, setAutomationsOpen] = useState(false);
   const [requestsOpen, setRequestsOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>(initialMilestones);
-  const [milestonesOpen, setMilestonesOpen] = useState(false);
-  const [releasesOpen, setReleasesOpen] = useState(false);
   const [epics, setEpics] = useState<Epic[]>(initialEpics);
-  const [epicsOpen, setEpicsOpen] = useState(false);
   const [objectives, setObjectives] =
     useState<Objective[]>(initialObjectives);
-  const [objectivesOpen, setObjectivesOpen] = useState(false);
   const [sprints, setSprints] = useState<Sprint[]>(initialSprints);
-  const [sprintsOpen, setSprintsOpen] = useState(false);
   const [dependencies, setDependencies] =
     useState<TaskDependencyEdge[]>(initialDependencies);
   const [customFields, setCustomFields] =
@@ -268,7 +381,6 @@ export function Board({
     () => Object.fromEntries(customFields.map((f) => [f.id, f])),
     [customFields]
   );
-  const [fieldsOpen, setFieldsOpen] = useState(false);
   const [doneColumnId, setDoneColumnId] = useState<number | null>(
     initialDoneColumnId
   );
@@ -276,6 +388,7 @@ export function Board({
     () => Object.fromEntries(labels.map((l) => [l.id, l])),
     [labels]
   );
+  const [density, setDensity] = useDensity();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
 
@@ -564,10 +677,342 @@ export function Board({
     }
   }
 
+  /**
+   * The Settings surface's sections, in nav order.
+   *
+   * Each `render` returns the feature's existing dialog with `open` pinned
+   * true — inside the surface's InlineDialogHost that dialog renders as a plain
+   * region, so none of these fifteen components needed changing to become a
+   * settings page. `onOpenChange(false)` closes the surface, which is what a
+   * panel's own Close button now means.
+   *
+   * The thunk matters: only the showing section is called, so opening Settings
+   * fetches one panel's data rather than fifteen.
+   */
+  const close = useCallback(() => setSettingsSection(null), []);
+  const settingsSections = useMemo<SettingsSection[]>(
+    () => [
+      {
+        id: "members",
+        label: "Members",
+        group: "Workspace",
+        icon: Users,
+        description: "Who is in this workspace, and what they may do.",
+        render: () => (
+          <MembersDialog
+            open
+            onOpenChange={close}
+            workspace={workspace}
+            currentUserId={currentUserId}
+          />
+        ),
+      },
+      {
+        id: "agents",
+        label: "Agents",
+        group: "Workspace",
+        icon: Bot,
+        description: "The non-human members, their keys and their limits.",
+        render: () => (
+          <AgentsDialog open onOpenChange={close} workspace={workspace} />
+        ),
+      },
+      {
+        id: "webhooks",
+        label: "Webhooks",
+        group: "Workspace",
+        icon: Webhook,
+        description: "Where activity is delivered, and what happened to it.",
+        render: () => (
+          <WebhooksDialog open onOpenChange={close} workspace={workspace} />
+        ),
+      },
+      // Owner/admin only, and the console itself refuses below that rank — the
+      // nav simply stops advertising a door that would not open.
+      ...(workspace.role === "owner" || workspace.role === "admin"
+        ? [
+            {
+              id: "admin",
+              label: "Administration",
+              group: "Workspace",
+              icon: Shield,
+              description:
+                "Permissions, field access, audit log, intake and network policy.",
+              render: () => (
+                <AdminConsoleDialog
+                  open
+                  onOpenChange={close}
+                  workspace={workspace}
+                  currentUserId={currentUserId}
+                  boards={boards}
+                />
+              ),
+            } satisfies SettingsSection,
+          ]
+        : []),
+      {
+        id: "labels",
+        label: "Labels",
+        group: "Board",
+        icon: Tags,
+        description: "The workspace's label vocabulary (007).",
+        render: () => (
+          <LabelsDialog
+            open
+            onOpenChange={close}
+            workspaceId={workspaceId}
+            labels={labels}
+            canEdit={canEdit}
+            canDelete={canDeleteColumns}
+            onChanged={(next) => {
+              setLabels(next);
+              void refresh();
+            }}
+          />
+        ),
+      },
+      {
+        id: "fields",
+        label: "Custom fields",
+        group: "Board",
+        icon: SlidersHorizontal,
+        description: "Extra facts this board records on a task.",
+        render: () => (
+          <CustomFieldsDialog
+            open
+            onOpenChange={close}
+            boardId={boardId}
+            canEdit={canEdit}
+            onChanged={refresh}
+          />
+        ),
+      },
+      {
+        id: "templates",
+        label: "Templates",
+        group: "Board",
+        icon: LayoutTemplate,
+        description: "Starting points the New-task form can be filled from.",
+        render: () => (
+          <TemplatesDialog
+            open
+            onOpenChange={close}
+            workspaceId={workspaceId}
+            templates={templates}
+            labels={labels}
+            canEdit={canEdit}
+            onChanged={setTemplates}
+          />
+        ),
+      },
+      {
+        id: "automations",
+        label: "Automations",
+        group: "Board",
+        icon: Zap,
+        description: "Rules that act on this board without being asked.",
+        render: () => (
+          <AutomationsDialog
+            open
+            onOpenChange={close}
+            boardId={boardId}
+            workspaceId={workspaceId}
+            columns={cols}
+            labels={labels}
+            canManage={canDeleteColumns}
+            onChanged={refresh}
+          />
+        ),
+      },
+      {
+        id: "forms",
+        label: "Forms",
+        group: "Board",
+        icon: ClipboardList,
+        description: "Intake forms that file straight into a column.",
+        render: () => (
+          <FormsDialog
+            open
+            onOpenChange={close}
+            boardId={boardId}
+            columns={cols}
+            canEdit={canEdit}
+            onSubmitted={refresh}
+          />
+        ),
+      },
+      {
+        id: "sprints",
+        label: "Sprints",
+        group: "Planning",
+        icon: Rocket,
+        description: "The board's iterations and their scope (028).",
+        render: () => (
+          <SprintsDialog
+            open
+            onOpenChange={close}
+            boardId={boardId}
+            canEdit={canEdit}
+            membersById={membersById}
+            agentsById={agentsById}
+            onChanged={refresh}
+          />
+        ),
+      },
+      {
+        id: "milestones",
+        label: "Milestones",
+        group: "Planning",
+        icon: Flag,
+        description: "Checkpoints work aims at (026).",
+        render: () => (
+          <MilestonesDialog
+            open
+            onOpenChange={close}
+            boardId={boardId}
+            milestones={milestones}
+            epics={epics}
+            objectives={objectives}
+            canEdit={canEdit}
+            onChanged={refresh}
+          />
+        ),
+      },
+      {
+        id: "releases",
+        label: "Releases",
+        group: "Planning",
+        icon: Tag,
+        description: "What shipped, and what is in the next one.",
+        render: () => (
+          <ReleasesDialog
+            open
+            onOpenChange={close}
+            boardId={boardId}
+            tasks={visibleTaskList.map((t) => ({ id: t.id, title: t.title }))}
+            canEdit={canEdit}
+            onChanged={refresh}
+          />
+        ),
+      },
+      {
+        id: "epics",
+        label: "Epics",
+        group: "Planning",
+        icon: Layers,
+        description: "The coarse groupings tasks are filed under (031).",
+        render: () => (
+          <EpicsDialog
+            open
+            onOpenChange={close}
+            boardId={boardId}
+            epics={epics}
+            canEdit={canEdit}
+            onChanged={refresh}
+          />
+        ),
+      },
+      {
+        id: "objectives",
+        label: "Objectives",
+        group: "Planning",
+        icon: Target,
+        description: "Outcomes and the key results measuring them (037).",
+        render: () => (
+          <ObjectivesDialog
+            open
+            onOpenChange={close}
+            boardId={boardId}
+            objectives={objectives}
+            canEdit={canEdit}
+            onChanged={refresh}
+          />
+        ),
+      },
+    ],
+    [
+      close,
+      workspace,
+      currentUserId,
+      boards,
+      workspaceId,
+      boardId,
+      labels,
+      templates,
+      cols,
+      milestones,
+      epics,
+      objectives,
+      membersById,
+      agentsById,
+      visibleTaskList,
+      canEdit,
+      canDeleteColumns,
+      refresh,
+    ]
+  );
+
+  /**
+   * Keyboard chords: `C` to create, `G` then a letter to change lens, `G S` for
+   * settings.
+   *
+   * A ref rather than state for the pending `G`: nothing renders differently
+   * while a chord is half-typed, and state here would re-render the whole board
+   * on every keystroke that reached it. The chord expires after a second and a
+   * half, so a stray G does not silently arm the next letter you type minutes
+   * later.
+   *
+   * Anything with a dialog open is off limits — the check is for a rendered
+   * dialog rather than this component's own state, so the palette, a confirm,
+   * and a panel opened by some other component all suppress the chords without
+   * this effect having to know they exist.
+   */
+  const chord = useRef<{ key: string; at: number } | null>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTypingTarget(e.target)) return;
+      if (document.querySelector('[data-slot="dialog-content"]')) return;
+      const key = e.key.toLowerCase();
+      const pending =
+        chord.current && e.timeStamp - chord.current.at < 1500
+          ? chord.current.key
+          : null;
+      chord.current = null;
+
+      if (pending === "g") {
+        if (key === "s") {
+          e.preventDefault();
+          openSettings();
+          return;
+        }
+        const mode = VIEW_CHORDS[key];
+        if (mode) {
+          e.preventDefault();
+          setView(mode);
+        }
+        return;
+      }
+      if (key === "g") {
+        chord.current = { key: "g", at: e.timeStamp };
+        return;
+      }
+      if (key === "c" && canEdit && cols.length > 0) {
+        e.preventDefault();
+        setDialog({ columnId: cols[0].id });
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canEdit, cols]);
+
   // The ⌘K palette's verbs. Everything here reuses state the board already
   // owns — a command is just a named setState — so the palette adds reach,
   // not a second way of doing anything.
   const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    // The hints are the chords VIEW_CHORDS binds (see the keydown effect):
+    // the palette is where someone discovers that G B exists, so the two lists
+    // are written from the same shape rather than kept in sync by hand.
     const views: [BoardViewMode, string][] = [
       ["board", "Go to Board"],
       ["list", "Go to List"],
@@ -579,19 +1024,9 @@ export function Board({
       ["dashboard", "Go to Dashboard"],
     ];
     const panels: [string, () => void][] = [
-      ["Templates", () => setTemplatesOpen(true)],
-      ["Labels", () => setLabelsOpen(true)],
-      ["Sprints", () => setSprintsOpen(true)],
-      ["Milestones", () => setMilestonesOpen(true)],
-      ["Releases", () => setReleasesOpen(true)],
-      ["Epics", () => setEpicsOpen(true)],
-      ["Objectives", () => setObjectivesOpen(true)],
-      ["Custom fields", () => setFieldsOpen(true)],
       ["Insights", () => setInsightsOpen(true)],
       ["Schedule", () => setScheduleOpen(true)],
       ["Timesheet", () => setTimesheetOpen(true)],
-      ["Forms", () => setFormsOpen(true)],
-      ["Automations", () => setAutomationsOpen(true)],
       ["Requests", () => setRequestsOpen(true)],
       ["Capacity", () => setCapacityOpen(true)],
       ["Budget", () => setBudgetOpen(true)],
@@ -604,7 +1039,7 @@ export function Board({
               id: "new-task",
               label: "Create new task",
               group: "Create",
-              hint: "first column",
+              hint: "C",
               run: () => setDialog({ columnId: cols[0].id }),
             },
           ]
@@ -613,6 +1048,7 @@ export function Board({
         id: `view-${mode}`,
         label,
         group: "Views",
+        hint: chordHint(mode),
         run: () => setView(mode),
       })),
       ...panels.map(([label, run]) => ({
@@ -621,8 +1057,25 @@ export function Board({
         group: "Panels",
         run,
       })),
+      // Every settings section is its own command, so "Labels" still reaches
+      // labels in one step now that the door is a shared surface — a
+      // consolidation that cost people a keystroke would not be one.
+      {
+        id: "settings",
+        label: "Open Settings",
+        group: "Settings",
+        hint: "G S",
+        run: () => openSettings(),
+      },
+      ...settingsSections.map((s) => ({
+        id: `settings-${s.id}`,
+        label: `Settings: ${s.label}`,
+        group: "Settings",
+        hint: s.group,
+        run: () => setSettingsSection(s.id),
+      })),
     ];
-  }, [canEdit, cols]);
+  }, [canEdit, cols, settingsSections]);
 
   return (
     <>
@@ -666,173 +1119,59 @@ export function Board({
               setFilter(v.filter);
             }}
           />
+          {/* Four view tabs, not eight (design synthesis).
+              Board / List / Timeline / Dashboard are the lenses people live in;
+              Calendar, Gantt, Backlog and Roadmap are real views that are read
+              occasionally, and eight equal-weight tabs made all of them look
+              equally likely. The dropdown keeps them one click away and takes
+              the active one's name onto its trigger, so the switcher never lies
+              about which lens you are in. */}
           <ToggleGroup
-            value={[view]}
+            value={[PRIMARY_VIEWS.some(([m]) => m === view) ? view : ""]}
             onValueChange={(v) => {
               // Single-select, but base-ui hands back an array; ignore the empty
               // case so clicking the active lens does not deselect into nothing.
               if (v[0]) setView(v[0] as BoardViewMode);
             }}
           >
-            <ToggleGroupItem value="board">
-              <Columns3 /> Board
-            </ToggleGroupItem>
-            <ToggleGroupItem value="list">
-              <List /> List
-            </ToggleGroupItem>
-            <ToggleGroupItem value="calendar">
-              <CalendarDays /> Calendar
-            </ToggleGroupItem>
-            <ToggleGroupItem value="timeline">
-              <GanttChartSquare /> Timeline
-            </ToggleGroupItem>
-            <ToggleGroupItem value="gantt">
-              <Waypoints /> Gantt
-            </ToggleGroupItem>
-            <ToggleGroupItem value="backlog">
-              <Inbox /> Backlog
-            </ToggleGroupItem>
-            <ToggleGroupItem value="roadmap">
-              <MapIcon /> Roadmap
-            </ToggleGroupItem>
-            <ToggleGroupItem value="dashboard">
-              <LayoutDashboard /> Dashboard
-            </ToggleGroupItem>
+            {PRIMARY_VIEWS.map(([mode, label, Icon]) => (
+              <ToggleGroupItem key={mode} value={mode}>
+                <Icon /> {label}
+              </ToggleGroupItem>
+            ))}
           </ToggleGroup>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setTemplatesOpen(true)}
-          >
-            <LayoutTemplate /> Templates
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setLabelsOpen(true)}
-          >
-            <Tags /> Labels
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setSprintsOpen(true)}
-          >
-            <Rocket /> Sprints
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setMilestonesOpen(true)}
-          >
-            <Flag /> Milestones
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setReleasesOpen(true)}
-          >
-            <Tag /> Releases
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setEpicsOpen(true)}
-          >
-            <Layers /> Epics
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setObjectivesOpen(true)}
-          >
-            <Target /> Objectives
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setFieldsOpen(true)}
-          >
-            <SlidersHorizontal /> Fields
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setInsightsOpen(true)}
-          >
-            <ChartNoAxesColumn /> Insights
-          </Button>
-          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setScheduleOpen(true)}>
-            <Clock /> Schedule
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setTimesheetOpen(true)}
-          >
-            <Clock /> Timesheet
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setFormsOpen(true)}
-          >
-            <ClipboardList /> Forms
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setAutomationsOpen(true)}
-          >
-            <Zap /> Automations
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setRequestsOpen(true)}
-          >
-            <Inbox /> Requests
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setCapacityOpen(true)}
-          >
-            <Gauge /> Capacity
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setBudgetOpen(true)}
-          >
-            <Landmark /> Budget
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setDiscoveryOpen(true)}
-          >
-            <Lightbulb /> Discovery
-          </Button>
-          {/* Export is a GET the browser can follow — plain anchors, so the
-              download rides the session cookie with no fetch-and-blob dance.
-              Viewer+: an export is a read of what the board already shows. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant={MORE_VIEWS.some(([m]) => m === view) ? "secondary" : "ghost"}
+                  size="sm"
+                  className="text-muted-foreground"
+                >
+                  {MORE_VIEWS.find(([m]) => m === view)?.[1] ?? "More views"}
+                  <ChevronDown />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              {MORE_VIEWS.map(([mode, label, Icon]) => (
+                <DropdownMenuItem key={mode} onClick={() => setView(mode)}>
+                  <Icon /> {label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {canEdit && cols.length > 0 && (
+            <Button size="sm" onClick={() => setDialog({ columnId: cols[0].id })}>
+              <Plus /> New task
+            </Button>
+          )}
+          {/* One overflow menu in place of seventeen flat ghost buttons.
+              Every entry below already had a ⌘K command (paletteCommands), so
+              the palette was always the fast path and the toolbar was a wall of
+              equally-weighted verbs nobody could scan. This is the mouse path to
+              the same set, grouped by what the thing is *for* rather than by the
+              order the features happened to land in. */}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -840,20 +1179,86 @@ export function Board({
                   variant="ghost"
                   size="sm"
                   className="text-muted-foreground"
+                  aria-label="Board tools"
                 >
-                  <Download /> Export
+                  <MoreHorizontal />
                 </Button>
               }
             />
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="max-h-[70vh] overflow-y-auto">
+              {/* Eleven entries became one door. Sprints, milestones, labels,
+                  fields, templates, automations, forms and the rest are all
+                  "set this board up", and listing them here made configuring
+                  look like eleven unrelated errands. They are sections of
+                  Settings now — the palette still names each one directly, so
+                  nothing moved further away than a menu. */}
+              <DropdownMenuItem onClick={() => openSettings()}>
+                <Settings /> Settings…
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setScheduleOpen(true)}>
+                <Clock /> Schedule
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Measure</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setInsightsOpen(true)}>
+                <ChartNoAxesColumn /> Insights
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTimesheetOpen(true)}>
+                <Clock /> Timesheet
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCapacityOpen(true)}>
+                <Gauge /> Capacity
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setBudgetOpen(true)}>
+                <Landmark /> Budget
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Intake</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => setRequestsOpen(true)}>
+                <Inbox /> Requests
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDiscoveryOpen(true)}>
+                <Lightbulb /> Discovery
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              {/* Sharing is minting capabilities, an admin-only power server-side —
+                  the same rank canDeleteColumns proves, so it doubles as the gate. */}
+              {canDeleteColumns && (
+                <DropdownMenuItem onClick={() => setShareOpen(true)}>
+                  <Share2 /> Share…
+                </DropdownMenuItem>
+              )}
+              {/* Export is a GET the browser can follow — plain anchors, so the
+                  download rides the session cookie with no fetch-and-blob dance.
+                  Viewer+: an export is a read of what the board already shows. */}
               <DropdownMenuItem
-                render={<a href={`/api/board/${boardId}/export?format=csv`}>CSV</a>}
+                render={<a href={`/api/board/${boardId}/export?format=csv`}>Export CSV</a>}
               />
               <DropdownMenuItem
-                render={
-                  <a href={`/api/board/${boardId}/export?format=json`}>JSON</a>
-                }
+                render={<a href={`/api/board/${boardId}/export?format=json`}>Export JSON</a>}
               />
+
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Density</DropdownMenuLabel>
+              {/* A per-browser reading preference, not a board setting: it says
+                  how much of the screen this person wants a row to take, which
+                  is about their eyes and their monitor rather than about the
+                  work. Stored locally for the same reason. */}
+              {(["comfortable", "compact"] as const).map((value) => (
+                <DropdownMenuItem
+                  key={value}
+                  onClick={() => setDensity(value)}
+                  aria-current={density === value ? "true" : undefined}
+                >
+                  <span className="w-3 text-primary" aria-hidden>
+                    {density === value ? "✓" : ""}
+                  </span>
+                  {value === "compact" ? "Compact" : "Comfortable"}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -871,6 +1276,13 @@ export function Board({
           canEdit={canEdit}
           onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
           onChanged={refresh}
+          filtering={filtering}
+          onClearFilter={() => setFilter(EMPTY_FILTER)}
+          onNewTask={
+            canEdit && cols.length > 0
+              ? () => setDialog({ columnId: cols[0].id })
+              : undefined
+          }
         />
       ) : view === "calendar" ? (
         <CalendarView
@@ -915,7 +1327,7 @@ export function Board({
         <RoadmapView
           milestones={milestones}
           epics={epics}
-          onOpenMilestones={() => setMilestonesOpen(true)}
+          onOpenMilestones={() => setSettingsSection("milestones")}
         />
       ) : view === "dashboard" ? (
         <DashboardView
@@ -1079,59 +1491,12 @@ export function Board({
         // same staleness for the same reason.
         onDependenciesChanged={refresh}
       />
-      {/* Beside the labels dialog and sharing its vocabulary: a template picks
-          labels from the same set (019). canEdit gates all of create/edit/delete
-          — a template deletion has no task-side blast radius, so it needs member,
-          not the admin canDeleteColumns demands. */}
-      <SprintsDialog
-        boardId={boardId}
-        open={sprintsOpen}
-        canEdit={canEdit}
-        membersById={membersById}
-        agentsById={agentsById}
-        onOpenChange={setSprintsOpen}
-        onChanged={refresh}
-      />
-      <MilestonesDialog
-        boardId={boardId}
-        open={milestonesOpen}
-        milestones={milestones}
-        epics={epics}
-        objectives={objectives}
-        canEdit={canEdit}
-        onOpenChange={setMilestonesOpen}
-        onChanged={refresh}
-      />
-      <ReleasesDialog
-        boardId={boardId}
-        open={releasesOpen}
-        tasks={visibleTaskList.map((t) => ({ id: t.id, title: t.title }))}
-        canEdit={canEdit}
-        onOpenChange={setReleasesOpen}
-        onChanged={refresh}
-      />
-      <EpicsDialog
-        boardId={boardId}
-        open={epicsOpen}
-        epics={epics}
-        canEdit={canEdit}
-        onOpenChange={setEpicsOpen}
-        onChanged={refresh}
-      />
-      <ObjectivesDialog
-        boardId={boardId}
-        open={objectivesOpen}
-        objectives={objectives}
-        canEdit={canEdit}
-        onOpenChange={setObjectivesOpen}
-        onChanged={refresh}
-      />
-      <CustomFieldsDialog
-        boardId={boardId}
-        open={fieldsOpen}
-        canEdit={canEdit}
-        onOpenChange={setFieldsOpen}
-        onChanged={refresh}
+      {/* Every configurable surface, behind one door. The panels are the same
+          components they always were — see settingsSections. */}
+      <SettingsDialog
+        sections={settingsSections}
+        section={settingsSection}
+        onSectionChange={setSettingsSection}
       />
       <InsightsDialog
         boardId={boardId}
@@ -1146,24 +1511,8 @@ export function Board({
         boardId={boardId}
         open={timesheetOpen}
         onOpenChange={setTimesheetOpen}
-      />
-      <FormsDialog
-        boardId={boardId}
-        open={formsOpen}
-        columns={cols}
-        canEdit={canEdit}
-        onOpenChange={setFormsOpen}
-        onSubmitted={refresh}
-      />
-      <AutomationsDialog
-        boardId={boardId}
-        workspaceId={workspaceId}
-        open={automationsOpen}
-        columns={cols}
-        labels={labels}
-        canManage={canDeleteColumns}
-        onOpenChange={setAutomationsOpen}
-        onChanged={refresh}
+        currentUserId={currentUserId}
+        canReview={canDeleteColumns}
       />
       <RequestsDialog
         boardId={boardId}
@@ -1190,30 +1539,16 @@ export function Board({
         onOpenChange={setDiscoveryOpen}
         onPromoted={refresh}
       />
-      <TemplatesDialog
-        open={templatesOpen}
-        workspaceId={workspaceId}
-        templates={templates}
-        labels={labels}
-        canEdit={canEdit}
-        onOpenChange={setTemplatesOpen}
-        onChanged={setTemplates}
-      />
-      <LabelsDialog
-        open={labelsOpen}
-        workspaceId={workspaceId}
-        labels={labels}
-        canEdit={canEdit}
-        canDelete={canDeleteColumns}
-        onOpenChange={setLabelsOpen}
-        onChanged={(next) => {
-          setLabels(next);
-          // The vocabulary changed, so the tasks may have too: deleting a label
-          // unlabels every task wearing it, and a rename changes what their
-          // chips say. Both are server-side facts this board is now stale about.
-          void refresh();
-        }}
-      />
+      {canDeleteColumns && (
+        <ShareDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          subjectType="board"
+          subjectId={String(boardId)}
+          subjectName="this board"
+          workspaceId={workspaceId}
+        />
+      )}
     </>
   );
 }

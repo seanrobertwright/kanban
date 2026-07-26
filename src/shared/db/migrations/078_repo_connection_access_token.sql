@@ -1,0 +1,14 @@
+-- Repository browsing auth (2.10 follow-up). Browsing a connected repo's
+-- branches/tree calls the provider's REST API, which needs an OUTBOUND
+-- credential — distinct from `secret`, which only verifies INBOUND webhooks.
+--
+-- The credential is a provider access token the admin supplies on connect:
+-- a GitHub fine-grained PAT, a GitLab PAT, or a Bitbucket "username:app-password"
+-- pair. A full OAuth/App install handshake is deliberately not modeled — the PAT
+-- is the honest self-hosted fix.
+--
+-- Stored encrypted (6.5, shared/crypto/secret-box — the same box as `secret`),
+-- entered by the admin exactly once, and never returned by any read: the
+-- connection list omits it, and only the browse proxy decrypts it. Nullable —
+-- a connection without a token still ingests webhooks; only browsing needs it.
+ALTER TABLE repo_connection ADD COLUMN IF NOT EXISTS access_token TEXT;

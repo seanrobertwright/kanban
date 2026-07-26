@@ -274,6 +274,16 @@ export type GitAction =
   | "git.ci_passed"
   | "git.ci_failed";
 
+/**
+ * Chat mentions (3.7). Chat messages are deliberately NOT logged per message —
+ * a busy channel would bury the board's audit trail under talk, and a message
+ * is not a board mutation — but a message that @names someone is exactly the
+ * event the bell exists for, so that one case writes a row. The mentioned user
+ * ids ride in the snapshot, and "mentioned me" is computed per reader at read
+ * time, the same way comment_mention serves comment.created (024).
+ */
+export type ChatAction = "chat.mentioned";
+
 export type ActivityAction =
   | TaskAction
   | CommentAction
@@ -286,7 +296,8 @@ export type ActivityAction =
   | TimeAction
   | SprintAction
   | CustomFieldValueAction
-  | GitAction;
+  | GitAction
+  | ChatAction;
 
 /** What a task looked like at one instant. */
 export interface TaskSnapshot {
@@ -597,6 +608,23 @@ export interface GitLinkInfo {
  */
 export type GitSnapshot = TaskSnapshot & { git: GitLinkInfo };
 
+/**
+ * A chat message that mentioned someone (3.7). Carries the channel's name so
+ * the bell can say "in #general" against a channel that may since be deleted —
+ * ColumnSnapshot.title's reasoning — and `author` for CommentSnapshot.author's:
+ * the snapshot must name whose words these were, independent of the row's
+ * actor. `mentions` holds the mentioned user ids, resolved server-side from
+ * member names, so a reader-side query can ask "does this row name me?".
+ */
+export interface ChatMessageSnapshot {
+  messageId: number;
+  channelId: number;
+  channelName: string;
+  body: string;
+  author: Actor;
+  mentions: string[];
+}
+
 export type Snapshot =
   | TaskSnapshot
   | CommentSnapshot
@@ -609,7 +637,8 @@ export type Snapshot =
   | TimeSnapshot
   | SprintSnapshot
   | CustomFieldValueSnapshot
-  | GitSnapshot;
+  | GitSnapshot
+  | ChatMessageSnapshot;
 
 interface ActivityBase {
   id: string;
@@ -704,6 +733,12 @@ export interface GitActivity extends ActivityBase {
   after: GitSnapshot | null;
 }
 
+export interface ChatActivity extends ActivityBase {
+  action: ChatAction;
+  before: ChatMessageSnapshot | null;
+  after: ChatMessageSnapshot | null;
+}
+
 export type Activity =
   | TaskActivity
   | CommentActivity
@@ -716,7 +751,8 @@ export type Activity =
   | TimeActivity
   | SprintActivity
   | CustomFieldValueActivity
-  | GitActivity;
+  | GitActivity
+  | ChatActivity;
 
 /**
  * An activity joined to the human who caused it, for rendering.

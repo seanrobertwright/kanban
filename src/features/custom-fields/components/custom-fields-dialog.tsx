@@ -18,6 +18,7 @@ import {
   type CustomField,
   type CustomFieldType,
 } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface CustomFieldsDialogProps {
   boardId: number;
@@ -33,7 +34,7 @@ interface CustomFieldsDialogProps {
 }
 
 const SELECT_CLASS =
-  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
+  "w-full py-1 text-base md:text-sm dark:bg-input/30";
 
 const TYPE_LABELS: Record<CustomFieldType, string> = {
   text: "Text",
@@ -183,18 +184,18 @@ export function CustomFieldsDialog({
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <select
+              <Select
                 aria-label="Field type"
                 className={SELECT_CLASS}
                 value={type}
-                onChange={(e) => setType(e.target.value as CustomFieldType)}
+                onValueChange={(value) => setType(value as CustomFieldType)}
               >
                 {CUSTOM_FIELD_TYPES.map((t) => (
-                  <option key={t} value={t}>
+                  <SelectItem key={t} value={t}>
                     {TYPE_LABELS[t]}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </Select>
               {type === "select" && (
                 <Input
                   aria-label="Options, comma separated"

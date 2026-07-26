@@ -32,6 +32,17 @@ export function createMilestone(
   }).then((res) => jsonOrThrow<Milestone>(res));
 }
 
+export function updateMilestone(
+  id: number,
+  input: { name?: string; dueDate?: string | null }
+): Promise<Milestone> {
+  return fetch(`/api/milestones/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((res) => jsonOrThrow<Milestone>(res));
+}
+
 export async function deleteMilestone(id: number): Promise<void> {
   const res = await fetch(`/api/milestones/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error(`Delete failed (${res.status})`);

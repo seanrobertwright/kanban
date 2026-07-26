@@ -24,10 +24,11 @@ export async function placeLegalHold(userId:string,workspaceId:string,subjectTyp
     subjectType === "doc"
       ? `SELECT id FROM doc WHERE id=$1 AND workspace_id=$2`
       : subjectType === "task"
-        ? `SELECT t.id FROM task t JOIN board b ON b.id=t.board_id WHERE t.id=$1 AND b.workspace_id=$2`
+        // task reaches its board through board_column; there is no task.board_id.
+        ? `SELECT t.id FROM task t JOIN board_column bc ON bc.id=t.column_id JOIN board b ON b.id=bc.board_id WHERE t.id=$1 AND b.workspace_id=$2`
         : subjectType === "comment"
-          ? `SELECT c.id FROM comment c JOIN task t ON t.id=c.task_id JOIN board b ON b.id=t.board_id WHERE c.id=$1 AND b.workspace_id=$2`
-          : `SELECT a.id FROM attachment a JOIN task t ON t.id=a.task_id JOIN board b ON b.id=t.board_id WHERE a.id=$1 AND b.workspace_id=$2`,
+          ? `SELECT c.id FROM comment c JOIN task t ON t.id=c.task_id JOIN board_column bc ON bc.id=t.column_id JOIN board b ON b.id=bc.board_id WHERE c.id=$1 AND b.workspace_id=$2`
+          : `SELECT a.id FROM attachment a JOIN task t ON t.id=a.task_id JOIN board_column bc ON bc.id=t.column_id JOIN board b ON b.id=bc.board_id WHERE a.id=$1 AND b.workspace_id=$2`,
     [id, workspaceId]
   );
   if (!subject) throw new AuthzError("not_found", `Held ${table} not found`);

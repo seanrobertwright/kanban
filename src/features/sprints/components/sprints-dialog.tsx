@@ -22,6 +22,7 @@ import {
   type Sprint,
   type SprintCapacityRow,
 } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface SprintsDialogProps {
   boardId: number;
@@ -245,19 +246,19 @@ export function SprintsDialog({
                   {completing === sprint.id && (
                     <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 px-2 py-1.5 text-xs">
                       <span>Move unfinished tasks to</span>
-                      <select
+                      <Select
                         aria-label="Roll unfinished tasks to"
-                        className="h-7 rounded-md border border-input bg-transparent px-2"
+                        className="h-7 rounded-md px-2"
                         value={rolloverTo}
-                        onChange={(e) => setRolloverTo(e.target.value)}
+                        onValueChange={(value) => setRolloverTo(value)}
                       >
-                        <option value="">Backlog</option>
+                        <SelectItem value="">Backlog</SelectItem>
                         {planningSprints.map((p) => (
-                          <option key={p.id} value={p.id}>
+                          <SelectItem key={p.id} value={String(p.id)}>
                             {p.name}
-                          </option>
+                          </SelectItem>
                         ))}
-                      </select>
+                      </Select>
                       <Button
                         type="button"
                         size="sm"

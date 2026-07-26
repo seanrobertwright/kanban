@@ -13,6 +13,7 @@ import { DependencySection } from "@/features/dependencies/components/dependency
 import { CommentThread } from "@/features/comments/components/comment-thread";
 import { CustomFieldsSection } from "@/features/custom-fields/components/custom-fields-section";
 import { TimeSection } from "@/features/time/components/time-section";
+import { SlaSection } from "@/features/sla/components/sla-section";
 import { DevelopmentSection } from "@/features/git/components/development-section";
 import { TaskIntegrationsSection } from "@/features/integrations/components/task-integrations-section";
 import { TaskExtensionPanels } from "@/features/extensions/components/task-extension-panels";
@@ -38,6 +39,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
 import { RichText } from "@/shared/ui/rich-text";
+import { CollapsibleSection } from "@/shared/ui/collapsible-section";
 import {
   PRIORITY_LABELS,
   PRIORITY_ORDER,
@@ -52,6 +54,7 @@ import type {
   TaskPriority,
   TaskType,
 } from "../types";
+import { Select, SelectGroup, SelectItem } from "@/shared/ui/select";
 
 export interface TaskFormValues {
   title: string;
@@ -144,6 +147,43 @@ function previewScore(
   if (value === null || estimate === null || estimate === 0) return null;
   return Math.round((value / (estimate * (1 + risk / 10))) * 100) / 100;
 }
+
+/**
+ * A rail field: a small label over a control, stacked tight.
+ *
+ * The rail's job is to be readable at a glance and out of the way otherwise,
+ * which a twelve-row form of full-size labelled inputs is not. Same Label and
+ * same htmlFor as before — the control is unchanged, only its setting is.
+ *
+ * At module scope, not inside TaskDialog. A component defined in a render body
+ * is a new function on every render, so React unmounts and remounts its whole
+ * subtree each time — which for a rail of controlled inputs means the field
+ * loses focus after every keystroke.
+ */
+function RailField({
+  htmlFor,
+  label,
+  children,
+}: {
+  htmlFor?: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-1">
+      <Label
+        htmlFor={htmlFor}
+        className="text-xs font-normal text-muted-foreground"
+      >
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+/** Every rail select wears the same compact geometry. */
+const railSelect = "h-8 w-full py-0 text-sm dark:bg-input/30";
 
 interface TaskDialogProps {
   open: boolean;
@@ -397,14 +437,24 @@ export function TaskDialog({
     }
   }
 
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* A right slide-over, not a centered popup (the design synthesis panel):
           the board stays visible behind the task being edited. Overrides the
-          DialogContent centering + zoom with edge-anchoring + a slide. */}
-      <DialogContent className="top-0 right-0 left-auto h-dvh max-h-dvh w-[min(560px,92vw)] max-w-none translate-x-0 translate-y-0 rounded-none border-l sm:max-w-none data-open:zoom-in-100 data-closed:zoom-out-100 data-open:slide-in-from-right-16 data-closed:slide-out-to-right-16">
-        <form onSubmit={handleSubmit} className="grid gap-4">
-          <DialogHeader>
+          DialogContent centering + zoom with edge-anchoring + a slide.
+
+          Wider than it was, because the shell was never the density problem —
+          the single 560px column was. At this width the work (title,
+          description, pieces, conversation) gets a column of its own and the
+          twelve properties become a rail beside it, which is the difference
+          between reading a task and scrolling past a form to reach it. */}
+      <DialogContent className="top-0 right-0 left-auto grid h-dvh max-h-dvh w-[min(1040px,96vw)] max-w-none translate-x-0 translate-y-0 grid-rows-[minmax(0,1fr)] gap-0 overflow-hidden rounded-none border-l p-0 sm:max-w-none data-open:zoom-in-100 data-closed:zoom-out-100 data-open:slide-in-from-right-16 data-closed:slide-out-to-right-16">
+        <form
+          onSubmit={handleSubmit}
+          className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]"
+        >
+          <DialogHeader className="border-b px-5 py-4 pr-12">
             {/* Only a subtask has a parent to go back to. The button carries the
                 parent's title so the reader knows what they are a piece of, and
                 returns without closing — the dialog stays open, the task inside
@@ -430,521 +480,612 @@ export function TaskDialog({
                 : "Add a task to this column."}
             </DialogDescription>
           </DialogHeader>
-          {/* Create mode only, and only with templates to offer: a starting
-              point, not a control that survives into editing. Choosing one fills
-              the fields below, which the user is then free to change — see
-              applyTemplate. Resetting to the placeholder does nothing, so it is
-              safe to re-pick. */}
-          {!task && templates.length > 0 && (
-            <div className="grid gap-2">
-              <Label htmlFor="task-template">Start from a template</Label>
-              <select
-                id="task-template"
-                value={templateChoice}
-                onChange={(e) => applyTemplate(e.target.value)}
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-              >
-                <option value="">Blank task</option>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="grid gap-2">
-            <Label htmlFor="task-title">Title</Label>
-            <Input
-              id="task-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="What needs doing?"
-              autoFocus
-            />
-          </div>
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="task-description">Description</Label>
-              {/* Write / Preview — the description takes the same safe Markdown
-                  subset as comments (**bold**, `code`, - lists, links…), and
-                  Preview renders it through RichText (033), which builds React
-                  elements, never HTML. */}
-              <div className="flex overflow-hidden rounded-md border border-input text-xs">
-                <button
-                  type="button"
-                  onClick={() => setDescPreview(false)}
-                  aria-pressed={!descPreview}
-                  className={`px-2 py-0.5 transition-colors ${
-                    descPreview
-                      ? "text-muted-foreground hover:bg-muted"
-                      : "bg-muted font-medium"
-                  }`}
-                >
-                  Write
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDescPreview(true)}
-                  aria-pressed={descPreview}
-                  className={`border-l border-input px-2 py-0.5 transition-colors ${
-                    descPreview
-                      ? "bg-muted font-medium"
-                      : "text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  Preview
-                </button>
+          {/* Main column and property rail.
+
+              The main column is the task: what it is called, what it says, the
+              pieces it breaks into, and the conversation about it. The rail is
+              everything that is *true of* it — assignee, priority, size, dates,
+              where it sits in the plan. Those twelve fields were a form you
+              scrolled through to reach the comments; beside the work they are a
+              summary you read without scrolling at all.
+
+              One column on a phone, where a 20rem rail would leave neither side
+              usable. The rail comes second in the DOM so it stacks below the
+              title and description there — and so tabbing from the title lands
+              in the description rather than in the sprint picker. */}
+          <div className="grid min-h-0 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_20rem]">
+            <div className="grid min-h-0 auto-rows-min gap-4 overflow-y-auto p-5">
+              {/* Create mode only, and only with templates to offer: a starting
+                  point, not a control that survives into editing. Choosing one
+                  fills the fields below, which the user is then free to change —
+                  see applyTemplate. Resetting to the placeholder does nothing, so
+                  it is safe to re-pick. */}
+              {!task && templates.length > 0 && (
+                <div className="grid gap-2">
+                  <Label htmlFor="task-template">Start from a template</Label>
+                  <Select
+                    id="task-template"
+                    value={templateChoice}
+                    onValueChange={(value) => applyTemplate(value)}
+                    className="w-full py-1 text-base md:text-sm dark:bg-input/30"
+                  >
+                    <SelectItem value="">Blank task</SelectItem>
+                    {templates.map((template) => (
+                      <SelectItem key={template.id} value={String(template.id)}>
+                        {template.title}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              <div className="grid gap-2">
+                {/* The label is for screen readers only: this input sits at the
+                    top of the panel under a heading that already says whether the
+                    task is being created or edited, and "Title" over the title is
+                    a caption on the obvious. It stays in the DOM because the field
+                    still needs a name when it is not being looked at. */}
+                <Label htmlFor="task-title" className="sr-only">
+                  Title
+                </Label>
+                <Input
+                  id="task-title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="What needs doing?"
+                  autoFocus
+                  className="h-auto border-0 px-0 py-1 text-lg font-medium shadow-none focus-visible:ring-0 md:text-lg dark:bg-transparent"
+                />
               </div>
-            </div>
-            {descPreview ? (
-              <div className="min-h-[92px] rounded-lg border border-input px-3 py-2">
-                {description.trim() === "" ? (
-                  <p className="text-sm text-muted-foreground">
-                    Nothing to preview.
-                  </p>
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="task-description">Description</Label>
+                  {/* Write / Preview — the description takes the same safe
+                      Markdown subset as comments (**bold**, `code`, - lists,
+                      links…), and Preview renders it through RichText (033), which
+                      builds React elements, never HTML. */}
+                  <div className="flex overflow-hidden rounded-md border border-input text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setDescPreview(false)}
+                      aria-pressed={!descPreview}
+                      className={`px-2 py-0.5 transition-colors ${
+                        descPreview
+                          ? "text-muted-foreground hover:bg-muted"
+                          : "bg-muted font-medium"
+                      }`}
+                    >
+                      Write
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDescPreview(true)}
+                      aria-pressed={descPreview}
+                      className={`border-l border-input px-2 py-0.5 transition-colors ${
+                        descPreview
+                          ? "bg-muted font-medium"
+                          : "text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      Preview
+                    </button>
+                  </div>
+                </div>
+                {descPreview ? (
+                  <div className="min-h-[128px] rounded-lg border border-input px-3 py-2">
+                    {description.trim() === "" ? (
+                      <p className="text-sm text-muted-foreground">
+                        Nothing to preview.
+                      </p>
+                    ) : (
+                      <RichText text={description} className="text-sm" />
+                    )}
+                  </div>
                 ) : (
-                  <RichText text={description} className="text-sm" />
+                  <Textarea
+                    id="task-description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Optional details — Markdown supported"
+                    rows={6}
+                  />
                 )}
               </div>
-            ) : (
-              <Textarea
-                id="task-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional details — Markdown supported"
-                rows={4}
-              />
-            )}
-          </div>
-          {/* A native select rather than a styled menu: it is one tab stop, it
-              is announced as a listbox without any ARIA of our own, and it gets
-              the platform picker on touch. The second group is 011's agents —
-              the whole wedge, and why the field was labelled "Assignee" rather
-              than anything person-shaped from the start. Each group renders only
-              when it has members, so a workspace with no agents shows exactly the
-              picker it did before. */}
-          <div className="grid gap-2">
-            <Label htmlFor="task-assignee">Assignee</Label>
-            <select
-              id="task-assignee"
-              value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-              className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-            >
-              <option value={UNASSIGNED}>Unassigned</option>
-              {members.length > 0 && (
-                <optgroup label="People">
-                  {members.map((member) => (
-                    <option key={member.userId} value={`human:${member.userId}`}>
-                      {member.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {agents.length > 0 && (
-                <optgroup label="Agents">
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={`agent:${agent.id}`}>
-                      {agent.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
-          {/* Status, for a piece only. A top-level task's column is its place on
-              the board and it moves there by drag; a piece has no place on the
-              board (008), so this is the one place its status can be set. The
-              change commits immediately — see onMoveSubtask — because a move is a
-              move whether it happens by drag or by this select. */}
-          {isSubtask && columns.length > 0 && (
-            <div className="grid gap-2">
-              <Label htmlFor="task-status">Status</Label>
-              <select
-                id="task-status"
-                value={columnId}
-                onChange={(e) => {
-                  const next = Number(e.target.value);
-                  setColumnId(next);
-                  if (task) onMoveSubtask?.(task.id, next);
-                }}
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-              >
-                {columns.map((column) => (
-                  <option key={column.id} value={column.id}>
-                    {column.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {/* Priority on its own row: PRD §9 calls it one of "the fields an
-              agent reasons over when triaging", and it now sits above the work's
-              window rather than beside a single date, since the window is two
-              dates (032). */}
-          <div className="grid gap-2">
-            <Label htmlFor="task-priority">Priority</Label>
-            <select
-              id="task-priority"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as TaskPriority)}
-              className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-            >
-              {/* Highest first: the reason to open this menu is almost always
-                  to raise a priority, and 'none' is where you already are. The
-                  stored order is lowest-first (it is a sort order, and DESC
-                  reads better than ASC in a query) — so this reverses a copy
-                  rather than reading PRIORITY_ORDER directly, which would
-                  silently reorder the enum for everyone. */}
-              {[...PRIORITY_ORDER].reverse().map((value) => (
-                <option key={value} value={value}>
-                  {PRIORITY_LABELS[value]}
-                </option>
-              ))}
-            </select>
-          </div>
-          {/* The work's window, side by side because they are one span — when it
-              begins and when it is due, the two dates the Timeline draws as a bar
-              (032). Either may stand alone: a start with no due, or the reverse. */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="task-start-date">Start date</Label>
-              {/* type="date", dueDate's reasoning verbatim: its value is already
-                  'YYYY-MM-DD', so no parsing and no Date to drag a zoneless date
-                  through, and it clears to "" on its own. */}
-              <Input
-                id="task-start-date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="task-due-date">Due date</Label>
-              {/* type="date" is the rare case where the platform control is
-                  exactly right: its value is 'YYYY-MM-DD' whatever locale it
-                  displays in, so the string the API wants is the string the DOM
-                  already holds — no parsing, no formatting, and no Date to
-                  convert a zoneless date through. It also clears to "" on its
-                  own, which is the only other state the field has. */}
-              <Input
-                id="task-due-date"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
-            </div>
-          </div>
-          {/* Type and estimate (022), side by side like priority and due date:
-              what kind of work, and how big — the two facts sprint planning
-              reads together. */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="task-type">Type</Label>
-              <select
-                id="task-type"
-                value={type}
-                onChange={(e) => setType(e.target.value as TaskType)}
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-              >
-                {TASK_TYPES.map((value) => (
-                  <option key={value} value={value}>
-                    {TASK_TYPE_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="task-estimate">Estimate</Label>
-              {/* type="number" min=0: the API refuses negatives, so the control
-                  should not offer them. Clears to "", the unestimated state. */}
-              <Input
-                id="task-estimate"
-                type="number"
-                min={0}
-                step={1}
-                value={estimate}
-                onChange={(e) => setEstimate(e.target.value)}
-                placeholder="Points"
-              />
-            </div>
-          </div>
-          {/* Prioritisation scoring (034): value and risk, 0–10, with the live
-              score = value / (estimate × (1 + risk/10)) the board ranks by. The
-              readout mirrors taskColumns' derivation so it updates as you type. */}
-          <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
-            <div className="grid gap-2">
-              <Label htmlFor="task-value">Value</Label>
-              <Input
-                id="task-value"
-                type="number"
-                min={0}
-                max={10}
-                step={1}
-                value={businessValue}
-                onChange={(e) => setBusinessValue(e.target.value)}
-                placeholder="0–10"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="task-risk">Risk</Label>
-              <Input
-                id="task-risk"
-                type="number"
-                min={0}
-                max={10}
-                step={1}
-                value={risk}
-                onChange={(e) => setRisk(e.target.value)}
-                placeholder="0–10"
-              />
-            </div>
-            <div className="grid gap-2 text-center">
-              <Label>Score</Label>
-              <p
-                className="flex h-8 min-w-14 items-center justify-center rounded-lg border bg-muted/40 px-2 text-sm font-medium tabular-nums"
-                title="value / (estimate × (1 + risk/10)) — needs value and an estimate"
-              >
-                {previewScore(businessValue, estimate, risk) ?? "—"}
-              </p>
-            </div>
-          </div>
-          {/* Milestone (026). Only when the board has any — the templates
-              rule — and hidden for a subtask, which aims through its parent. */}
-          {!isSubtask && milestones.length > 0 && (
-            <div className="grid gap-2">
-              <Label htmlFor="task-milestone">Milestone</Label>
-              <select
-                id="task-milestone"
-                value={milestoneId}
-                onChange={(e) => setMilestoneId(e.target.value)}
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-              >
-                <option value="">No milestone</option>
-                {milestones.map((milestone) => (
-                  <option key={milestone.id} value={milestone.id}>
-                    {milestone.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {/* Epic (031). The milestone rule: only when the board has any, and
-              hidden for a subtask, which is filed through its parent. An epic is
-              a coarser grouping than a milestone — a task may carry both. */}
-          {!isSubtask && epics.length > 0 && (
-            <div className="grid gap-2">
-              <Label htmlFor="task-epic">Epic</Label>
-              <select
-                id="task-epic"
-                value={epicId}
-                onChange={(e) => setEpicId(e.target.value)}
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-              >
-                <option value="">No epic</option>
-                {epics.map((epic) => (
-                  <option key={epic.id} value={epic.id}>
-                    {epic.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {/* Objective (037). The epic rule: only when the board has any, hidden
-              for a subtask. A task aims at an outcome the objective's key results
-              measure — independent of any milestone or epic it also carries. */}
-          {!isSubtask && objectives.length > 0 && (
-            <div className="grid gap-2">
-              <Label htmlFor="task-objective">Objective</Label>
-              <select
-                id="task-objective"
-                value={objectiveId}
-                onChange={(e) => setObjectiveId(e.target.value)}
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-              >
-                <option value="">No objective</option>
-                {objectives.map((objective) => (
-                  <option key={objective.id} value={objective.id}>
-                    {objective.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {/* Sprint (028). Only when the board has any, and hidden for a subtask
-              (a piece is scheduled through its parent). The picker offers
-              planning + active sprints; a completed one shows disabled only if
-              the task is already in it, so its home stays legible. */}
-          {!isSubtask && sprints.length > 0 && (
-            <div className="grid gap-2">
-              <Label htmlFor="task-sprint">Sprint</Label>
-              <select
-                id="task-sprint"
-                value={sprintId}
-                onChange={(e) => setSprintId(e.target.value)}
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-              >
-                <option value="">Backlog</option>
-                {sprints
-                  .filter(
-                    (s) =>
-                      s.status !== "completed" ||
-                      String(s.id) === sprintId
-                  )
-                  .map((sprint) => (
-                    <option
-                      key={sprint.id}
-                      value={sprint.id}
-                      disabled={sprint.status === "completed"}
-                    >
-                      {sprint.name}
-                      {sprint.status === "active" ? " (active)" : ""}
-                      {sprint.status === "completed" ? " (completed)" : ""}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          )}
-          {/* Repeat (020). A recurring task spawns its successor when it is moved
-              into the board's done column — so this sets the cadence, and the
-              board's done column is where completion happens. Hidden for a
-              subtask: a piece completes with the parent, not on its own cycle. */}
-          {!isSubtask && (
-            <div className="grid gap-2">
-              <Label htmlFor="task-recurrence">Repeat</Label>
-              <select
-                id="task-recurrence"
-                value={recurrence}
-                onChange={(e) =>
-                  setRecurrence(e.target.value as RecurrenceFrequency | "")
-                }
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
-              >
-                <option value="">Does not repeat</option>
-                {RECURRENCE_FREQUENCIES.map((value) => (
-                  <option key={value} value={value}>
-                    {RECURRENCE_LABELS[value]}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="grid gap-2">
-            <Label>Labels</Label>
-            <LabelPicker
-              labels={labels}
-              selected={labelIds}
-              onChange={setLabelIds}
-            />
-          </div>
-          {/* Only an existing task has a thread or history, and only while the
-              dialog is open — mounting either otherwise would fetch on every
-              board render. The keys remount them per task so switching cards
-              cannot show the previous task's entries while the new ones load.
+              {/* Only an existing task has a thread or history, and only while the
+                  dialog is open — mounting either otherwise would fetch on every
+                  board render. The keys remount them per task so switching cards
+                  cannot show the previous task's entries while the new ones load.
 
-              Comments come first because they are the conversation and the
-              history is the receipt: the thread is what a reader came for, and
-              at M2 it is where an agent reports what it did. */}
-          {task && open && (
-            <div className="grid gap-4 border-t pt-3">
-              {/* A piece has no pieces of its own — depth is 1 (008) — so the
-                  section is here for a top-level task only. It is the sole way to
-                  reach a subtask, since none of them are on the board. */}
-              {!isSubtask && (
-                <SubtaskList
-                  key={`subtasks-${task.id}`}
-                  parentId={task.id}
-                  defaultColumnId={columns[0]?.id ?? null}
-                  columnNames={columnNames}
-                  onOpenSubtask={(sub) => onOpenSubtask?.(sub)}
-                  onChanged={onSubtasksChanged}
-                />
+                  What is open and what is folded is a claim about what a reader
+                  came for. The pieces, the blockers and the conversation are the
+                  task; files, hours, SLA timers, custom answers, linked branches
+                  and the audit history are things the task *also* has, and twelve
+                  of them stacked open was the density the review objected to.
+                  Folded sections still mount and still fetch — see
+                  CollapsibleSection — so opening one is instant and its heading
+                  can carry a count. */}
+              {task && open && (
+                <div className="grid gap-4 border-t pt-4">
+                  {/* A piece has no pieces of its own — depth is 1 (008) — so the
+                      section is here for a top-level task only. It is the sole way
+                      to reach a subtask, since none of them are on the board. */}
+                  {!isSubtask && (
+                    <SubtaskList
+                      key={`subtasks-${task.id}`}
+                      parentId={task.id}
+                      defaultColumnId={columns[0]?.id ?? null}
+                      columnNames={columnNames}
+                      onOpenSubtask={(sub) => onOpenSubtask?.(sub)}
+                      onChanged={onSubtasksChanged}
+                    />
+                  )}
+                  {/* Any task — top-level or a piece — can carry a checklist
+                      (017), so unlike the subtask list this is not gated on
+                      isSubtask. The same refresh the subtasks use: a checklist
+                      change moves the card's "2/5" badge, which the board must
+                      refetch to show. */}
+                  <ChecklistSection
+                    key={`checklist-${task.id}`}
+                    taskId={task.id}
+                    onChanged={onSubtasksChanged}
+                  />
+                  {/* What this task waits on (018). Open rather than folded: a
+                      blocker is the reason work is not moving, which nobody should
+                      have to expand a section to discover. Any task can carry
+                      dependencies, so it is not gated on isSubtask; a change moves
+                      the card's blocked-by count, so it nudges a refetch. */}
+                  <DependencySection
+                    key={`deps-${task.id}`}
+                    taskId={task.id}
+                    onChanged={onDependenciesChanged}
+                  />
+                  {/* An agent run's review sits above the thread: it is what a
+                      human came to this task to resolve when the agent has proposed
+                      work. Renders nothing when the task has never had a run.
+                      Accepting or undoing writes activity, so it bumps the same
+                      version the feed reads — the receipt updates in step. */}
+                  <RunReview
+                    key={`run-${task.id}`}
+                    taskId={task.id}
+                    onChanged={() => setActivityVersion((v) => v + 1)}
+                  />
+                  <CommentThread
+                    key={`comments-${task.id}`}
+                    taskId={task.id}
+                    onChanged={() => setActivityVersion((v) => v + 1)}
+                  />
+
+                  {/* Files on the task (021). Any task can carry them, so not
+                      gated on isSubtask. A change moves the card's paperclip
+                      count, so it nudges the same board refresh. */}
+                  <CollapsibleSection title="Files">
+                    <AttachmentSection
+                      key={`attachments-${task.id}`}
+                      taskId={task.id}
+                      onChanged={onDependenciesChanged}
+                    />
+                  </CollapsibleSection>
+                  {/* The time ledger (027) and the SLA timers (SPEC 1.6) — both
+                      about clocks, so one section rather than two. Any task can
+                      carry hours: a piece's work is still work. Logging writes
+                      history, so it bumps the feed. */}
+                  <CollapsibleSection title="Time & SLA">
+                    <div className="grid gap-3">
+                      <TimeSection
+                        key={`time-${task.id}`}
+                        taskId={task.id}
+                        onChanged={() => setActivityVersion((v) => v + 1)}
+                      />
+                      <SlaSection key={`sla-${task.id}`} taskId={task.id} />
+                    </div>
+                  </CollapsibleSection>
+                  {/* The board's custom-field answers (035). Inert when the board
+                      defines no fields, so this is empty until opted into. No
+                      onChanged: custom fields are outside the activity log by
+                      design. */}
+                  <CollapsibleSection title="Custom fields">
+                    <div className="grid gap-3">
+                      <CustomFieldsSection
+                        key={`fields-${task.id}`}
+                        taskId={task.id}
+                      />
+                      <TaskExtensionPanels
+                        key={`field-extensions-${task.id}`}
+                        taskId={task.id}
+                        slot="custom_field_renderer"
+                      />
+                    </div>
+                  </CollapsibleSection>
+                  {/* Linked branches/PRs/commits (2.4/2.5) and the other systems
+                      this task touches. Read-only where the git host owns the
+                      lifecycle, and inert until something references the task — so
+                      it costs nothing on an unlinked one. */}
+                  <CollapsibleSection title="Development & integrations">
+                    <div className="grid gap-3">
+                      <DevelopmentSection
+                        key={`dev-${task.id}`}
+                        taskId={task.id}
+                        taskTitle={task.title}
+                      />
+                      <TaskIntegrationsSection
+                        key={`integrations-${task.id}`}
+                        taskId={task.id}
+                      />
+                      <TaskExtensionPanels
+                        key={`extensions-${task.id}`}
+                        taskId={task.id}
+                      />
+                    </div>
+                  </CollapsibleSection>
+                  {/* The receipt. Folded because it is what you check when
+                      something looks wrong, not what you read when you open a
+                      task — the conversation above is that. */}
+                  <CollapsibleSection title="History">
+                    <ActivityFeed
+                      key={task.id}
+                      taskId={task.id}
+                      columnNames={columnNames}
+                      memberNames={memberNames}
+                      agentNames={agentNames}
+                      refreshToken={activityVersion}
+                    />
+                  </CollapsibleSection>
+                </div>
               )}
-              {/* Any task — top-level or a piece — can carry a checklist (017),
-                  so unlike the subtask list this is not gated on isSubtask. The
-                  same refresh the subtasks use: a checklist change moves the
-                  card's "2/5" badge, which the board must refetch to show. */}
-              <ChecklistSection
-                key={`checklist-${task.id}`}
-                taskId={task.id}
-                onChanged={onSubtasksChanged}
-              />
-              {/* What this task waits on (018). Like the checklist, any task —
-                  top-level or a piece — can carry dependencies, so it is not
-                  gated on isSubtask; the server allows an edge between any two
-                  tasks on the same board. A change moves the card's blocked-by
-                  count, so it nudges the board to refetch. */}
-              <DependencySection
-                key={`deps-${task.id}`}
-                taskId={task.id}
-                onChanged={onDependenciesChanged}
-              />
-              {/* Files on the task (021). Like the checklist, any task can carry
-                  them, so it is not gated on isSubtask. A change moves the card's
-                  paperclip count, so it nudges the same board refresh. */}
-              <AttachmentSection
-                key={`attachments-${task.id}`}
-                taskId={task.id}
-                onChanged={onDependenciesChanged}
-              />
-              {/* The time ledger (027). Any task can carry hours — a piece's
-                  work is still work — so like the checklist it is not gated on
-                  isSubtask. Writes log history, so it bumps the feed. */}
-              <TimeSection
-                key={`time-${task.id}`}
-                taskId={task.id}
-                onChanged={() => setActivityVersion((v) => v + 1)}
-              />
-              {/* The board's custom-field answers (035). Renders nothing when the
-                  board defines no fields, so it is inert until opted into. No
-                  onChanged: custom fields are outside the activity log by design. */}
-              <CustomFieldsSection
-                key={`fields-${task.id}`}
-                taskId={task.id}
-              />
-              <TaskExtensionPanels key={`field-extensions-${task.id}`} taskId={task.id} slot="custom_field_renderer" />
-              {/* Linked branches/PRs/commits (2.4/2.5). Read-only — the git host
-                  owns their lifecycle — and inert until a repo references the
-                  task, so it costs nothing on an unlinked one. */}
-              <DevelopmentSection
-                key={`dev-${task.id}`}
-                taskId={task.id}
-                taskTitle={task.title}
-              />
-              <TaskIntegrationsSection key={`integrations-${task.id}`} taskId={task.id} />
-              <TaskExtensionPanels key={`extensions-${task.id}`} taskId={task.id} />
-              {/* An agent run's review sits above the thread: it is what a human
-                  came to this task to resolve when the agent has proposed work.
-                  Renders nothing when the task has never had a run. Accepting or
-                  undoing writes activity, so it bumps the same version the feed
-                  reads — the receipt below updates in step. */}
-              <RunReview
-                key={`run-${task.id}`}
-                taskId={task.id}
-                onChanged={() => setActivityVersion((v) => v + 1)}
-              />
-              <CommentThread
-                key={`comments-${task.id}`}
-                taskId={task.id}
-                onChanged={() => setActivityVersion((v) => v + 1)}
-              />
-              <div className="grid gap-2">
-                <p className="text-xs font-medium text-muted-foreground">
-                  History
-                </p>
-                <ActivityFeed
-                  key={task.id}
-                  taskId={task.id}
-                  columnNames={columnNames}
-                  memberNames={memberNames}
-                  agentNames={agentNames}
-                  refreshToken={activityVersion}
+            </div>
+
+            {/* The property rail. `content-start` so the fields sit at the top
+                rather than spreading down a tall panel, and its own scroll so a
+                long main column never pushes the labels out of reach. */}
+            <aside className="grid auto-rows-min content-start gap-3 overflow-y-auto border-t p-4 md:border-t-0 md:border-l">
+              <p className="text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                Properties
+              </p>
+              {/* Status, for a piece only. A top-level task's column is its place
+                  on the board and it moves there by drag; a piece has no place on
+                  the board (008), so this is the one place its status can be set.
+                  The change commits immediately — see onMoveSubtask — because a
+                  move is a move whether it happens by drag or by this select.
+                  First in the rail because for a piece it is the field that
+                  answers "where is this". */}
+              {isSubtask && columns.length > 0 && (
+                <RailField htmlFor="task-status" label="Status">
+                  <Select
+                    id="task-status"
+                    value={String(columnId)}
+                    onValueChange={(value) => {
+                      const next = Number(value);
+                      setColumnId(next);
+                      if (task) onMoveSubtask?.(task.id, next);
+                    }}
+                    className={railSelect}
+                  >
+                    {columns.map((column) => (
+                      <SelectItem key={column.id} value={String(column.id)}>
+                        {column.title}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                </RailField>
+              )}
+              {/* A native select rather than a styled menu: it is one tab stop, it
+                  is announced as a listbox without any ARIA of our own, and it gets
+                  the platform picker on touch. The second group is 011's agents —
+                  the whole wedge, and why the field was labelled "Assignee" rather
+                  than anything person-shaped from the start. Each group renders
+                  only when it has members, so a workspace with no agents shows
+                  exactly the picker it did before. */}
+              <RailField htmlFor="task-assignee" label="Assignee">
+                <Select
+                  id="task-assignee"
+                  value={assignee}
+                  onValueChange={setAssignee}
+                  className={railSelect}
+                >
+                  <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+                  {members.length > 0 && (
+                    <SelectGroup label="People">
+                      {members.map((member) => (
+                        <SelectItem
+                          key={member.userId}
+                          value={`human:${member.userId}`}
+                        >
+                          {member.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {agents.length > 0 && (
+                    <SelectGroup label="Agents">
+                      {agents.map((agent) => (
+                        <SelectItem key={agent.id} value={`agent:${agent.id}`}>
+                          {agent.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </Select>
+              </RailField>
+              {/* Priority: PRD §9 calls it one of "the fields an agent reasons
+                  over when triaging". */}
+              <RailField htmlFor="task-priority" label="Priority">
+                <Select
+                  id="task-priority"
+                  value={priority}
+                  onValueChange={(value) => setPriority(value as TaskPriority)}
+                  className={railSelect}
+                >
+                  {/* Highest first: the reason to open this menu is almost always
+                      to raise a priority, and 'none' is where you already are. The
+                      stored order is lowest-first (it is a sort order, and DESC
+                      reads better than ASC in a query) — so this reverses a copy
+                      rather than reading PRIORITY_ORDER directly, which would
+                      silently reorder the enum for everyone. */}
+                  {[...PRIORITY_ORDER].reverse().map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {PRIORITY_LABELS[value]}
+                    </SelectItem>
+                  ))}
+                </Select>
+              </RailField>
+              {/* Type and estimate (022), paired: what kind of work, and how big —
+                  the two facts sprint planning reads together. */}
+              <div className="grid grid-cols-2 gap-2">
+                <RailField htmlFor="task-type" label="Type">
+                  <Select
+                    id="task-type"
+                    value={type}
+                    onValueChange={(value) => setType(value as TaskType)}
+                    className={railSelect}
+                  >
+                    {TASK_TYPES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {TASK_TYPE_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                </RailField>
+                <RailField htmlFor="task-estimate" label="Estimate">
+                  {/* type="number" min=0: the API refuses negatives, so the control
+                      should not offer them. Clears to "", the unestimated state. */}
+                  <Input
+                    id="task-estimate"
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={estimate}
+                    onChange={(e) => setEstimate(e.target.value)}
+                    placeholder="Points"
+                    className="h-8"
+                  />
+                </RailField>
+              </div>
+              {/* Prioritisation scoring (034): value and risk, 0–10, with the live
+                  score = value / (estimate × (1 + risk/10)) the board ranks by. The
+                  readout mirrors taskColumns' derivation so it updates as you
+                  type. */}
+              <div className="grid grid-cols-3 gap-2">
+                <RailField htmlFor="task-value" label="Value">
+                  <Input
+                    id="task-value"
+                    type="number"
+                    min={0}
+                    max={10}
+                    step={1}
+                    value={businessValue}
+                    onChange={(e) => setBusinessValue(e.target.value)}
+                    placeholder="0–10"
+                    className="h-8"
+                  />
+                </RailField>
+                <RailField htmlFor="task-risk" label="Risk">
+                  <Input
+                    id="task-risk"
+                    type="number"
+                    min={0}
+                    max={10}
+                    step={1}
+                    value={risk}
+                    onChange={(e) => setRisk(e.target.value)}
+                    placeholder="0–10"
+                    className="h-8"
+                  />
+                </RailField>
+                <RailField label="Score">
+                  <p
+                    className="flex h-8 items-center justify-center rounded-lg border bg-muted/40 px-2 text-sm font-medium tabular-nums"
+                    title="value / (estimate × (1 + risk/10)) — needs value and an estimate"
+                  >
+                    {previewScore(businessValue, estimate, risk) ?? "—"}
+                  </p>
+                </RailField>
+              </div>
+              {/* The work's window, side by side because they are one span — when
+                  it begins and when it is due, the two dates the Timeline draws as
+                  a bar (032). Either may stand alone: a start with no due, or the
+                  reverse. */}
+              <div className="grid grid-cols-2 gap-2">
+                <RailField htmlFor="task-start-date" label="Start date">
+                  {/* type="date", dueDate's reasoning verbatim: its value is already
+                      'YYYY-MM-DD', so no parsing and no Date to drag a zoneless date
+                      through, and it clears to "" on its own. */}
+                  <Input
+                    id="task-start-date"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="h-8"
+                  />
+                </RailField>
+                <RailField htmlFor="task-due-date" label="Due date">
+                  {/* type="date" is the rare case where the platform control is
+                      exactly right: its value is 'YYYY-MM-DD' whatever locale it
+                      displays in, so the string the API wants is the string the DOM
+                      already holds — no parsing, no formatting, and no Date to
+                      convert a zoneless date through. It also clears to "" on its
+                      own, which is the only other state the field has. */}
+                  <Input
+                    id="task-due-date"
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    className="h-8"
+                  />
+                </RailField>
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs font-normal text-muted-foreground">
+                  Labels
+                </Label>
+                <LabelPicker
+                  labels={labels}
+                  selected={labelIds}
+                  onChange={setLabelIds}
                 />
               </div>
-            </div>
-          )}
-          <DialogFooter>
+              {/* Where this sits in the plan. Grouped under a heading and kept
+                  last because these are the fields a task is *filed* by rather
+                  than worked by — and every one renders only when the board has
+                  any (the templates rule), so a board that plans nothing shows
+                  nothing here. Hidden for a subtask throughout: a piece is
+                  scheduled and filed through its parent. */}
+              {!isSubtask &&
+                (sprints.length > 0 ||
+                  milestones.length > 0 ||
+                  epics.length > 0 ||
+                  objectives.length > 0) && (
+                  <p className="pt-1 text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                    Plan
+                  </p>
+                )}
+              {/* Sprint (028). The picker offers planning + active sprints; a
+                  completed one shows disabled only if the task is already in it,
+                  so its home stays legible. */}
+              {!isSubtask && sprints.length > 0 && (
+                <RailField htmlFor="task-sprint" label="Sprint">
+                  <Select
+                    id="task-sprint"
+                    value={sprintId}
+                    onValueChange={setSprintId}
+                    className={railSelect}
+                  >
+                    <SelectItem value="">Backlog</SelectItem>
+                    {sprints
+                      .filter(
+                        (s) =>
+                          s.status !== "completed" || String(s.id) === sprintId
+                      )
+                      .map((sprint) => (
+                        <SelectItem
+                          key={sprint.id}
+                          value={String(sprint.id)}
+                          disabled={sprint.status === "completed"}
+                        >
+                          {sprint.status === "active"
+                            ? `${sprint.name} (active)`
+                            : sprint.status === "completed"
+                              ? `${sprint.name} (completed)`
+                              : sprint.name}
+                        </SelectItem>
+                      ))}
+                  </Select>
+                </RailField>
+              )}
+              {/* Milestone (026). */}
+              {!isSubtask && milestones.length > 0 && (
+                <RailField htmlFor="task-milestone" label="Milestone">
+                  <Select
+                    id="task-milestone"
+                    value={milestoneId}
+                    onValueChange={setMilestoneId}
+                    className={railSelect}
+                  >
+                    <SelectItem value="">No milestone</SelectItem>
+                    {milestones.map((milestone) => (
+                      <SelectItem
+                        key={milestone.id}
+                        value={String(milestone.id)}
+                      >
+                        {milestone.name}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                </RailField>
+              )}
+              {/* Epic (031) — a coarser grouping than a milestone; a task may
+                  carry both. */}
+              {!isSubtask && epics.length > 0 && (
+                <RailField htmlFor="task-epic" label="Epic">
+                  <Select
+                    id="task-epic"
+                    value={epicId}
+                    onValueChange={setEpicId}
+                    className={railSelect}
+                  >
+                    <SelectItem value="">No epic</SelectItem>
+                    {epics.map((epic) => (
+                      <SelectItem key={epic.id} value={String(epic.id)}>
+                        {epic.name}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                </RailField>
+              )}
+              {/* Objective (037). A task aims at an outcome the objective's key
+                  results measure — independent of any milestone or epic it also
+                  carries. */}
+              {!isSubtask && objectives.length > 0 && (
+                <RailField htmlFor="task-objective" label="Objective">
+                  <Select
+                    id="task-objective"
+                    value={objectiveId}
+                    onValueChange={setObjectiveId}
+                    className={railSelect}
+                  >
+                    <SelectItem value="">No objective</SelectItem>
+                    {objectives.map((objective) => (
+                      <SelectItem
+                        key={objective.id}
+                        value={String(objective.id)}
+                      >
+                        {objective.name}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                </RailField>
+              )}
+              {/* Repeat (020). A recurring task spawns its successor when it is
+                  moved into the board's done column — so this sets the cadence,
+                  and the board's done column is where completion happens. Hidden
+                  for a subtask: a piece completes with the parent, not on its own
+                  cycle. */}
+              {!isSubtask && (
+                <RailField htmlFor="task-recurrence" label="Repeat">
+                  <Select
+                    id="task-recurrence"
+                    value={recurrence}
+                    onValueChange={(value) =>
+                      setRecurrence(value as RecurrenceFrequency | "")
+                    }
+                    className={railSelect}
+                  >
+                    <SelectItem value="">Does not repeat</SelectItem>
+                    {RECURRENCE_FREQUENCIES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {RECURRENCE_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                </RailField>
+              )}
+            </aside>
+          </div>
+          {/* The footer is the form's third row rather than something floating
+              at the popup's padded edge — the panel has no padding of its own
+              now, so the default bleed would pull it a rem off the bottom.
+              Sitting in the grid also means it stays put while either column
+              scrolls, which is what keeps Save reachable from the bottom of a
+              long comment thread. */}
+          <DialogFooter className="mx-0 mb-0 rounded-none bg-muted/50">
             <Button
               type="button"
               variant="outline"

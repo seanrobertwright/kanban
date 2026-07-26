@@ -18,6 +18,7 @@ import { Textarea } from "@/shared/ui/textarea";
 import type { WorkspaceMembership, WorkspaceRole } from "@/features/workspaces/types";
 import * as api from "../client/api";
 import type { AgentDetail, AgentKind, WorkspaceBudget } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 const MICROS_PER_DOLLAR = 1_000_000;
 
@@ -26,7 +27,7 @@ const MICROS_PER_DOLLAR = 1_000_000;
 const ROLES: WorkspaceRole[] = ["owner", "admin", "member", "viewer"];
 
 const selectClass =
-  "h-9 rounded-md border bg-background px-2 text-xs capitalize outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
+  "h-9 rounded-md bg-background px-2 text-xs capitalize";
 
 interface AgentsDialogProps {
   open: boolean;
@@ -197,27 +198,27 @@ export function AgentsDialog({ open, onOpenChange, workspace }: AgentsDialogProp
               placeholder="Triage Bot"
               className="flex-1"
             />
-            <select
+            <Select
               aria-label="Agent kind"
               className={selectClass}
               value={kind}
-              onChange={(e) => setKind(e.target.value as AgentKind)}
+              onValueChange={(value) => setKind(value as AgentKind)}
             >
-              <option value="external">external (MCP)</option>
-              <option value="native">native (hosted)</option>
-            </select>
-            <select
+              <SelectItem value="external">external (MCP)</SelectItem>
+              <SelectItem value="native">native (hosted)</SelectItem>
+            </Select>
+            <Select
               aria-label="Agent role"
               className={selectClass}
               value={role}
-              onChange={(e) => setRole(e.target.value as WorkspaceRole)}
+              onValueChange={(value) => setRole(value as WorkspaceRole)}
             >
               {ROLES.filter((r) => isOwner || r !== "owner").map((r) => (
-                <option key={r} value={r}>
+                <SelectItem key={r} value={r}>
                   {r}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+            </Select>
           </div>
 
           {kind === "native" && (

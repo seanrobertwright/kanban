@@ -62,12 +62,41 @@ unassign.
 |---|---|
 | `GET /api/agent/me` | The agent's identity + its boards. |
 | `GET /api/board/:id` | Columns and their top-level tasks (each with `subtaskCount`). |
+| `GET /api/board/:id/tasks/search` | **Search one board** — filters in the query string, paged. See below. |
 | `GET /api/tasks/:id` | One task: column, priority, due date, labels, assignee, claim. |
 | `GET /api/tasks/:id/subtasks` | A task's decomposed pieces. |
 | `GET /api/tasks/:id/activity` | The task's history, newest first, with who acted. |
 | `GET /api/tasks/:id/comments` | The task's comment thread. |
 | `GET /api/workspaces/:id/labels` | The workspace's label vocabulary (id, name, color). |
 | `GET /api/workspaces/:id/assignees` | Who a task can be assigned to — people and agents, **no email addresses**. |
+
+#### Search
+
+`GET /api/board/:id/tasks/search` is the read that lets you ask a question
+instead of downloading a board. Every parameter is optional and they combine
+(AND); with none, it is the whole board newest-first.
+
+| Parameter | Meaning |
+|---|---|
+| `q` | Case-insensitive substring of title **or** description. `%` and `_` are literal. |
+| `columnId` | On this column. |
+| `assignee` | `none` (unassigned), `human:<id>`, or `agent:<id>`. |
+| `priority` `type` | Exact match; an unknown value is a `400`, never a silent no-op. |
+| `labelId` | Repeatable — a task must carry **all** of them. |
+| `milestoneId` `sprintId` `epicId` | In this container. |
+| `dueBefore` `dueAfter` | `YYYY-MM-DD`, strict; tasks with no due date match neither. |
+| `includeSubtasks=true` | Subtasks are excluded by default. |
+| `openOnly=true` | Outside the board's done column (no-op if it has none). |
+| `limit` `cursor` | Page size (default 50, max 200) and the previous page's `nextCursor`. |
+
+Returns `{tasks, nextCursor}`. Keep passing `nextCursor` back as `cursor` until
+it is `null` — that is the last page, and a short page never needs a second
+round trip to discover it. Pagination is keyset, not offset, so rows are neither
+skipped nor repeated when someone edits the board mid-scan.
+
+```
+GET /api/board/1/tasks/search?q=auth&openOnly=true&assignee=none&limit=20
+```
 
 ### Act on a task
 
@@ -76,7 +105,7 @@ unassign.
 | `POST /api/tasks` | `columnId`, `title`, `description?`, `priority?`, `dueDate?`, `assignee?`, `labelIds?`, `parentId?` | Create a task (or a subtask, with `parentId`). |
 | `PATCH /api/tasks/:id` | any of `title`, `description`, `priority`, `dueDate`, `assignee`, `labelIds` | Edit a task. Only fields you send change; send `null` to clear `dueDate` or `assignee`. |
 | `PATCH /api/tasks/:id` | `columnId`, `position` | Move a task — this is how status changes. `position` is 0-based in the destination column. |
-| `POST /api/tasks/:id/claim` | — | Take the exclusive working hold. A task another agent holds is refused (`409`). |
+| `POST /api/tasks/:id/claim` | `ttlMinutes?` | Take the exclusive working **lease**. A task another agent holds is refused (`409`) — unless that hold has expired, which anyone with the rank may take over. Your own re-claim renews it. `ttlMinutes` defaults to 60, max 1440. |
 | `DELETE /api/tasks/:id/claim` | — | Release your hold. Releasing an unheld task is a no-op. |
 | `POST /api/tasks/:id/comments` | `body` | Post a comment under the agent's name — its channel for reporting. |
 
@@ -141,6 +170,22 @@ Standard HTTP status codes, with a JSON `{ "error": "…" }` body:
 | `403` | The agent's role is too low for this action (e.g. a `viewer` moving a card). |
 | `404` | No such resource **in this agent's workspace** — the id space is not an oracle, so "doesn't exist" and "belongs to another workspace" answer the same. |
 | `409` | A conflict with current state — most often a task already claimed by someone else. |
+| `429` | Rate limited. This is the one status worth retrying after a backoff. |
 
 Errors carry the server's own sentence in `error`, meant to be read by the agent
-and acted on (e.g. re-fetch and retry after a `409` claim).
+and acted on. A `409` claim conflict is **not** worth retrying — another agent
+holds the task; pick a different one.
+
+### The approval gate applies here
+
+Two responses come from the §7.4 gate rather than from RBAC, and both carry a
+machine-readable `code`:
+
+| Status | `code` | Means |
+|---|---|---|
+| `202` | `HELD_FOR_REVIEW` | Understood, **not applied**. The change was recorded as a changeset for a human to accept or reject; the body names `runId` and `changesetId`. Do not retry it — say so in a comment and carry on. |
+| `403` | `BLOCKED_BY_POLICY` | This action requires explicit human approval for this agent and was not performed. |
+
+Which actions land in which tier is the gate's call, not the caller's — see
+`src/features/agents/server/gate.ts`. A `202` is a success in HTTP terms and a
+"held" in yours; treating it as "applied" is the mistake to avoid.

@@ -31,6 +31,31 @@ vi.mock("@/features/git/components/development-section", () => ({
 vi.mock("@/features/time/components/time-section", () => ({
   TimeSection: () => null,
 }));
+vi.mock("@/features/sla/components/sla-section", () => ({
+  SlaSection: () => null,
+}));
+
+/**
+ * The pickers are DOM-rendered selects now, not native ones, so a value cannot
+ * be poked in with fireEvent.change — the options only exist while the popup is
+ * open, and Base UI commits a click only when a pointerdown began on that item.
+ */
+async function openPicker(label: string) {
+  fireEvent.click(screen.getByLabelText(label));
+  await waitFor(() =>
+    expect(screen.getAllByRole("option").length).toBeGreaterThan(0)
+  );
+}
+
+function optionTexts() {
+  return screen.getAllByRole("option").map((o) => o.textContent);
+}
+
+function choose(name: string) {
+  const option = screen.getByRole("option", { name });
+  fireEvent.pointerDown(option, { pointerType: "mouse" });
+  fireEvent.click(option, { detail: 1 });
+}
 
 const LABELS: LabelData[] = [
   {
@@ -137,30 +162,25 @@ const submit = () =>
  * unassigning impossible.
  */
 describe("TaskDialog assignee picker", () => {
-  it("offers every member and agent, plus nobody", () => {
+  it("offers every member and agent, plus nobody", async () => {
     renderDialog();
-    const picker = screen.getByLabelText("Assignee") as HTMLSelectElement;
-    // Options flatten across the optgroups — people, then agents, then nobody.
-    expect([...picker.options].map((o) => o.text)).toEqual([
-      "Unassigned",
-      "Alice",
-      "Bob",
-      "Triage Bot",
-    ]);
+    await openPicker("Assignee");
+    // Options flatten across the groups — nobody, then people, then agents.
+    expect(optionTexts()).toEqual(["Unassigned", "Alice", "Bob", "Triage Bot"]);
   });
 
   it("shows the task's current assignee when opened, encoding its kind", () => {
     renderDialog({ task: task({ assignee: { type: "human", id: "u-bob" } }) });
-    expect((screen.getByLabelText("Assignee") as HTMLSelectElement).value).toBe(
-      "human:u-bob"
-    );
+    // The encoded "human:u-bob" is internal now, so the guard is that it still
+    // resolves to a person: a mis-encoded value matches no item and the trigger
+    // would fall back to showing nothing rather than Bob.
+    expect(screen.getByLabelText("Assignee").textContent).toContain("Bob");
   });
 
   it("submits the chosen member as a human Actor", async () => {
     const { onSubmit } = renderDialog({ task: task() });
-    fireEvent.change(screen.getByLabelText("Assignee"), {
-      target: { value: "human:u-bob" },
-    });
+    await openPicker("Assignee");
+    choose("Bob");
     submit();
 
     await waitFor(() =>
@@ -172,9 +192,8 @@ describe("TaskDialog assignee picker", () => {
 
   it("submits the chosen agent as an agent Actor — the wedge in one field", async () => {
     const { onSubmit } = renderDialog({ task: task() });
-    fireEvent.change(screen.getByLabelText("Assignee"), {
-      target: { value: "agent:a-triage" },
-    });
+    await openPicker("Assignee");
+    choose("Triage Bot");
     submit();
 
     await waitFor(() =>
@@ -190,9 +209,8 @@ describe("TaskDialog assignee picker", () => {
     const { onSubmit } = renderDialog({
       task: task({ assignee: { type: "human", id: "u-bob" } }),
     });
-    fireEvent.change(screen.getByLabelText("Assignee"), {
-      target: { value: "" },
-    });
+    await openPicker("Assignee");
+    choose("Unassigned");
     submit();
 
     await waitFor(() =>
@@ -224,14 +242,13 @@ describe("TaskDialog assignee picker", () => {
  * consistent.
  */
 describe("TaskDialog priority", () => {
-  it("offers the priorities highest-first", () => {
+  it("offers the priorities highest-first", async () => {
     // Order is not decoration here: the enum is stored lowest-first because that
     // is a sort order, and the menu reverses it because raising a priority is
     // why anyone opens the menu. A test, so the reverse cannot quietly vanish.
-    const picker = (renderDialog(), screen.getByLabelText(
-      "Priority"
-    ) as HTMLSelectElement);
-    expect([...picker.options].map((o) => o.text)).toEqual([
+    renderDialog();
+    await openPicker("Priority");
+    expect(optionTexts()).toEqual([
       "Urgent",
       "High",
       "Medium",
@@ -256,9 +273,7 @@ describe("TaskDialog priority", () => {
 
   it("shows the task's current priority when opened", () => {
     renderDialog({ task: task({ priority: "high" }) });
-    expect((screen.getByLabelText("Priority") as HTMLSelectElement).value).toBe(
-      "high"
-    );
+    expect(screen.getByLabelText("Priority").textContent).toContain("High");
   });
 
   it("submits 'none' — not null — when the priority is cleared", async () => {
@@ -267,9 +282,8 @@ describe("TaskDialog priority", () => {
     // read as "not supplied" by the repository's COALESCE and silently leave the
     // old priority in place.
     const { onSubmit } = renderDialog({ task: task({ priority: "urgent" }) });
-    fireEvent.change(screen.getByLabelText("Priority"), {
-      target: { value: "none" },
-    });
+    await openPicker("Priority");
+    choose("No priority");
     submit();
 
     await waitFor(() =>
@@ -441,29 +455,24 @@ describe("TaskDialog subtask", () => {
     return { onMoveSubtask, onBack };
   }
 
-  it("offers a Status control set to the piece's current column", () => {
+  it("offers a Status control set to the piece's current column", async () => {
     // The one field a piece has that a top-level task edits by dragging. A piece
     // cannot be dragged — it is not on the board — so this is where its status
     // lives.
     renderSubtaskDialog();
-    const status = screen.getByLabelText("Status") as HTMLSelectElement;
-    expect([...status.options].map((o) => o.text)).toEqual([
-      "To Do",
-      "Doing",
-      "Done",
-    ]);
-    expect(status.value).toBe("2");
+    expect(screen.getByLabelText("Status").textContent).toContain("Doing");
+    await openPicker("Status");
+    expect(optionTexts()).toEqual(["To Do", "Doing", "Done"]);
   });
 
-  it("moves the piece the moment its status changes, not on save", () => {
+  it("moves the piece the moment its status changes, not on save", async () => {
     // A move is its own mutation, committed when made — exactly as dragging a
     // card commits one on drop. Waiting for "Save changes" would make status the
     // odd field out; firing here makes it the same event a drag is.
     const { onMoveSubtask } = renderSubtaskDialog();
-    fireEvent.change(screen.getByLabelText("Status"), {
-      target: { value: "3" },
-    });
-    expect(onMoveSubtask).toHaveBeenCalledWith(11, 3);
+    await openPicker("Status");
+    choose("Done");
+    await waitFor(() => expect(onMoveSubtask).toHaveBeenCalledWith(11, 3));
   });
 
   it("offers a way back to the parent it decomposes", () => {

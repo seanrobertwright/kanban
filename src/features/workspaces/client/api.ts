@@ -4,9 +4,10 @@ import type {
   Member,
   NewWorkspace,
   Portfolio,
+  Workspace,
   WorkspaceRole,
 } from "../types";
-import type { AdminSummary, DiscoveryHit, IdentityProvider, IpAllowlistEntry, LegalHold, PermissionGrant, RetentionPolicy } from "@/features/admin/types";
+import type { AdminSummary, AuditEvent, BoardIntakeAddress, CustomFieldPolicy, DiscoveryHit, IdentityProvider, IpAllowlistEntry, LegalHold, PermissionGrant, RetentionPolicy } from "@/features/admin/types";
 import type { IntegrationConnection } from "@/features/integrations/types";
 import type { ExtensionManifest, WorkspaceExtension } from "@/features/extensions/types";
 
@@ -14,6 +15,8 @@ export interface MembersResponse {
   members: Member[];
   /** Always empty for non-admins — the server withholds pending emails. */
   invitations: Invitation[];
+  /** Whether the server will email invitations (SMTP configured). */
+  emailConfigured: boolean;
 }
 
 /** Surfaces the server's message, which carries the reason (last owner, etc.). */
@@ -55,6 +58,23 @@ export async function createBoard(
       body: JSON.stringify({ name }),
     })
   );
+}
+
+export async function renameWorkspace(
+  workspaceId: string,
+  name: string
+): Promise<Workspace> {
+  return unwrap(
+    await fetch(`/api/workspaces/${workspaceId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+  );
+}
+
+export async function deleteWorkspace(workspaceId: string): Promise<void> {
+  return unwrap(await fetch(`/api/workspaces/${workspaceId}`, { method: "DELETE" }));
 }
 
 export async function fetchMembers(workspaceId: string): Promise<MembersResponse> {
@@ -121,6 +141,11 @@ export async function deleteIpAllowlistEntry(workspaceId: string, entryId: numbe
 export async function fetchBoardGrants(workspaceId: string): Promise<PermissionGrant[]> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/permissions`, { cache: "no-store" })); }
 export async function grantBoardPermission(workspaceId: string, input: Omit<PermissionGrant, "id" | "workspaceId" | "createdAt" | "subjectType">): Promise<PermissionGrant> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/permissions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })); }
 export async function revokeBoardGrant(workspaceId: string, id: string): Promise<void> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/permissions/${id}`, { method: "DELETE" })); }
+export async function fetchFieldPolicies(workspaceId: string): Promise<CustomFieldPolicy[]> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/field-policies`, { cache: "no-store" })); }
+export async function saveFieldPolicy(workspaceId: string, input: { fieldId: number; role: string; canView: boolean; canEdit: boolean }): Promise<CustomFieldPolicy> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/field-policies`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) })); }
+export async function deleteFieldPolicy(workspaceId: string, fieldId: number, role: string): Promise<void> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/field-policies?fieldId=${fieldId}&role=${encodeURIComponent(role)}`, { method: "DELETE" })); }
+export async function fetchAuditLog(workspaceId: string, limit: number, offset: number): Promise<AuditEvent[]> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/audit-log?limit=${limit}&offset=${offset}`, { cache: "no-store" })); }
+export async function fetchEmailIntake(workspaceId: string): Promise<{ configured: boolean; addresses: BoardIntakeAddress[] }> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/email-intake`, { cache: "no-store" })); }
 export async function fetchRetentionPolicies(workspaceId: string): Promise<RetentionPolicy[]> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/retention`, { cache: "no-store" })); }
 export async function saveRetentionPolicy(workspaceId: string, subjectType: RetentionPolicy["subjectType"], maxAgeDays: number): Promise<RetentionPolicy> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/retention`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subjectType, maxAgeDays }) })); }
 export async function fetchLegalHolds(workspaceId: string): Promise<LegalHold[]> { return unwrap(await fetch(`/api/workspaces/${workspaceId}/legal-holds`, { cache: "no-store" })); }

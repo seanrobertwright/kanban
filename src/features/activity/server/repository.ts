@@ -14,6 +14,8 @@ import type {
   ActivityAction,
   ActivityEntry,
   Actor,
+  ChatAction,
+  ChatMessageSnapshot,
   ColumnAction,
   ColumnSnapshot,
   CommentAction,
@@ -115,6 +117,11 @@ export type ActivityInput =
       action: GitAction;
       before?: GitSnapshot | null;
       after?: GitSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: ChatAction;
+      before?: ChatMessageSnapshot | null;
+      after?: ChatMessageSnapshot | null;
     });
 
 /**
@@ -261,11 +268,18 @@ export async function listWorkspaceNotifications(
             COALESCE(u.image, ag.image) AS "actorImage",
             COALESCE(t.title, al.after->>'title', al.before->>'title')
               AS "taskTitle",
-            EXISTS (SELECT 1 FROM comment_mention cm
-                     WHERE cm.user_id = $2
-                       AND cm.comment_id =
-                           COALESCE((al.after->>'commentId')::int,
-                                    (al.before->>'commentId')::int))
+            (EXISTS (SELECT 1 FROM comment_mention cm
+                      WHERE cm.user_id = $2
+                        AND cm.comment_id =
+                            COALESCE((al.after->>'commentId')::int,
+                                     (al.before->>'commentId')::int))
+             -- Chat mentions (3.7) carry their audience in the snapshot rather
+             -- than a join table, so "does this row name me?" is a containment
+             -- test. COALESCEd to false: rows without a mentions key say no.
+             OR COALESCE(
+                  COALESCE(al.after->'mentions', al.before->'mentions')
+                    @> to_jsonb($2::text),
+                  false))
               AS "mentionedMe"
        FROM activity_log al
        LEFT JOIN "user" u

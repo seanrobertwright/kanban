@@ -52,6 +52,10 @@ export function LabelsDialog({
   const [color, setColor] = useState<LabelColor>("slate");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Inline rename + recolor: which label is being edited, and its drafts.
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editColor, setEditColor] = useState<LabelColor>("slate");
 
   async function reload() {
     onChanged(await labelsApi.fetchLabels(workspaceId));
@@ -105,13 +109,90 @@ export function LabelsDialog({
               No labels yet.
             </li>
           )}
-          {labels.map((label) => (
+          {labels.map((label) =>
+            editingId === label.id ? (
+              /* Rename + recolor in place, through the until-now-unused
+                 updateLabel. The colour radios are the create form's, resized. */
+              <li key={label.id} className="flex items-center gap-2">
+                <Input
+                  aria-label={`Rename ${label.name}`}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  maxLength={LABEL_NAME_MAX}
+                  className="h-7 flex-1 text-sm"
+                />
+                <div
+                  role="radiogroup"
+                  aria-label={`Colour for ${label.name}`}
+                  className="flex shrink-0 items-center gap-1"
+                >
+                  {LABEL_COLORS.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={editColor === value}
+                      aria-label={value}
+                      onClick={() => setEditColor(value)}
+                      className={`size-3.5 rounded-full ${labelDotClass(value)} ${
+                        editColor === value
+                          ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
+                          : ""
+                      }`}
+                    />
+                  ))}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  disabled={busy || !editName.trim()}
+                  onClick={() =>
+                    run(async () => {
+                      await labelsApi.updateLabel(label.id, {
+                        name: editName.trim(),
+                        color: editColor,
+                      });
+                      setEditingId(null);
+                    })
+                  }
+                >
+                  Save
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  disabled={busy}
+                  onClick={() => setEditingId(null)}
+                >
+                  Cancel
+                </Button>
+              </li>
+            ) : (
             <li key={label.id} className="flex items-center gap-2">
               <span
                 className={`size-2.5 shrink-0 rounded-full ${labelDotClass(label.color)}`}
                 aria-hidden="true"
               />
               <span className="flex-1 truncate text-sm">{label.name}</span>
+              {canEdit && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-muted-foreground"
+                  disabled={busy}
+                  aria-label={`Edit ${label.name}`}
+                  onClick={() => {
+                    setEditingId(label.id);
+                    setEditName(label.name);
+                    setEditColor(label.color);
+                  }}
+                >
+                  Edit
+                </Button>
+              )}
               {canDelete && (
                 <Button
                   variant="ghost"
@@ -125,7 +206,8 @@ export function LabelsDialog({
                 </Button>
               )}
             </li>
-          ))}
+            )
+          )}
         </ul>
 
         {canEdit && (

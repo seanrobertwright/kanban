@@ -112,6 +112,84 @@ export async function createWebhook(
   return { webhook, secret };
 }
 
+/**
+ * Edit a webhook in place: its URL, its event filter, whether it is active, and
+ * — separately — a rotation of its signing secret.
+ *
+ * Before this the only edit was delete-and-recreate, which is not the same
+ * operation: it drops the delivery history (082's rows cascade with the hook)
+ * and forces a secret rotation on a subscriber that only wanted its filter
+ * narrowed. Pausing was likewise unreachable, so an admin with a noisy endpoint
+ * had to delete it and rebuild it later from memory.
+ *
+ * A rotation returns the new secret exactly once, createWebhook's convention.
+ * It is a separate flag rather than something a caller can set, because a
+ * secret a caller chooses is a secret that has already been somewhere else.
+ */
+export async function updateWebhook(
+  userId: string,
+  id: number,
+  input: {
+    url?: string;
+    events?: string[];
+    active?: boolean;
+    rotateSecret?: boolean;
+  }
+): Promise<{ webhook: Webhook; secret?: string } | undefined> {
+  const row = await queryOne<{ workspaceId: string }>(
+    `SELECT workspace_id AS "workspaceId" FROM workspace_webhook WHERE id = $1`,
+    [id]
+  );
+  if (!row) return undefined;
+  await requireWorkspaceRole(userId, row.workspaceId, "admin");
+
+  const sets: string[] = [];
+  const params: unknown[] = [id];
+  const bind = (value: unknown) => `$${params.push(value)}`;
+
+  if (input.url !== undefined) {
+    // The same three gates createWebhook applies, and applied here for the
+    // reason they exist: an edit that skipped them would be the way to point a
+    // webhook at the metadata service after passing the check at creation.
+    let parsed: URL;
+    try {
+      parsed = new URL(input.url);
+    } catch {
+      throw new AuthzError("conflict", "That is not a valid URL");
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new AuthzError("conflict", "A webhook URL must be http(s)");
+    }
+    assertPublicTarget(parsed);
+    sets.push(`url = ${bind(input.url)}`);
+  }
+  if (input.events !== undefined) sets.push(`events = ${bind(input.events)}`);
+  if (input.active !== undefined) sets.push(`active = ${bind(input.active)}`);
+
+  let secret: string | undefined;
+  if (input.rotateSecret) {
+    secret = `whs_${randomBytes(32).toString("hex")}`;
+    sets.push(`secret = ${bind(encryptSecret(secret))}`);
+  }
+
+  if (sets.length === 0) {
+    // Nothing to change is not an error; return the row as it stands so a
+    // caller's optimistic update has something true to settle on.
+    const webhook = (await queryOne<Webhook>(
+      `SELECT ${WEBHOOK_COLUMNS} FROM workspace_webhook WHERE id = $1`,
+      [id]
+    ))!;
+    return { webhook };
+  }
+
+  const webhook = (await queryOne<Webhook>(
+    `UPDATE workspace_webhook SET ${sets.join(", ")}
+      WHERE id = $1 RETURNING ${WEBHOOK_COLUMNS}`,
+    params
+  ))!;
+  return secret ? { webhook, secret } : { webhook };
+}
+
 /** Admin of the webhook's own workspace — resolved from the row, not trusted
  *  from the caller, the same one-join rule every requireXAccess follows. */
 export async function deleteWebhook(

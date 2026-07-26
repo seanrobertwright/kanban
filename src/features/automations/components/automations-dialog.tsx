@@ -38,6 +38,7 @@ import {
   type TriggerEvent,
   type WorkflowTemplate,
 } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface AutomationsColumn {
   id: number;
@@ -631,6 +632,10 @@ function SlaPolicies({ boardId, open }: { boardId: number; open: boolean }) {
   const [value, setValue] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  // Inline policy edit (rename, retarget, toggle): which row, and its drafts.
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTarget, setEditTarget] = useState("60");
 
   useEffect(() => {
     if (!open) return;
@@ -668,23 +673,100 @@ function SlaPolicies({ boardId, open }: { boardId: number; open: boolean }) {
       <p className="text-sm font-medium">SLA policies</p>
       {policies.length > 0 && (
         <ul className="grid gap-1">
-          {policies.map((p) => (
+          {policies.map((p) =>
+            editingId === p.id ? (
+              /* Inline edit through the until-now-unused updateSlaPolicy:
+                 rename and retarget, then Save; the row's own Cancel. */
+              <li key={p.id} className="flex items-center gap-1.5 text-xs">
+                <Input
+                  aria-label={`Rename ${p.name}`}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="h-6 text-xs"
+                />
+                <Input
+                  aria-label={`Target minutes for ${p.name}`}
+                  type="number"
+                  value={editTarget}
+                  onChange={(e) => setEditTarget(e.target.value)}
+                  className="h-6 w-20 text-xs"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-6 px-1.5 text-xs"
+                  disabled={busy || editName.trim() === "" || Number(editTarget) <= 0}
+                  onClick={async () => {
+                    await act(() =>
+                      slaApi.updateSlaPolicy(p.id, {
+                        name: editName.trim(),
+                        targetMins: Number(editTarget),
+                      })
+                    );
+                    setEditingId(null);
+                  }}
+                >
+                  Save
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-xs"
+                  disabled={busy}
+                  onClick={() => setEditingId(null)}
+                >
+                  Cancel
+                </Button>
+              </li>
+            ) : (
             <li key={p.id} className="flex items-center justify-between gap-2 text-xs">
               <span>
                 {p.name} — {p.targetMins}m{!p.isEnabled && " (off)"}
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
-                disabled={busy}
-                onClick={() => act(() => slaApi.deleteSlaPolicy(p.id))}
-              >
-                Delete
-              </Button>
+              <span className="flex gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-xs text-muted-foreground"
+                  disabled={busy}
+                  onClick={() => {
+                    setEditingId(p.id);
+                    setEditName(p.name);
+                    setEditTarget(String(p.targetMins));
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-xs text-muted-foreground"
+                  disabled={busy}
+                  onClick={() =>
+                    act(() =>
+                      slaApi.updateSlaPolicy(p.id, { isEnabled: !p.isEnabled })
+                    )
+                  }
+                >
+                  {p.isEnabled ? "Disable" : "Enable"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
+                  disabled={busy}
+                  onClick={() => act(() => slaApi.deleteSlaPolicy(p.id))}
+                >
+                  Delete
+                </Button>
+              </span>
             </li>
-          ))}
+            )
+          )}
         </ul>
       )}
       <div className="grid gap-1.5">
@@ -707,30 +789,30 @@ function SlaPolicies({ boardId, open }: { boardId: number; open: boolean }) {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-muted-foreground">for</span>
-          <select
+          <Select
             aria-label="SLA field"
-            className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+            className="h-7 rounded-md px-1 text-xs"
             value={field}
-            onChange={(e) => setField(e.target.value)}
+            onValueChange={(value) => setField(value)}
           >
             {CONDITION_FIELDS.map((f) => (
-              <option key={f.field} value={f.field}>
+              <SelectItem key={f.field} value={f.field}>
                 {f.label}
-              </option>
+              </SelectItem>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             aria-label="SLA operator"
-            className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+            className="h-7 rounded-md px-1 text-xs"
             value={op}
-            onChange={(e) => setOp(e.target.value as Operator)}
+            onValueChange={(value) => setOp(value as Operator)}
           >
             {OPERATORS.map((o) => (
-              <option key={o} value={o}>
+              <SelectItem key={o} value={o}>
                 {o}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+          </Select>
           <Input
             aria-label="SLA value"
             value={value}
@@ -1061,31 +1143,31 @@ function CreateRule({
 
       <label className="grid gap-1 text-xs text-muted-foreground">
         When
-        <select
+        <Select
           aria-label="Trigger event"
-          className="h-8 rounded-md border bg-transparent px-2 text-sm text-foreground"
+          className="h-8 rounded-md px-2"
           value={event}
-          onChange={(e) => setEvent(e.target.value as TriggerEvent)}
+          onValueChange={(value) => setEvent(value as TriggerEvent)}
         >
           {TRIGGER_EVENTS.map((ev) => (
-            <option key={ev} value={ev}>
+            <SelectItem key={ev} value={ev}>
               {EVENT_LABELS[ev]}
-            </option>
+            </SelectItem>
           ))}
-        </select>
+        </Select>
         {event === "schedule.tick" && (
-          <select
+          <Select
             aria-label="Schedule interval"
-            className="h-8 rounded-md border bg-transparent px-2 text-sm text-foreground"
+            className="h-8 rounded-md px-2"
             value={every}
-            onChange={(e) => setEvery(e.target.value as ScheduleInterval)}
+            onValueChange={(value) => setEvery(value as ScheduleInterval)}
           >
             {SCHEDULE_INTERVALS.map((iv) => (
-              <option key={iv} value={iv}>
+              <SelectItem key={iv} value={iv}>
                 {iv}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+          </Select>
         )}
       </label>
 
@@ -1093,45 +1175,45 @@ function CreateRule({
       <div className="grid gap-1.5">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           If
-          <select
+          <Select
             aria-label="Match combinator"
-            className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+            className="h-7 rounded-md px-1 text-xs"
             value={combinator}
-            onChange={(e) => setCombinator(e.target.value as "all" | "any")}
+            onValueChange={(value) => setCombinator(value as "all" | "any")}
           >
-            <option value="all">all of</option>
-            <option value="any">any of</option>
-          </select>
+            <SelectItem value="all">all of</SelectItem>
+            <SelectItem value="any">any of</SelectItem>
+          </Select>
           <span>(leave empty to always run)</span>
         </div>
         {predicates.map((p, i) => {
           const unary = UNARY_OPS.includes(p.op);
           return (
             <div key={i} className="flex items-center gap-1.5">
-              <select
+              <Select
                 aria-label={`Condition ${i + 1} field`}
-                className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                className="h-7 rounded-md px-1 text-xs"
                 value={p.field}
-                onChange={(e) => setPredicate(i, { field: e.target.value })}
+                onValueChange={(value) => setPredicate(i, { field: value })}
               >
                 {CONDITION_FIELDS.map((f) => (
-                  <option key={f.field} value={f.field}>
+                  <SelectItem key={f.field} value={f.field}>
                     {f.label}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
-              <select
+              </Select>
+              <Select
                 aria-label={`Condition ${i + 1} operator`}
-                className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                className="h-7 rounded-md px-1 text-xs"
                 value={p.op}
-                onChange={(e) => setPredicate(i, { op: e.target.value as Operator })}
+                onValueChange={(value) => setPredicate(i, { op: value as Operator })}
               >
                 {OPERATORS.map((op) => (
-                  <option key={op} value={op}>
+                  <SelectItem key={op} value={op}>
                     {op}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </Select>
               {!unary && (
                 <Input
                   aria-label={`Condition ${i + 1} value`}
@@ -1171,12 +1253,12 @@ function CreateRule({
       <ul className="grid gap-1.5">
         {actions.map((a, i) => (
           <li key={i} className="flex items-center gap-1.5">
-            <select
+            <Select
               aria-label={`Action ${i + 1} type`}
-              className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+              className="h-7 rounded-md px-1 text-xs"
               value={a.type}
-              onChange={(e) => {
-                const t = e.target.value as ActionDraft["type"];
+              onValueChange={(value) => {
+                const t = value as ActionDraft["type"];
                 setAction(
                   i,
                   t === "move"
@@ -1195,45 +1277,45 @@ function CreateRule({
                 );
               }}
             >
-              <option value="move">move</option>
-              <option value="set_field">set field</option>
-              <option value="add_label">add label</option>
-              <option value="comment">comment</option>
-              <option value="notify">notify</option>
-              <option value="create_task">create task</option>
-              <option value="script">run script</option>
-            </select>
+              <SelectItem value="move">move</SelectItem>
+              <SelectItem value="set_field">set field</SelectItem>
+              <SelectItem value="add_label">add label</SelectItem>
+              <SelectItem value="comment">comment</SelectItem>
+              <SelectItem value="notify">notify</SelectItem>
+              <SelectItem value="create_task">create task</SelectItem>
+              <SelectItem value="script">run script</SelectItem>
+            </Select>
 
             {a.type === "move" && (
-              <select
+              <Select
                 aria-label={`Action ${i + 1} column`}
-                className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                className="h-7 rounded-md px-1 text-xs"
                 value={a.columnId}
-                onChange={(e) => setAction(i, { type: "move", columnId: e.target.value })}
+                onValueChange={(value) => setAction(i, { type: "move", columnId: value })}
               >
                 {columns.map((c) => (
-                  <option key={c.id} value={c.id}>
+                  <SelectItem key={c.id} value={String(c.id)}>
                     {c.title}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </Select>
             )}
             {a.type === "set_field" && (
               <>
-                <select
+                <Select
                   aria-label={`Action ${i + 1} field`}
-                  className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                  className="h-7 rounded-md px-1 text-xs"
                   value={a.field}
-                  onChange={(e) =>
-                    setAction(i, { type: "set_field", field: e.target.value as SettableField, value: a.value })
+                  onValueChange={(value) =>
+                    setAction(i, { type: "set_field", field: value as SettableField, value: a.value })
                   }
                 >
                   {SETTABLE_FIELDS.map((f) => (
-                    <option key={f} value={f}>
+                    <SelectItem key={f} value={f}>
                       {f}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                </Select>
                 <Input
                   aria-label={`Action ${i + 1} value`}
                   value={a.value}
@@ -1244,18 +1326,18 @@ function CreateRule({
               </>
             )}
             {a.type === "add_label" && (
-              <select
+              <Select
                 aria-label={`Action ${i + 1} label`}
-                className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                className="h-7 rounded-md px-1 text-xs"
                 value={a.labelId}
-                onChange={(e) => setAction(i, { type: "add_label", labelId: e.target.value })}
+                onValueChange={(value) => setAction(i, { type: "add_label", labelId: value })}
               >
                 {labels.map((l) => (
-                  <option key={l.id} value={l.id}>
+                  <SelectItem key={l.id} value={String(l.id)}>
                     {l.name}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </Select>
             )}
             {a.type === "comment" && (
               <Input
@@ -1268,12 +1350,12 @@ function CreateRule({
             )}
             {a.type === "notify" && (
               <>
-                <select
+                <Select
                   aria-label={`Action ${i + 1} notify target`}
-                  className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                  className="h-7 rounded-md px-1 text-xs"
                   value={a.targetKind}
-                  onChange={(e) => {
-                    const kind = e.target.value as NotifyKind;
+                  onValueChange={(next) => {
+                    const kind = next as NotifyKind;
                     // Each kind stores a different reference in targetValue, so
                     // switching kinds re-seeds it with that kind's default.
                     const value =
@@ -1285,26 +1367,26 @@ function CreateRule({
                     setAction(i, { ...a, targetKind: kind, targetValue: value });
                   }}
                 >
-                  <option value="assignee">assignee</option>
-                  <option value="human">member</option>
-                  <option value="slack">Slack channel</option>
-                  <option value="teams">Teams</option>
-                  <option value="email">email</option>
-                </select>
+                  <SelectItem value="assignee">assignee</SelectItem>
+                  <SelectItem value="human">member</SelectItem>
+                  <SelectItem value="slack">Slack channel</SelectItem>
+                  <SelectItem value="teams">Teams</SelectItem>
+                  <SelectItem value="email">email</SelectItem>
+                </Select>
                 {a.targetKind === "human" &&
                   (members.length > 0 ? (
-                    <select
+                    <Select
                       aria-label={`Action ${i + 1} notify member`}
-                      className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                      className="h-7 rounded-md px-1 text-xs"
                       value={a.targetValue}
-                      onChange={(e) => setAction(i, { ...a, targetValue: e.target.value })}
+                      onValueChange={(value) => setAction(i, { ...a, targetValue: value })}
                     >
                       {members.map((m) => (
-                        <option key={m.userId} value={m.userId}>
+                        <SelectItem key={m.userId} value={m.userId}>
                           {m.name}
-                        </option>
+                        </SelectItem>
                       ))}
-                    </select>
+                    </Select>
                   ) : (
                     <span className="text-xs text-muted-foreground">No members found</span>
                   ))}
@@ -1319,18 +1401,18 @@ function CreateRule({
                 )}
                 {a.targetKind === "teams" &&
                   (teamsConnections.length > 0 ? (
-                    <select
+                    <Select
                       aria-label={`Action ${i + 1} Teams connection`}
-                      className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                      className="h-7 rounded-md px-1 text-xs"
                       value={a.targetValue}
-                      onChange={(e) => setAction(i, { ...a, targetValue: e.target.value })}
+                      onValueChange={(value) => setAction(i, { ...a, targetValue: value })}
                     >
                       {teamsConnections.map((c) => (
-                        <option key={c.id} value={c.id}>
+                        <SelectItem key={c.id} value={String(c.id)}>
                           {typeof c.metadata.name === "string" ? c.metadata.name : c.externalId}
-                        </option>
+                        </SelectItem>
                       ))}
-                    </select>
+                    </Select>
                   ) : (
                     <span className="text-xs text-muted-foreground">No Teams webhook connected</span>
                   ))}
@@ -1361,19 +1443,19 @@ function CreateRule({
                   placeholder="New task title"
                   className="h-7 text-xs"
                 />
-                <select
+                <Select
                   aria-label={`Action ${i + 1} task column`}
-                  className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                  className="h-7 rounded-md px-1 text-xs"
                   value={a.columnId}
-                  onChange={(e) => setAction(i, { type: "create_task", title: a.title, columnId: e.target.value })}
+                  onValueChange={(value) => setAction(i, { type: "create_task", title: a.title, columnId: value })}
                 >
-                  <option value="">same column</option>
+                  <SelectItem value="">same column</SelectItem>
                   {columns.map((c) => (
-                    <option key={c.id} value={c.id}>
+                    <SelectItem key={c.id} value={String(c.id)}>
                       {c.title}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                </Select>
               </>
             )}
             {a.type === "script" && (

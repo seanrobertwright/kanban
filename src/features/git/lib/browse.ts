@@ -89,3 +89,46 @@ export function normalizeGitlabBranches(payload: unknown): RepoBranch[] {
     .filter((b): b is GitlabBranch => Boolean(b) && typeof b.name === "string")
     .map((b) => ({ name: b.name as string, protected: Boolean(b.protected) }));
 }
+
+interface BitbucketEntry {
+  path?: string;
+  type?: string;
+  size?: number;
+}
+
+/**
+ * Bitbucket `GET /2.0/repositories/{repo}/src/{rev}/{path}` — a paginated
+ * envelope `{ values: [{ path, type: commit_directory|commit_file, size }] }`.
+ * Bitbucket reports full paths, no bare name — the name is the last segment.
+ */
+export function normalizeBitbucketTree(payload: unknown): RepoEntry[] {
+  const values = (payload as { values?: unknown } | null)?.values;
+  const rows: BitbucketEntry[] = Array.isArray(values) ? (values as BitbucketEntry[]) : [];
+  const entries: RepoEntry[] = [];
+  for (const r of rows) {
+    if (!r || typeof r.path !== "string" || r.path === "") continue;
+    const type = r.type === "commit_directory" ? "dir" : "file";
+    const name = r.path.split("/").filter(Boolean).pop() ?? r.path;
+    entries.push({
+      name,
+      path: r.path,
+      type,
+      size: type === "file" && typeof r.size === "number" ? r.size : null,
+    });
+  }
+  return sortEntries(entries);
+}
+
+interface BitbucketBranch {
+  name?: string;
+}
+
+/** Bitbucket `GET /2.0/repositories/{repo}/refs/branches` — `{ values: [{ name }] }`.
+ *  Branch protection lives in a separate branch-restrictions API; reported false. */
+export function normalizeBitbucketBranches(payload: unknown): RepoBranch[] {
+  const values = (payload as { values?: unknown } | null)?.values;
+  const rows: BitbucketBranch[] = Array.isArray(values) ? (values as BitbucketBranch[]) : [];
+  return rows
+    .filter((b): b is BitbucketBranch => Boolean(b) && typeof b.name === "string")
+    .map((b) => ({ name: b.name as string, protected: false }));
+}

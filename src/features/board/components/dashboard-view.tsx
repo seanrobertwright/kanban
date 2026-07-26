@@ -123,7 +123,7 @@ export function DashboardView({
               {stat.label}
             </div>
             <div
-              className="font-heading text-3xl leading-none font-bold dark:text-glow"
+              className="text-3xl leading-none font-semibold tabular-nums"
               style={{ color: stat.color } as CSSProperties}
             >
               {stat.value}

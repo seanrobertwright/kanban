@@ -14,6 +14,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import * as api from "../client/api";
 import type { Release } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface ReleasesDialogProps {
   boardId: number;
@@ -282,20 +283,20 @@ function ReleaseRow({
             <p className="text-xs text-muted-foreground">No tasks in this release.</p>
           )}
           {canEdit && assignable.length > 0 && (
-            <select
+            <Select
               aria-label="Add a task to this release"
               value=""
               disabled={busy}
-              onChange={(e) => e.target.value && onAssign(Number(e.target.value), true)}
-              className="mt-1 h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+              onValueChange={(value) => value && onAssign(Number(value), true)}
+              className="mt-1 w-full py-1 dark:bg-input/30"
             >
-              <option value="">Add a task…</option>
+              <SelectItem value="">Add a task…</SelectItem>
               {assignable.map((t) => (
-                <option key={t.id} value={t.id}>
+                <SelectItem key={t.id} value={String(t.id)}>
                   {t.title}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+            </Select>
           )}
         </div>
       )}

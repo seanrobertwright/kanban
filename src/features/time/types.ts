@@ -60,6 +60,39 @@ export interface Timesheet {
   total: number;
 }
 
+/**
+ * A verdict on one contributor's week (083).
+ *
+ * Per (contributor, board, week) rather than per entry: the unit a reviewer
+ * works in is a person's week, and one row per entry would be sixty clicks for
+ * one decision. `submitted` is the contributor saying "this week is finished";
+ * approved and rejected are the reviewer's answer.
+ */
+export interface TimesheetApproval {
+  id: number;
+  boardId: number;
+  userId: string;
+  userName: string | null;
+  /** The Monday of the week, 'YYYY-MM-DD'. */
+  weekStart: string;
+  status: "submitted" | "approved" | "rejected";
+  reviewedBy: string | null;
+  reviewerName: string | null;
+  reviewedAt: string | null;
+  /** Why it was rejected; empty for an approval that needed no comment. */
+  note: string;
+}
+
+/**
+ * The grid and the verdicts on it, which is what the timesheet endpoint
+ * returns. They travel together because a grid rendered before its approval
+ * state arrives shows every week as unreviewed for a frame — a different claim
+ * from "not loaded yet".
+ */
+export interface TimesheetWithApprovals extends Timesheet {
+  approvals: TimesheetApproval[];
+}
+
 /** One ungrouped ledger fact, as the board rollup query returns it. */
 export interface TimesheetCell {
   userId: string;

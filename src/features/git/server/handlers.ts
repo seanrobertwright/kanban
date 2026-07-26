@@ -69,6 +69,7 @@ export async function handleCreateConnection(request: Request, id: string) {
         provider: p.provider,
         externalRepo: typeof p.externalRepo === "string" ? p.externalRepo : undefined,
         installId: typeof p.installId === "string" ? p.installId : undefined,
+        accessToken: typeof p.accessToken === "string" ? p.accessToken : undefined,
       }),
       { status: 201 }
     );

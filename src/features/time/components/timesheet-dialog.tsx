@@ -11,9 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/ui/dialog";
-import { fetchBoardTimesheet } from "../client/api";
+import { fetchBoardTimesheet, reviewTimesheet } from "../client/api";
 import { addDays } from "../lib/timesheet";
-import { formatMinutes, type Timesheet } from "../types";
+import { formatMinutes, type TimesheetWithApprovals } from "../types";
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -37,16 +37,25 @@ export function TimesheetDialog({
   boardId,
   open,
   onOpenChange,
+  currentUserId,
+  canReview,
 }: {
   boardId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Whose row carries the Submit button — you may only submit your own week. */
+  currentUserId: string;
+  /** Admin+: the rank that may approve or reject someone else's week (083). */
+  canReview: boolean;
 }) {
-  const [data, setData] = useState<Timesheet | null>(null);
+  const [data, setData] = useState<TimesheetWithApprovals | null>(null);
   const [error, setError] = useState<string | null>(null);
   // The window the *next* fetch asks for. null on first open → server defaults
   // to the week ending today; the response's from/to then seed navigation.
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
+  // Bumped after a verdict so the same window refetches — setRange alone would
+  // be a no-op when the window has not moved.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -64,7 +73,7 @@ export function TimesheetDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, boardId, range]);
+  }, [open, boardId, range, reloadKey]);
 
   // Reset to the default (today's) week when the dialog closes, so a reopen
   // never lingers on a week navigated to before — done on the close event rather
@@ -82,7 +91,42 @@ export function TimesheetDialog({
     });
   }
 
+  /**
+   * Send a verdict, then reload — the row that comes back is one week's, and
+   * the grid shows a window that may span two. Refetching is cheaper than
+   * reconciling those by hand and cannot disagree with the server.
+   */
+  async function review(
+    verdict: "submitted" | "approved" | "rejected",
+    userId?: string
+  ) {
+    if (!data) return;
+    setError(null);
+    try {
+      let note = "";
+      if (verdict === "rejected") {
+        // A rejection needs a reason (the server refuses one without), and the
+        // contributor is the only audience for it.
+        note = window.prompt("Why is this week being rejected?")?.trim() ?? "";
+        if (!note) return;
+      }
+      await reviewTimesheet(boardId, {
+        week: data.from,
+        verdict,
+        userId,
+        note,
+      });
+      setRange({ from: data.from, to: data.to });
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not record the verdict");
+    }
+  }
+
   const days = data?.days ?? [];
+  /** The verdict on a contributor's week, if the window carries one. */
+  const verdictFor = (userId: string) =>
+    data?.approvals.find((a) => a.userId === userId) ?? null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -151,6 +195,7 @@ export function TimesheetDialog({
                         );
                       })}
                       <th className="py-1 pl-2 text-right font-medium">Total</th>
+                      <th className="py-1 pl-3 text-right font-medium">Sign-off</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -174,6 +219,58 @@ export function TimesheetDialog({
                         <td className="py-1 pl-2 text-right font-medium tabular-nums">
                           {formatMinutes(row.total)}
                         </td>
+                        <td className="py-1 pl-3 text-right whitespace-nowrap">
+                          {(() => {
+                            const v = verdictFor(row.userId);
+                            return (
+                              <span className="inline-flex items-center gap-1">
+                                {v && (
+                                  <span
+                                    className={
+                                      v.status === "approved"
+                                        ? "text-primary"
+                                        : v.status === "rejected"
+                                          ? "text-destructive"
+                                          : "text-muted-foreground"
+                                    }
+                                    title={v.note || undefined}
+                                  >
+                                    {v.status}
+                                  </span>
+                                )}
+                                {row.userId === currentUserId &&
+                                  v?.status !== "submitted" && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => void review("submitted")}
+                                    >
+                                      Submit
+                                    </Button>
+                                  )}
+                                {canReview && v?.status !== "approved" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => void review("approved", row.userId)}
+                                  >
+                                    Approve
+                                  </Button>
+                                )}
+                                {canReview && v?.status !== "rejected" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-muted-foreground hover:text-destructive"
+                                    onClick={() => void review("rejected", row.userId)}
+                                  >
+                                    Reject
+                                  </Button>
+                                )}
+                              </span>
+                            );
+                          })()}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -191,6 +288,10 @@ export function TimesheetDialog({
                       <td className="py-1 pl-2 text-right tabular-nums">
                         {formatMinutes(data.total)}
                       </td>
+                      {/* The Sign-off column has no total — a week is signed
+                          off per person, and "3 of 5 approved" is a different
+                          claim from anything this footer makes. */}
+                      <td className="py-1 pl-3" />
                     </tr>
                   </tfoot>
                 </table>

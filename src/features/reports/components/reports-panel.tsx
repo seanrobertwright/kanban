@@ -26,6 +26,7 @@ import {
   type ReportVisibility,
 } from "../types";
 import { EMPTY_FILTER } from "@/features/board/lib/filter";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 const SOURCE_LABELS: Record<ReportSource, string> = {
   tasks: "Tasks",
@@ -245,78 +246,78 @@ export function ReportsPanel({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Source">
-              <Select value={draft.source} onChange={(v) => setSource(v as ReportSource)}>
+              <FieldSelect value={draft.source} onChange={(v) => setSource(v as ReportSource)}>
                 {Object.entries(SOURCE_LABELS).map(([v, label]) => (
-                  <option key={v} value={v}>
+                  <SelectItem key={v} value={v}>
                     {label}
-                  </option>
+                  </SelectItem>
                 ))}
-              </Select>
+              </FieldSelect>
             </Field>
 
             <Field label="Scope">
-              <Select
+              <FieldSelect
                 value={draft.boardId === null ? "" : String(draft.boardId)}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, boardId: v === "" ? null : Number(v) }))
                 }
               >
-                <option value="">All boards (portfolio)</option>
+                <SelectItem value="">All boards (portfolio)</SelectItem>
                 {boards.map((b) => (
-                  <option key={b.id} value={b.id}>
+                  <SelectItem key={b.id} value={String(b.id)}>
                     {b.name}
-                  </option>
+                  </SelectItem>
                 ))}
-              </Select>
+              </FieldSelect>
             </Field>
 
             <Field label="Metric">
-              <Select
+              <FieldSelect
                 value={draft.metric}
                 onChange={(v) => setDraft((d) => ({ ...d, metric: v as ReportMetric }))}
               >
                 {metrics.map((m) => (
-                  <option key={m} value={m}>
+                  <SelectItem key={m} value={m}>
                     {METRIC_LABELS[m]}
-                  </option>
+                  </SelectItem>
                 ))}
-              </Select>
+              </FieldSelect>
             </Field>
 
             <Field label="Group by">
-              <Select
+              <FieldSelect
                 value={draft.groupBy}
                 onChange={(v) => setDraft((d) => ({ ...d, groupBy: v as ReportGroupBy }))}
               >
                 {groups.map((g) => (
-                  <option key={g} value={g}>
+                  <SelectItem key={g} value={g}>
                     {GROUP_LABELS[g]}
-                  </option>
+                  </SelectItem>
                 ))}
-              </Select>
+              </FieldSelect>
             </Field>
 
             <Field label="Chart">
-              <Select
+              <FieldSelect
                 value={draft.viz}
                 onChange={(v) => setDraft((d) => ({ ...d, viz: v as ReportViz }))}
               >
-                <option value="bar">Bar</option>
-                <option value="line">Line</option>
-                <option value="table">Table</option>
-              </Select>
+                <SelectItem value="bar">Bar</SelectItem>
+                <SelectItem value="line">Line</SelectItem>
+                <SelectItem value="table">Table</SelectItem>
+              </FieldSelect>
             </Field>
 
             <Field label="Visibility">
-              <Select
+              <FieldSelect
                 value={draft.visibility}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, visibility: v as ReportVisibility }))
                 }
               >
-                <option value="private">Private (only me)</option>
-                <option value="shared">Shared (workspace)</option>
-              </Select>
+                <SelectItem value="private">Private (only me)</SelectItem>
+                <SelectItem value="shared">Shared (workspace)</SelectItem>
+              </FieldSelect>
             </Field>
           </div>
 
@@ -364,7 +365,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Select({
+/** The panel's field-sized select — named to leave `Select` to the shared one. */
+function FieldSelect({
   value,
   onChange,
   children,
@@ -374,13 +376,13 @@ function Select({
   children: React.ReactNode;
 }) {
   return (
-    <select
+    <Select
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-9 rounded-md border bg-background px-2 text-sm"
+      onValueChange={onChange}
+      className="h-9 rounded-md bg-background px-2"
     >
       {children}
-    </select>
+    </Select>
   );
 }
 

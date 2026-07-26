@@ -1,7 +1,7 @@
 import { query, queryOne } from "@/shared/db/client";
 import { AuthzError, requireWorkspaceRole } from "@/features/workspaces/server/authz";
 import { normalizeCidr } from "./ip";
-import type { AdminSummary, IpAllowlistEntry, PermissionGrant } from "../types";
+import type { AdminSummary, AuditEvent, CustomFieldPolicy, IpAllowlistEntry, PermissionGrant } from "../types";
 
 export async function listBoardGrants(userId: string, workspaceId: string): Promise<PermissionGrant[]> {
   await requireWorkspaceRole(userId, workspaceId, "admin");
@@ -31,6 +31,29 @@ export async function setCustomFieldPolicy(userId:string,workspaceId:string,fiel
   if(!["guest","viewer","member","admin","owner"].includes(role)||canEdit&&!canView)throw new AuthzError("conflict","Invalid field access policy");
   const field=await queryOne<{id:number}>(`SELECT cf.id FROM custom_field cf JOIN board b ON b.id=cf.board_id WHERE cf.id=$1 AND b.workspace_id=$2`,[fieldId,workspaceId]);if(!field)throw new AuthzError("not_found","Custom field not found");
   return queryOne(`INSERT INTO custom_field_access_policy(field_id,role,can_view,can_edit) VALUES($1,$2,$3,$4) ON CONFLICT(field_id,role) DO UPDATE SET can_view=EXCLUDED.can_view,can_edit=EXCLUDED.can_edit RETURNING field_id AS "fieldId",role,can_view AS "canView",can_edit AS "canEdit"`,[fieldId,role,canView,canEdit]);
+}
+export async function listCustomFieldPolicies(userId:string,workspaceId:string):Promise<CustomFieldPolicy[]>{
+  await requireWorkspaceRole(userId,workspaceId,"admin");
+  return query<CustomFieldPolicy>(`SELECT p.field_id AS "fieldId",cf.name AS "fieldName",cf.board_id AS "boardId",p.role,p.can_view AS "canView",p.can_edit AS "canEdit" FROM custom_field_access_policy p JOIN custom_field cf ON cf.id=p.field_id JOIN board b ON b.id=cf.board_id WHERE b.workspace_id=$1 ORDER BY cf.board_id,cf.position,p.role`,[workspaceId]);
+}
+export async function deleteCustomFieldPolicy(userId:string,workspaceId:string,fieldId:number,role:string):Promise<void>{
+  await requireWorkspaceRole(userId,workspaceId,"admin");
+  const row=await queryOne<{fieldId:number}>(`DELETE FROM custom_field_access_policy p USING custom_field cf,board b WHERE p.field_id=cf.id AND b.id=cf.board_id AND b.workspace_id=$1 AND p.field_id=$2 AND p.role=$3 RETURNING p.field_id AS "fieldId"`,[workspaceId,fieldId,role]);
+  if(!row)throw new AuthzError("not_found","Field access policy not found");
+}
+
+/** The audit-log viewer's read path: recent workspace-wide activity rows,
+ * newest first, admin-gated like the summary the count came from. The user
+ * join names a human actor when the account still exists; agent actors keep
+ * their id (the agents dialog is where those are named). */
+export async function listAuditEvents(userId: string, workspaceId: string, limit: number, offset: number): Promise<AuditEvent[]> {
+  await requireWorkspaceRole(userId, workspaceId, "admin");
+  return query<AuditEvent>(
+    `SELECT a.id::text, a.board_id AS "boardId", a.task_id AS "taskId", a.actor_type AS "actorType", a.actor_id AS "actorId", u.name AS "actorName", a.action, a.created_at AS "createdAt"
+       FROM activity_log a LEFT JOIN "user" u ON a.actor_type='human' AND u.id=a.actor_id
+      WHERE a.workspace_id=$1 ORDER BY a.id DESC LIMIT $2 OFFSET $3`,
+    [workspaceId, Math.min(Math.max(limit, 1), 100), Math.max(offset, 0)]
+  );
 }
 
 /** One admin-gated overview query. The console deliberately reports counts,

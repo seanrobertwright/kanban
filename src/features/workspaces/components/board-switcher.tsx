@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, Check, ChevronDown, GitBranch, Plus, Users, Webhook } from "lucide-react";
+import { Bot, Check, ChevronDown, GitBranch, Pencil, Plus, Trash2, Users, Webhook } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -20,6 +20,10 @@ import { WebhooksDialog } from "@/features/webhooks/components/webhooks-dialog";
 import { RepoConnectionsDialog } from "@/features/git/components/repo-connections-dialog";
 import { CreateDialog } from "./create-dialog";
 import { MembersDialog } from "./members-dialog";
+import {
+  DeleteWorkspaceDialog,
+  RenameWorkspaceDialog,
+} from "./workspace-lifecycle-dialogs";
 import type { Board, WorkspaceMembership } from "../types";
 
 interface BoardSwitcherProps {
@@ -45,6 +49,9 @@ export function BoardSwitcher({
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   /** The workspace a new board is being created in, or null when idle. */
   const [newBoardIn, setNewBoardIn] = useState<WorkspaceMembership | null>(null);
+  /** Owner-only lifecycle targets — null when the dialogs are closed. */
+  const [renaming, setRenaming] = useState<WorkspaceMembership | null>(null);
+  const [deleting, setDeleting] = useState<WorkspaceMembership | null>(null);
 
   const currentBoard = boards.find((b) => b.id === currentBoardId);
   const currentWorkspace =
@@ -130,6 +137,22 @@ export function BoardSwitcher({
                     <Plus /> New board
                   </DropdownMenuItem>
                 )}
+                {/* Rename/delete are owner-only server-side; don't offer them
+                    to anyone the server would refuse. */}
+                {workspace.role === "owner" && (
+                  <>
+                    <DropdownMenuItem
+                      onClick={() => openLater(() => setRenaming(workspace))}
+                    >
+                      <Pencil /> Rename workspace
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => openLater(() => setDeleting(workspace))}
+                    >
+                      <Trash2 /> Delete workspace
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
               </DropdownMenuGroup>
             );
@@ -211,6 +234,23 @@ export function BoardSwitcher({
         label="Board name"
         placeholder="Roadmap"
         onSubmit={handleCreateBoard}
+      />
+
+      <RenameWorkspaceDialog
+        workspace={renaming}
+        onOpenChange={(open) => !open && setRenaming(null)}
+        onDone={() => router.refresh()}
+      />
+
+      <DeleteWorkspaceDialog
+        workspace={deleting}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        onDone={() => {
+          // The current board may have just gone with the workspace; land on
+          // the default board the server picks for "/".
+          router.push("/");
+          router.refresh();
+        }}
       />
 
       <CreateDialog

@@ -1,4 +1,4 @@
-import type { Webhook } from "../types";
+import type { Webhook, WebhookDelivery } from "../types";
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -29,6 +29,31 @@ export function createWebhook(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, events }),
   }).then((res) => jsonOrThrow<{ webhook: Webhook; secret: string }>(res));
+}
+
+/**
+ * Edit a webhook in place. `secret` comes back only when `rotateSecret` was
+ * asked for — the caller must show it then, because nothing will show it again.
+ */
+export function updateWebhook(
+  id: number,
+  patch: {
+    url?: string;
+    events?: string[];
+    active?: boolean;
+    rotateSecret?: boolean;
+  }
+): Promise<{ webhook: Webhook; secret?: string }> {
+  return fetch(`/api/webhooks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  }).then((res) => jsonOrThrow<{ webhook: Webhook; secret?: string }>(res));
+}
+
+export async function fetchDeliveries(id: number): Promise<WebhookDelivery[]> {
+  const res = await fetch(`/api/webhooks/${id}/deliveries`, { cache: "no-store" });
+  return jsonOrThrow<WebhookDelivery[]>(res);
 }
 
 export async function deleteWebhook(id: number): Promise<void> {

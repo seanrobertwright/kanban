@@ -1,6 +1,9 @@
 import { getSessionFromRequest, unauthorized } from "@/features/auth/server/session";
-import { authzErrorResponse } from "@/features/workspaces/server/authz";
-import { addIpAllowlistEntry, deleteIpAllowlistEntry, getAdminSummary, grantBoardPermission, grantScopedPermission, listBoardGrants, listIpAllowlist, revokeBoardGrant } from "./repository";
+import { authzErrorResponse, requireWorkspaceRole } from "@/features/workspaces/server/authz";
+import { query } from "@/shared/db/client";
+import { inboundAddress } from "@/features/integrations/server/email";
+import type { BoardIntakeAddress } from "../types";
+import { addIpAllowlistEntry, deleteCustomFieldPolicy, deleteIpAllowlistEntry, getAdminSummary, grantBoardPermission, grantScopedPermission, listAuditEvents, listBoardGrants, listCustomFieldPolicies, listIpAllowlist, revokeBoardGrant, setCustomFieldPolicy } from "./repository";
 import { listLegalHolds, listRetentionPolicies, placeLegalHold, releaseLegalHold, saveRetentionPolicy } from "./retention";
 import { generateScimToken, listIdentityProviders, registerIdentityProvider, removeIdentityProvider } from "./identity";
 import { exportDiscovery, searchWorkspace } from "./ediscovery";
@@ -42,6 +45,49 @@ export async function removeProvider(request:Request,workspaceId:string,provider
 export async function scimToken(request:Request,workspaceId:string,providerId:string){const s=await getSessionFromRequest(request);if(!s)return unauthorized();try{return Response.json(await generateScimToken(s.user.id,workspaceId,providerId,request.headers),{status:201});}catch(e){return authzErrorResponse(e);}}
 export async function discover(request:Request,workspaceId:string){const s=await getSessionFromRequest(request);if(!s)return unauthorized();const term=new URL(request.url).searchParams.get("q")??"";try{return Response.json(await searchWorkspace(s.user.id,workspaceId,term));}catch(e){return authzErrorResponse(e);}}
 export async function exportDiscover(request:Request,workspaceId:string){const s=await getSessionFromRequest(request);if(!s)return unauthorized();const term=new URL(request.url).searchParams.get("q")??"";try{return Response.json(await exportDiscovery(s.user.id,workspaceId,term),{headers:{"Content-Disposition":"attachment; filename=ediscovery.json"}});}catch(e){return authzErrorResponse(e);}}
+
+export async function fieldPolicies(request: Request, workspaceId: string) {
+  const s = await getSessionFromRequest(request); if (!s) return unauthorized();
+  try { return Response.json(await listCustomFieldPolicies(s.user.id, workspaceId)); } catch (e) { return authzErrorResponse(e); }
+}
+export async function saveFieldPolicy(request: Request, workspaceId: string) {
+  const s = await getSessionFromRequest(request); if (!s) return unauthorized();
+  const b = await request.json().catch(() => null);
+  if (!b || !Number.isInteger(b.fieldId) || typeof b.role !== "string" || typeof b.canView !== "boolean" || typeof b.canEdit !== "boolean") return bad("Invalid field access policy");
+  try { return Response.json(await setCustomFieldPolicy(s.user.id, workspaceId, b.fieldId, b.role, b.canView, b.canEdit)); } catch (e) { return authzErrorResponse(e); }
+}
+export async function removeFieldPolicy(request: Request, workspaceId: string) {
+  const s = await getSessionFromRequest(request); if (!s) return unauthorized();
+  const url = new URL(request.url); const fieldId = Number(url.searchParams.get("fieldId")); const role = url.searchParams.get("role") ?? "";
+  if (!Number.isInteger(fieldId) || !role) return bad("fieldId and role are required");
+  try { await deleteCustomFieldPolicy(s.user.id, workspaceId, fieldId, role); return new Response(null, { status: 204 }); } catch (e) { return authzErrorResponse(e); }
+}
+
+export async function auditLog(request: Request, workspaceId: string) {
+  const s = await getSessionFromRequest(request); if (!s) return unauthorized();
+  const url = new URL(request.url);
+  const limit = Number(url.searchParams.get("limit") ?? 25); const offset = Number(url.searchParams.get("offset") ?? 0);
+  if (!Number.isInteger(limit) || !Number.isInteger(offset)) return bad("limit and offset must be integers");
+  try { return Response.json(await listAuditEvents(s.user.id, workspaceId, limit, offset)); } catch (e) { return authzErrorResponse(e); }
+}
+
+/** Per-board inbound email addresses (email intake), admin-gated and behind the
+ * same configuration inboundAddress() itself enforces: when the deployment has
+ * no EMAIL_INBOUND_SIGNING_SECRET / EMAIL_INBOUND_DOMAIN the module throws, and
+ * this reports {configured:false} so the console shows nothing to copy. */
+export async function emailIntake(request: Request, workspaceId: string) {
+  const s = await getSessionFromRequest(request); if (!s) return unauthorized();
+  try {
+    await requireWorkspaceRole(s.user.id, workspaceId, "admin");
+    const boards = await query<{ id: number; name: string }>(`SELECT id, name FROM board WHERE workspace_id=$1 ORDER BY id`, [workspaceId]);
+    try {
+      const addresses: BoardIntakeAddress[] = boards.map((b) => ({ boardId: b.id, boardName: b.name, address: inboundAddress(b.id) }));
+      return Response.json({ configured: true, addresses });
+    } catch {
+      return Response.json({ configured: false, addresses: [] });
+    }
+  } catch (e) { return authzErrorResponse(e); }
+}
 
 export async function listIps(request: Request, workspaceId: string) {
   const session = await getSessionFromRequest(request); if (!session) return unauthorized();

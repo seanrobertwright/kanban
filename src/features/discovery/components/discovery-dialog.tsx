@@ -22,6 +22,7 @@ import {
   type IdeaSignal,
   type IdeaStatus,
 } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface DiscoveryDialogProps {
   boardId: number;
@@ -34,7 +35,7 @@ interface DiscoveryDialogProps {
 }
 
 const selectClass =
-  "h-7 rounded-md border bg-transparent px-1 text-xs text-foreground";
+  "h-7 rounded-md px-1 text-xs";
 
 /**
  * Product discovery + Feedback intake (043). Two lenses on one dialog: an Ideas
@@ -293,27 +294,27 @@ function IdeaRow({
           </span>
         )}
         {canEdit ? (
-          <select
+          <Select
             aria-label={`Status of ${idea.title}`}
             className={selectClass}
             value={idea.status}
             disabled={busy || idea.status === "promoted"}
-            onChange={(e) =>
+            onValueChange={(value) =>
               run(
                 () =>
                   api.updateIdea(idea.id, {
-                    status: e.target.value as IdeaStatus,
+                    status: value as IdeaStatus,
                   }),
                 onChanged
               )
             }
           >
             {IDEA_STATUSES.map((s) => (
-              <option key={s} value={s}>
+              <SelectItem key={s} value={s}>
                 {s}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+          </Select>
         ) : (
           <span>{idea.status}</span>
         )}
@@ -405,18 +406,18 @@ function FeedbackPanel({
               className="h-7 max-w-40 text-xs"
               onChange={(e) => setSource(e.target.value)}
             />
-            <select
+            <Select
               aria-label="Sentiment"
               className={selectClass}
               value={sentiment}
-              onChange={(e) => setSentiment(e.target.value as FeedbackSentiment)}
+              onValueChange={(value) => setSentiment(value as FeedbackSentiment)}
             >
               {FEEDBACK_SENTIMENTS.map((s) => (
-                <option key={s} value={s}>
+                <SelectItem key={s} value={s}>
                   {s}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+            </Select>
             <IdeaSelect ideas={data.ideas} value={ideaId} onChange={setIdeaId} />
             <Button
               type="button"
@@ -497,26 +498,26 @@ function FeedbackRow({
         </button>
 
         {canEdit ? (
-          <select
+          <Select
             aria-label="File under idea"
             className={`${selectClass} ml-auto`}
-            value={feedback.ideaId ?? ""}
+            value={String(feedback.ideaId ?? "")}
             disabled={busy}
-            onChange={(e) =>
+            onValueChange={(value) =>
               run(() =>
                 api.updateFeedback(feedback.id, {
-                  ideaId: e.target.value ? Number(e.target.value) : null,
+                  ideaId: value ? Number(value) : null,
                 })
               )
             }
           >
-            <option value="">Inbox (unfiled)</option>
+            <SelectItem value="">Inbox (unfiled)</SelectItem>
             {ideas.map((i) => (
-              <option key={i.id} value={i.id}>
+              <SelectItem key={i.id} value={String(i.id)}>
                 {i.title}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+          </Select>
         ) : (
           <span className="ml-auto">{filedUnder ? filedUnder.title : "unfiled"}</span>
         )}
@@ -548,19 +549,19 @@ function IdeaSelect({
   onChange: (v: string) => void;
 }) {
   return (
-    <select
+    <Select
       aria-label="File under idea"
       className={selectClass}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onValueChange={(value) => onChange(value)}
     >
-      <option value="">No idea</option>
+      <SelectItem value="">No idea</SelectItem>
       {ideas.map((i) => (
-        <option key={i.id} value={i.id}>
+        <SelectItem key={i.id} value={String(i.id)}>
           {i.title}
-        </option>
+        </SelectItem>
       ))}
-    </select>
+    </Select>
   );
 }
 

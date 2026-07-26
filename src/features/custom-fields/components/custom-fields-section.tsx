@@ -6,13 +6,14 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import * as api from "../client/api";
 import type { TaskCustomField } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface CustomFieldsSectionProps {
   taskId: number;
 }
 
 const SELECT_CLASS =
-  "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
+  "w-full py-1 text-base md:text-sm dark:bg-input/30";
 
 /**
  * The task's answers to its board's custom fields (035) — a dialog section in the
@@ -106,22 +107,22 @@ export function CustomFieldsSection({ taskId }: CustomFieldsSectionProps) {
             <div key={field.id} className="grid gap-1">
               <Label htmlFor={inputId}>{field.name}</Label>
               {field.type === "select" ? (
-                <select
+                <Select
                   id={inputId}
                   className={SELECT_CLASS}
                   value={value}
-                  onChange={(e) => {
-                    set(e.target.value);
-                    void commit(field.id, e.target.value);
+                  onValueChange={(value) => {
+                    set(value);
+                    void commit(field.id, value);
                   }}
                 >
-                  <option value="">—</option>
+                  <SelectItem value="">—</SelectItem>
                   {field.options.map((opt) => (
-                    <option key={opt} value={opt}>
+                    <SelectItem key={opt} value={opt}>
                       {opt}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                </Select>
               ) : (
                 <Input
                   id={inputId}

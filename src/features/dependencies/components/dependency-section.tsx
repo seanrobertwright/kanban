@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/shared/ui/button";
 import * as api from "../client/api";
 import type { TaskDependencyRef } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface DependencySectionProps {
   taskId: number;
@@ -122,19 +123,19 @@ export function DependencySection({
               announced as a listbox with no ARIA of ours, the platform picker on
               touch. Only same-board, non-cyclic tasks are offered — the server
               filters the options and refuses anything slipped past regardless. */}
-          <select
+          <Select
             value={choice}
             aria-label="Add a blocking task"
-            onChange={(e) => setChoice(e.target.value)}
-            className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+            onValueChange={(value) => setChoice(value)}
+            className="w-full py-1 text-base md:text-sm dark:bg-input/30"
           >
-            <option value="">Add a blocking task…</option>
+            <SelectItem value="">Add a blocking task…</SelectItem>
             {candidates.map((task) => (
-              <option key={task.id} value={task.id}>
+              <SelectItem key={task.id} value={String(task.id)}>
                 {task.title}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+          </Select>
           <Button
             type="button"
             size="icon"

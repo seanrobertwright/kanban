@@ -15,6 +15,20 @@ export function addDays(iso: string, n: number): string {
   return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
 }
 
+/**
+ * The Monday on or before `iso` — the week a day belongs to (083).
+ *
+ * Computed on the UTC parts of the string for addDays' reason: a local-zone
+ * `new Date("2026-07-26")` is the previous evening west of Greenwich, which
+ * would file a Sunday's work under the wrong week for half the world. JS's
+ * getUTCDay is 0 for Sunday, so Sunday steps back six days rather than one.
+ */
+export function weekStart(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return addDays(iso, day === 0 ? -6 : 1 - day);
+}
+
 /** Every date from `from` to `to` inclusive; empty when to precedes from. */
 export function eachDay(from: string, to: string): string[] {
   const out: string[] = [];

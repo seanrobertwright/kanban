@@ -7,8 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-rajdhani);
-  --font-mono: var(--font-share-tech-mono);
+  /* One text face and its mono; the display face is the brand mark only. */
+  --font-sans: var(--font-geist);
+  --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-orbitron);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -62,6 +63,11 @@
 :root {
   /* The light theme keeps usable, softened counterparts of the same hues so
      the toggle still works; the design language itself is dark-first. */
+  /* Tells the UA which form to render native widgets in — date pickers,
+     scrollbars, and the like. Selects are DOM-rendered components now, but
+     the date inputs in the task dialog are still platform controls, and
+     without this Chrome paints them light under the dark theme. */
+  color-scheme: light;
   --background: #f4f9fb;
   --foreground: #10222c;
   --card: #ffffff;
@@ -103,6 +109,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #04060c;
   --foreground: #d6ecf5;
   --card: #0a121c;
@@ -153,30 +160,21 @@
   html {
     @apply font-sans;
   }
-  /* The animated grid floor: two 1px cyan lattices panning diagonally one
-     cell every 8s. background-attachment keeps it still under scroll; the
-     animation provides the drift. */
+  /* The grid floor: two 1px cyan lattices, still.
+     It used to pan diagonally one cell every 8s, forever, behind every screen
+     in the app. Perpetual background motion is the thing that separates a
+     product demo from a tool people keep open for eight hours — it competes
+     with the content for attention and never stops competing, and the
+     reduced-motion escape hatch only helped the users who had already found
+     that setting. Keeping the lattice keeps the identity; dropping the
+     animation is what makes it a surface rather than a screensaver. */
   .dark body {
     background-image:
-      linear-gradient(rgba(0, 229, 255, 0.045) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 229, 255, 0.045) 1px, transparent 1px);
+      linear-gradient(rgba(0, 229, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 229, 255, 0.03) 1px, transparent 1px);
     background-size:
       40px 40px,
       40px 40px;
-    animation: gridpan 8s linear infinite;
-  }
-  @keyframes gridpan {
-    from {
-      background-position: 0 0;
-    }
-    to {
-      background-position: 40px 40px;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .dark body {
-      animation: none;
-    }
   }
   .dark ::placeholder {
     color: #4a6577;
@@ -224,4 +222,37 @@
   letter-spacing: 1.5px;
   text-transform: uppercase;
   font-weight: 400;
+}
+
+/*
+ * Compact density.
+ *
+ * Set on the document root by useDensity (shared/ui/density) so it reaches
+ * portalled surfaces — dialogs and dropdown menus render under <body>, not
+ * under whatever opened them, and a wrapper-scoped rule would style the board
+ * and miss the task panel.
+ *
+ * Padding and leading only. Nothing here changes a font size below the body's,
+ * hides an affordance, or shortens a hit target: "compact" is a person saying
+ * they can already read this and want more of it on screen, not a request for
+ * a version of the app that is harder to use.
+ */
+:root[data-density="compact"] {
+  [data-slot="card"] {
+    padding-block: calc(var(--spacing) * 2);
+    gap: calc(var(--spacing) * 0.5);
+  }
+  [data-slot="card-header"],
+  [data-slot="card-content"],
+  [data-slot="card-footer"] {
+    padding-inline: calc(var(--spacing) * 2);
+  }
+  [data-slot="card-title"] {
+    line-height: 1.3;
+  }
+  /* Table rows — the List view and the timesheet grid are the dense reads
+     where a row of padding is a row of tasks not shown. */
+  table :is(th, td) {
+    padding-block: calc(var(--spacing) * 0.5);
+  }
 }

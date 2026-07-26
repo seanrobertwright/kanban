@@ -23,6 +23,7 @@ import { Textarea } from "@/shared/ui/textarea";
 import * as templatesApi from "../client/api";
 import { TEMPLATE_TITLE_MAX } from "../types";
 import type { TaskTemplate } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface TemplatesDialogProps {
   open: boolean;
@@ -220,23 +221,23 @@ export function TemplatesDialog({
             <div className="grid grid-cols-2 items-end gap-3">
               <div className="grid gap-1.5">
                 <FieldLabel htmlFor="template-priority">Priority</FieldLabel>
-                <select
+                <Select
                   id="template-priority"
                   value={form.priority}
-                  onChange={(e) =>
+                  onValueChange={(value) =>
                     setForm((f) => ({
                       ...f,
-                      priority: e.target.value as TaskPriority,
+                      priority: value as TaskPriority,
                     }))
                   }
-                  className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+                  className="w-full py-1 text-base md:text-sm dark:bg-input/30"
                 >
                   {[...PRIORITY_ORDER].reverse().map((value) => (
-                    <option key={value} value={value}>
+                    <SelectItem key={value} value={value}>
                       {PRIORITY_LABELS[value]}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                </Select>
               </div>
               <div className="grid gap-1.5">
                 <FieldLabel>Labels</FieldLabel>

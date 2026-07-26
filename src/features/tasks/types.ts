@@ -479,3 +479,56 @@ export interface MoveTaskInput {
   columnId: number;
   position: number;
 }
+
+/**
+ * What a board search asks for.
+ *
+ * Every field is optional and every present field narrows — an empty input is
+ * "the whole board, newest first", which is the honest degenerate case rather
+ * than an error. That matters most to the caller this was built for: an agent
+ * over MCP, which today reads a whole board and filters in its own context. A
+ * search that refuses an empty query would just push it back to that.
+ *
+ * `text` matches title or description, case-insensitively and as a substring —
+ * not full-text. A board's tasks are short titles an agent half-remembers
+ * ("the auth timeout one"), and stemming would not help while substring
+ * matching on a partial word does. If this ever outgrows a sequential scan, the
+ * answer is a tsvector column, not a smarter LIKE.
+ *
+ * `assignee` is three-valued the way the task's own field is: absent means "do
+ * not filter", null means "unassigned only", an Actor means that principal.
+ *
+ * `labelIds` is a conjunction — a task must carry *all* of them. An OR would be
+ * expressible as several searches; an AND would not be expressible at all.
+ */
+export interface TaskSearchInput {
+  text?: string;
+  columnId?: number;
+  assignee?: Actor | null;
+  priority?: TaskPriority;
+  type?: TaskType;
+  labelIds?: number[];
+  milestoneId?: number;
+  sprintId?: number;
+  epicId?: number;
+  /** Strictly before / strictly after, both YYYY-MM-DD; tasks with no due date match neither. */
+  dueBefore?: string;
+  dueAfter?: string;
+  /** Subtasks are excluded by default — a board's work items are its roots. */
+  includeSubtasks?: boolean;
+  /** Only tasks outside the board's done column (no-op if it has none). */
+  openOnly?: boolean;
+  limit?: number;
+  /** The previous page's `nextCursor`; results are strictly older ids. */
+  cursor?: number;
+}
+
+/**
+ * A page of search results. `nextCursor` is null on the last page — the caller
+ * loops until it is, which is the one protocol that does not require it to know
+ * the page size it asked for.
+ */
+export interface TaskSearchResult {
+  tasks: Task[];
+  nextCursor: number | null;
+}

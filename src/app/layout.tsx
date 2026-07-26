@@ -6,25 +6,27 @@ import { ThemeProvider } from "@/shared/theme/theme-provider";
 
 // Self-hosted (src/app/fonts/*.woff2), not next/font/google: the build no longer
 // reaches out to Google Fonts, so it is reproducible and works offline.
-// The neon-grid design language (docs/Kanban tool design synthesis) uses three
-// faces: Rajdhani for UI text, Share Tech Mono for data/labels, Orbitron for
-// brand headings. Rajdhani has no variable release, so its four weights are
-// separate static files.
-const rajdhani = localFont({
-  src: [
-    { path: "./fonts/Rajdhani-400.woff2", weight: "400" },
-    { path: "./fonts/Rajdhani-500.woff2", weight: "500" },
-    { path: "./fonts/Rajdhani-600.woff2", weight: "600" },
-    { path: "./fonts/Rajdhani-700.woff2", weight: "700" },
-  ],
-  variable: "--font-rajdhani",
+//
+// Two faces, not four. The neon-grid design language originally set Rajdhani
+// for UI text and Share Tech Mono for data, which is two display faces doing
+// the work of one text face — Rajdhani is condensed and narrow at the 13px this
+// app renders most of its interface at, and a condensed display face is the
+// single loudest "not enterprise software" signal a UI can send. Geist is a
+// neutral text face with a matching mono, and the pair carries everything.
+//
+// Orbitron survives for exactly one thing: the brand mark. A display face on a
+// wordmark is identity; the same face on a dialog heading is costume.
+const geist = localFont({
+  src: "./fonts/Geist-Variable.woff2",
+  variable: "--font-geist",
+  weight: "100 900",
   display: "swap",
 });
 
-const shareTechMono = localFont({
-  src: "./fonts/ShareTechMono-400.woff2",
-  variable: "--font-share-tech-mono",
-  weight: "400",
+const geistMono = localFont({
+  src: "./fonts/GeistMono-Variable.woff2",
+  variable: "--font-geist-mono",
+  weight: "100 900",
   display: "swap",
 });
 
@@ -48,7 +50,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${rajdhani.variable} ${shareTechMono.variable} ${orbitron.variable} h-full antialiased`}
+      className={`${geist.variable} ${geistMono.variable} ${orbitron.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">

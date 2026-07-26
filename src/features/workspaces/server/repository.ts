@@ -154,6 +154,41 @@ export async function createWorkspace(
   return withTransaction((client) => provisionWorkspace(client, userId, name));
 }
 
+/**
+ * Owner-only: the workspace name is its identity everywhere members look. The
+ * slug is untouched — it is an addressing detail nobody typed, and rewriting it
+ * would break anything holding the old one.
+ */
+export async function renameWorkspace(
+  actorId: string,
+  workspaceId: string,
+  name: string
+): Promise<Workspace> {
+  await requireWorkspaceRole(actorId, workspaceId, "owner");
+  const row = await queryOne<Workspace>(
+    `UPDATE workspace SET name = $2
+      WHERE id = $1
+      RETURNING id, name, slug, created_at AS "createdAt"`,
+    [workspaceId, name]
+  );
+  return row!;
+}
+
+/**
+ * Owner-only, and the cascade is deliberate: every workspace-scoped table
+ * declares ON DELETE CASCADE back to workspace(id) (001 onward), so one DELETE
+ * takes boards, columns, tasks, members, invitations, and the rest with it.
+ * Refuse-if-nonempty would make deletion impossible in practice — every
+ * workspace has at least its seeded board.
+ */
+export async function deleteWorkspace(
+  actorId: string,
+  workspaceId: string
+): Promise<void> {
+  await requireWorkspaceRole(actorId, workspaceId, "owner");
+  await query(`DELETE FROM workspace WHERE id = $1`, [workspaceId]);
+}
+
 export async function addMember(
   actorId: string,
   workspaceId: string,

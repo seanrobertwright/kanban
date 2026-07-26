@@ -17,6 +17,7 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import * as api from "../client/api";
 import type { Invitation, Member, WorkspaceMembership, WorkspaceRole } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 const ROLES: WorkspaceRole[] = ["owner", "admin", "member", "viewer", "guest"];
 
@@ -36,7 +37,7 @@ interface MembersDialogProps {
 }
 
 const selectClass =
-  "h-8 rounded-md border bg-background px-2 text-xs capitalize outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
+  "h-8 rounded-md bg-background px-2 text-xs capitalize";
 
 export function MembersDialog({
   open,
@@ -46,6 +47,7 @@ export function MembersDialog({
 }: MembersDialogProps) {
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [emailConfigured, setEmailConfigured] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -62,6 +64,7 @@ export function MembersDialog({
       const data = await api.fetchMembers(workspace.id);
       setMembers(data.members);
       setInvitations(data.invitations);
+      setEmailConfigured(Boolean(data.emailConfigured));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load members");
     } finally {
@@ -123,26 +126,27 @@ export function MembersDialog({
                 placeholder="teammate@company.com"
                 className="flex-1"
               />
-              <select
+              <Select
                 aria-label="Invite role"
                 className={cn(selectClass, "h-9")}
                 value={role}
-                onChange={(e) => setRole(e.target.value as WorkspaceRole)}
+                onValueChange={(value) => setRole(value as WorkspaceRole)}
               >
                 {ROLES.filter((r) => isOwner || r !== "owner").map((r) => (
-                  <option key={r} value={r}>
+                  <SelectItem key={r} value={r}>
                     {r}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </Select>
               <Button type="submit" disabled={inviting || !email.trim()}>
                 {inviting ? <Loader2 className="animate-spin" /> : "Invite"}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              {/* Be honest rather than implying an email went out. */}
-              No email is sent yet — they join automatically the next time they
-              sign in with this address.
+              {/* Truthful either way: the server says whether SMTP is wired up. */}
+              {emailConfigured
+                ? "They'll get an invitation email with a sign-in link, and join automatically when they sign in with this address."
+                : "No email is sent — they join automatically the next time they sign in with this address."}
             </p>
           </form>
         )}
@@ -188,29 +192,29 @@ export function MembersDialog({
                 </div>
 
                 {isAdmin ? (
-                  <select
+                  <Select
                     aria-label={`Role for ${member.name}`}
                     className={selectClass}
                     value={member.role}
                     // The server enforces all of this too; disabling here just
                     // avoids offering an action that will be refused.
                     disabled={member.role === "owner" && !isOwner}
-                    onChange={(e) =>
+                    onValueChange={(value) =>
                       run(() =>
                         api.updateMemberRole(
                           workspace.id,
                           member.userId,
-                          e.target.value as WorkspaceRole
+                          value as WorkspaceRole
                         )
                       )
                     }
                   >
                     {ROLES.filter((r) => isOwner || r !== "owner").map((r) => (
-                      <option key={r} value={r} title={ROLE_HINT[r]}>
+                      <SelectItem key={r} value={r} title={ROLE_HINT[r]}>
                         {r}
-                      </option>
+                      </SelectItem>
                     ))}
-                  </select>
+                  </Select>
                 ) : (
                   <span className="text-xs capitalize text-muted-foreground">
                     {member.role}

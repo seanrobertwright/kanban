@@ -14,7 +14,13 @@ import {
   revokeInvitation,
   updateMemberRole,
 } from "./members";
-import { createBoard, createWorkspace } from "./repository";
+import { invitationEmailConfigured } from "./invitation-email";
+import {
+  createBoard,
+  createWorkspace,
+  deleteWorkspace,
+  renameWorkspace,
+} from "./repository";
 
 function badRequest(message: string) {
   return Response.json({ error: message }, { status: 400 });
@@ -66,6 +72,31 @@ export async function handleCreateBoard(request: Request, workspaceId: string) {
   }
 }
 
+export async function handleRenameWorkspace(request: Request, workspaceId: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+
+  const name = readName(await request.json().catch(() => null));
+  if (typeof name !== "string") return badRequest(name.error);
+
+  try {
+    return Response.json(await renameWorkspace(session.user.id, workspaceId, name));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+export async function handleDeleteWorkspace(request: Request, workspaceId: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  try {
+    await deleteWorkspace(session.user.id, workspaceId);
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
 export async function handleListMembers(request: Request, workspaceId: string) {
   const session = await getSessionFromRequest(request);
   if (!session) return unauthorized();
@@ -75,7 +106,13 @@ export async function handleListMembers(request: Request, workspaceId: string) {
       // Only admins may see pending invites; members still get their roster.
       listInvitations(session.user.id, workspaceId).catch(() => []),
     ]);
-    return Response.json({ members, invitations });
+    // emailConfigured lets the invite form tell the truth about delivery —
+    // "an email is on its way" vs "they join on their next sign-in".
+    return Response.json({
+      members,
+      invitations,
+      emailConfigured: invitationEmailConfigured(),
+    });
   } catch (error) {
     return authzErrorResponse(error);
   }

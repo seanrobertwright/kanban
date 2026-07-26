@@ -23,10 +23,13 @@ async function requireAttachmentRole(
   role: "viewer" | "member"
 ): Promise<{ taskId: number; key: string; workspaceId: string }> {
   const rows = await query<{ taskId: number; key: string; workspaceId: string }>(
+    // task carries column_id, not board_id — the board is two hops away,
+    // through board_column. Same path requireTaskRole walks.
     `SELECT a.task_id AS "taskId", a.key, b.workspace_id AS "workspaceId"
        FROM attachment a
        JOIN task t ON t.id = a.task_id
-       JOIN board b ON b.id = t.board_id
+       JOIN board_column bc ON bc.id = t.column_id
+       JOIN board b ON b.id = bc.board_id
       WHERE a.id = $1`,
     [attachmentId]
   );

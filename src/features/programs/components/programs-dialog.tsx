@@ -16,6 +16,7 @@ import { donePercent } from "@/features/workspaces/lib/portfolio";
 import type { PortfolioBoard } from "@/features/workspaces/types";
 import * as api from "../client/api";
 import type { Program, ProgramGroup, ProgramsOverview } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 /**
  * Programs / initiatives (040): the workspace's boards grouped one level up, in a
@@ -333,29 +334,29 @@ function BoardRow({
         )}
       </div>
       {canManage && (
-        <select
+        <Select
           aria-label={`Program for ${board.name}`}
-          className="mt-0.5 h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
-          value={currentProgramId ?? ""}
+          className="mt-0.5 h-7 rounded-md px-1 text-xs"
+          value={String(currentProgramId ?? "")}
           disabled={busy}
-          onChange={(e) =>
+          onValueChange={(value) =>
             run(
               () =>
                 api.assignBoardProgram(
                   board.id,
-                  e.target.value === "" ? null : Number(e.target.value)
+                  value === "" ? null : Number(value)
                 ),
               "Could not move the board"
             )
           }
         >
-          <option value="">Unassigned</option>
+          <SelectItem value="">Unassigned</SelectItem>
           {programs.map((p) => (
-            <option key={p.id} value={p.id}>
+            <SelectItem key={p.id} value={String(p.id)}>
               {p.name}
-            </option>
+            </SelectItem>
           ))}
-        </select>
+        </Select>
       )}
     </div>
   );

@@ -17,6 +17,7 @@ import type { Epic } from "@/features/epics/types";
 import type { Objective } from "@/features/objectives/types";
 import * as api from "../client/api";
 import type { Milestone } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface MilestonesDialogProps {
   boardId: number;
@@ -58,6 +59,10 @@ export function MilestonesDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  // Inline edit (rename / re-date): which row is in edit mode, and its drafts.
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
 
   const epicName = new Map(epics.map((e) => [e.id, e.name]));
   const objectiveName = new Map(objectives.map((o) => [o.id, o.name]));
@@ -82,6 +87,31 @@ export function MilestonesDialog({
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create the milestone");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startEdit(milestone: Milestone) {
+    setEditingId(milestone.id);
+    setEditName(milestone.name);
+    setEditDueDate(milestone.dueDate ?? "");
+  }
+
+  async function saveEdit(id: number) {
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updateMilestone(id, {
+        name: trimmed,
+        dueDate: editDueDate || null,
+      });
+      setEditingId(null);
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update the milestone");
     } finally {
       setBusy(false);
     }
@@ -132,6 +162,44 @@ export function MilestonesDialog({
                   key={milestone.id}
                   className="grid gap-1 rounded-lg border px-3 py-2"
                 >
+                  {editingId === milestone.id ? (
+                    /* Inline edit: rename and re-date in place, the row's own
+                       Save/Cancel — nothing else about the row changes. */
+                    <div className="flex items-center gap-2">
+                      <Input
+                        aria-label={`Rename ${milestone.name}`}
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="h-8"
+                      />
+                      <Input
+                        aria-label={`Due date for ${milestone.name}`}
+                        type="date"
+                        className="h-8 w-36 shrink-0"
+                        value={editDueDate}
+                        onChange={(e) => setEditDueDate(e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8"
+                        disabled={busy || !editName.trim()}
+                        onClick={() => saveEdit(milestone.id)}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        disabled={busy}
+                        onClick={() => setEditingId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="min-w-0 truncate font-medium">
@@ -165,24 +233,37 @@ export function MilestonesDialog({
                         </time>
                       )}
                       {canEdit && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
-                          disabled={busy}
-                          onClick={() =>
-                            confirmingId === milestone.id
-                              ? remove(milestone.id)
-                              : setConfirmingId(milestone.id)
-                          }
-                          onBlur={() => setConfirmingId(null)}
-                        >
-                          {confirmingId === milestone.id ? "Really?" : "Delete"}
-                        </Button>
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-1.5 text-xs text-muted-foreground"
+                            disabled={busy}
+                            onClick={() => startEdit(milestone)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
+                            disabled={busy}
+                            onClick={() =>
+                              confirmingId === milestone.id
+                                ? remove(milestone.id)
+                                : setConfirmingId(milestone.id)
+                            }
+                            onBlur={() => setConfirmingId(null)}
+                          >
+                            {confirmingId === milestone.id ? "Really?" : "Delete"}
+                          </Button>
+                        </>
                       )}
                     </span>
                   </div>
+                  )}
                   {/* The bar and the words carry the same fact — the words are
                       for anyone who cannot judge a proportion by eye. */}
                   <div
@@ -234,36 +315,36 @@ export function MilestonesDialog({
                 has any — the picker is absent otherwise, so a board with no
                 epics shows the form exactly as before. */}
             {epics.length > 0 && (
-              <select
+              <Select
                 aria-label="Epic"
                 value={epicId}
-                onChange={(e) => setEpicId(e.target.value)}
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+                onValueChange={(value) => setEpicId(value)}
+                className="w-full py-1 text-base md:text-sm dark:bg-input/30"
               >
-                <option value="">No epic</option>
+                <SelectItem value="">No epic</SelectItem>
                 {epics.map((epic) => (
-                  <option key={epic.id} value={epic.id}>
+                  <SelectItem key={epic.id} value={String(epic.id)}>
                     {epic.name}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </Select>
             )}
             {/* Aim the new milestone at an objective (037). Epic's rule: only
                 when the board has any. */}
             {objectives.length > 0 && (
-              <select
+              <Select
                 aria-label="Objective"
                 value={objectiveId}
-                onChange={(e) => setObjectiveId(e.target.value)}
-                className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+                onValueChange={(value) => setObjectiveId(value)}
+                className="w-full py-1 text-base md:text-sm dark:bg-input/30"
               >
-                <option value="">No objective</option>
+                <SelectItem value="">No objective</SelectItem>
                 {objectives.map((objective) => (
-                  <option key={objective.id} value={objective.id}>
+                  <SelectItem key={objective.id} value={String(objective.id)}>
                     {objective.name}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </Select>
             )}
           </div>
         )}

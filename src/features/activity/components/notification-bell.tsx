@@ -67,6 +67,7 @@ const ACTION_VERB: Record<string, string> = {
   "git.commit_linked": "linked a commit to",
   "git.ci_passed": "CI passed for",
   "git.ci_failed": "CI failed for",
+  "chat.mentioned": "mentioned someone in",
 };
 
 const POLL_MS = 60_000;
@@ -85,10 +86,18 @@ function NotificationRow({
   unread: boolean;
   now: number;
 }) {
-  // A comment that names the reader outranks its generic verb: "mentioned you
-  // on" is the sentence worth interrupting someone for (024).
+  // A chat row's subject is a channel, not a task: the snapshot carries the
+  // channel's name (3.7), and the row renders "#general" where every other
+  // entry renders a task title.
+  const chat =
+    entry.action === "chat.mentioned" ? (entry.after ?? entry.before) : null;
+  // A comment (or chat message) that names the reader outranks its generic
+  // verb: "mentioned you on/in" is the sentence worth interrupting someone
+  // for (024, 3.7).
   const verb = entry.mentionedMe
-    ? "mentioned you on"
+    ? chat
+      ? "mentioned you in"
+      : "mentioned you on"
     : (ACTION_VERB[entry.action] ?? "updated");
   return (
     <div
@@ -103,7 +112,9 @@ function NotificationRow({
       <div className="min-w-0 flex-1">
         <p className="leading-snug">
           <span className="font-medium">{actorLabel(entry)}</span> {verb}
-          {entry.taskTitle ? (
+          {chat ? (
+            <span className="text-muted-foreground"> #{chat.channelName}</span>
+          ) : entry.taskTitle ? (
             <span className="text-muted-foreground"> “{entry.taskTitle}”</span>
           ) : null}
         </p>

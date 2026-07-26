@@ -14,6 +14,8 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
 import * as api from "../client/api";
+import * as sharingApi from "@/features/sharing/client/api";
+import { publicPathForToken } from "@/features/sharing/types";
 import { OPERATORS, type Operator } from "@/features/automations/types";
 import {
   FORM_FIELD_TYPES,
@@ -23,6 +25,7 @@ import {
   type FormFieldType,
   type FormRoute,
 } from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface FormsColumn {
   id: number;
@@ -162,6 +165,7 @@ function FormCard({
 }) {
   const [filling, setFilling] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   return (
     <li className="grid gap-2 rounded-lg border px-3 py-2.5">
@@ -187,6 +191,16 @@ function FormCard({
         </div>
         {canEdit && (
           <div className="flex shrink-0 items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-xs text-muted-foreground"
+              disabled={busy}
+              onClick={() => setSharing((v) => !v)}
+            >
+              Public link
+            </Button>
             {form.isOpen && (
               <Button
                 type="button"
@@ -233,6 +247,8 @@ function FormCard({
         )}
       </div>
 
+      {sharing && <PublicLinkPanel formId={form.id} />}
+
       {filling && form.isOpen && (
         <FillForm
           form={form}
@@ -243,6 +259,126 @@ function FormCard({
         />
       )}
     </li>
+  );
+}
+
+/**
+ * Public intake links for one form (§3.9): mint a tokenized submit URL, copy
+ * it, revoke it. Minting is a workspace-admin power server-side — a member who
+ * opens this panel sees the server's refusal rather than a hidden button.
+ */
+function PublicLinkPanel({ formId }: { formId: number }) {
+  const [links, setLinks] = useState<sharingApi.PublicLink[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  async function load() {
+    try {
+      setError(null);
+      setLinks(await sharingApi.fetchPublicLinks("form", String(formId)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load public links");
+    }
+  }
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formId]);
+
+  async function run(action: () => Promise<unknown>, failure: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : failure);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy(link: sharingApi.PublicLink) {
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}${publicPathForToken("form", link.token)}`
+      );
+      setCopiedId(link.id);
+      setTimeout(() => setCopiedId((prev) => (prev === link.id ? null : prev)), 1500);
+    } catch {
+      setError("Could not copy — copy the URL manually");
+    }
+  }
+
+  return (
+    <div className="grid gap-1.5 rounded-md bg-muted/40 p-2">
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+      {links.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No public link yet — anyone with one can submit this form without
+          signing in.
+        </p>
+      ) : (
+        <ul className="grid gap-1">
+          {links.map((link) => (
+            <li key={link.id} className="flex items-center gap-1.5">
+              <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                {publicPathForToken("form", link.token)}
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {link.expiresAt
+                  ? `expires ${new Date(link.expiresAt).toLocaleDateString()}`
+                  : "no expiry"}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-xs"
+                onClick={() => void copy(link)}
+              >
+                {copiedId === link.id ? "Copied" : "Copy"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-xs text-muted-foreground hover:text-destructive"
+                disabled={busy}
+                onClick={() =>
+                  run(
+                    () => sharingApi.revokePublicLink(link.id),
+                    "Could not revoke the link"
+                  )
+                }
+              >
+                Revoke
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="h-6 w-fit px-2 text-xs"
+        disabled={busy}
+        onClick={() =>
+          run(
+            () => sharingApi.mintPublicLink("form", String(formId), "submit"),
+            "Could not create the link"
+          )
+        }
+      >
+        New public link
+      </Button>
+    </div>
   );
 }
 
@@ -393,19 +529,19 @@ function CreateForm({
       />
       <label className="grid gap-1 text-xs text-muted-foreground">
         Lands in
-        <select
+        <Select
           aria-label="Target column"
-          className="h-8 rounded-md border bg-transparent px-2 text-sm text-foreground"
+          className="h-8 rounded-md px-2"
           value={targetColumnId}
-          onChange={(e) => setTargetColumnId(e.target.value)}
+          onValueChange={(value) => setTargetColumnId(value)}
         >
-          <option value="">First column</option>
+          <SelectItem value="">First column</SelectItem>
           {columns.map((c) => (
-            <option key={c.id} value={c.id}>
+            <SelectItem key={c.id} value={String(c.id)}>
               {c.title}
-            </option>
+            </SelectItem>
           ))}
-        </select>
+        </Select>
       </label>
 
       <p className="text-xs text-muted-foreground">
@@ -421,20 +557,20 @@ function CreateForm({
               placeholder="Question"
               className="h-7 text-xs"
             />
-            <select
+            <Select
               aria-label={`Question ${i + 1} type`}
-              className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+              className="h-7 rounded-md px-1 text-xs"
               value={field.type}
-              onChange={(e) =>
-                setField(i, { type: e.target.value as FormFieldType })
+              onValueChange={(value) =>
+                setField(i, { type: value as FormFieldType })
               }
             >
               {FORM_FIELD_TYPES.map((t) => (
-                <option key={t} value={t}>
+                <SelectItem key={t} value={t}>
                   {t}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+            </Select>
             <label className="flex items-center gap-1 text-xs text-muted-foreground">
               <input
                 type="checkbox"
@@ -466,35 +602,35 @@ function CreateForm({
       <ul className="grid gap-1.5">
         {routes.map((r, i) => (
           <li key={i} className="flex items-center gap-1.5">
-            <select
+            <Select
               aria-label={`Route ${i + 1} question`}
-              className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+              className="h-7 rounded-md px-1 text-xs"
               value={r.field}
-              onChange={(e) =>
-                setRoutes((prev) => prev.map((x, idx) => (idx === i ? { ...x, field: e.target.value } : x)))
+              onValueChange={(value) =>
+                setRoutes((prev) => prev.map((x, idx) => (idx === i ? { ...x, field: value } : x)))
               }
             >
-              <option value="">question…</option>
+              <SelectItem value="">question…</SelectItem>
               {fields.map((f, fi) => (
-                <option key={fi} value={f.label}>
+                <SelectItem key={fi} value={f.label}>
                   {f.label || `Q${fi + 1}`}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-            <select
+            </Select>
+            <Select
               aria-label={`Route ${i + 1} operator`}
-              className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+              className="h-7 rounded-md px-1 text-xs"
               value={r.op}
-              onChange={(e) =>
-                setRoutes((prev) => prev.map((x, idx) => (idx === i ? { ...x, op: e.target.value as Operator } : x)))
+              onValueChange={(value) =>
+                setRoutes((prev) => prev.map((x, idx) => (idx === i ? { ...x, op: value as Operator } : x)))
               }
             >
               {OPERATORS.map((op) => (
-                <option key={op} value={op}>
+                <SelectItem key={op} value={op}>
                   {op}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+            </Select>
             <Input
               aria-label={`Route ${i + 1} value`}
               value={r.value}
@@ -505,21 +641,21 @@ function CreateForm({
               className="h-7 text-xs"
             />
             <span className="text-xs text-muted-foreground">→</span>
-            <select
+            <Select
               aria-label={`Route ${i + 1} column`}
-              className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+              className="h-7 rounded-md px-1 text-xs"
               value={r.columnId}
-              onChange={(e) =>
-                setRoutes((prev) => prev.map((x, idx) => (idx === i ? { ...x, columnId: e.target.value } : x)))
+              onValueChange={(value) =>
+                setRoutes((prev) => prev.map((x, idx) => (idx === i ? { ...x, columnId: value } : x)))
               }
             >
-              <option value="">column…</option>
+              <SelectItem value="">column…</SelectItem>
               {columns.map((c) => (
-                <option key={c.id} value={c.id}>
+                <SelectItem key={c.id} value={String(c.id)}>
                   {c.title}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+            </Select>
             <Button
               type="button"
               variant="ghost"

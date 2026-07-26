@@ -56,6 +56,7 @@ const roster = {
       expiresAt: "2026-07-29T00:00:00.000Z",
     },
   ],
+  emailConfigured: false,
 };
 
 beforeEach(() => {
@@ -77,6 +78,32 @@ describe("MembersDialog", () => {
     expect(await screen.findByText("Bob")).toBeDefined();
     expect(screen.getByText("carol@example.test")).toBeDefined();
     expect(screen.getByLabelText("Invite by email")).toBeDefined();
+  });
+
+  it("tells the truth about invite delivery either way", async () => {
+    const { unmount } = render(
+      <MembersDialog
+        open
+        onOpenChange={vi.fn()}
+        workspace={workspace("owner")}
+        currentUserId="u-alice"
+      />
+    );
+    expect(await screen.findByText(/No email is sent/)).toBeDefined();
+    unmount();
+
+    fetchMembers.mockResolvedValue({ ...roster, emailConfigured: true });
+    render(
+      <MembersDialog
+        open
+        onOpenChange={vi.fn()}
+        workspace={workspace("owner")}
+        currentUserId="u-alice"
+      />
+    );
+    expect(
+      await screen.findByText(/They'll get an invitation email/)
+    ).toBeDefined();
   });
 
   it("hides the invite form from a viewer", async () => {
@@ -131,9 +158,12 @@ describe("MembersDialog", () => {
     fireEvent.change(await screen.findByLabelText("Invite by email"), {
       target: { value: "dave@example.test" },
     });
-    fireEvent.change(screen.getByLabelText("Invite role"), {
-      target: { value: "admin" },
-    });
+    // A DOM-rendered select: open the popup, then click the item. Base UI
+    // commits a click only when a pointerdown began on that same item.
+    fireEvent.click(screen.getByLabelText("Invite role"));
+    const admin = await screen.findByRole("option", { name: "admin" });
+    fireEvent.pointerDown(admin, { pointerType: "mouse" });
+    fireEvent.click(admin, { detail: 1 });
     fireEvent.click(screen.getByRole("button", { name: "Invite" }));
 
     await waitFor(() =>

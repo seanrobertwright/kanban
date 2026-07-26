@@ -14,7 +14,14 @@ import {
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import * as api from "../client/api";
-import { GIT_PROVIDERS, type GitProvider, type RepoConnection } from "../types";
+import {
+  GIT_PROVIDERS,
+  type GitProvider,
+  type RepoBranch,
+  type RepoConnection,
+  type RepoEntry,
+} from "../types";
+import { Select, SelectItem } from "@/shared/ui/select";
 
 interface RepoConnectionsDialogProps {
   open: boolean;
@@ -26,6 +33,12 @@ const PROVIDER_LABELS: Record<GitProvider, string> = {
   github: "GitHub",
   gitlab: "GitLab",
   bitbucket: "Bitbucket",
+};
+
+const TOKEN_PLACEHOLDERS: Record<GitProvider, string> = {
+  github: "Fine-grained PAT (contents: read)",
+  gitlab: "Personal access token (read_repository)",
+  bitbucket: "username:app-password",
 };
 
 /**
@@ -45,6 +58,9 @@ export function RepoConnectionsDialog({
   const [provider, setProvider] = useState<GitProvider>("github");
   const [externalRepo, setExternalRepo] = useState("");
   const [installId, setInstallId] = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  /** Which connection's read-only browse panel is open. */
+  const [browsingId, setBrowsingId] = useState<number | null>(null);
   /** The freshly minted secret and its webhook URL — shown until close. */
   const [minted, setMinted] = useState<{
     repo: string;
@@ -76,7 +92,8 @@ export function RepoConnectionsDialog({
   async function connect(
     connectProvider: GitProvider,
     repo: string,
-    install?: string
+    install?: string,
+    token?: string
   ) {
     const trimmed = repo.trim();
     if (!trimmed) return;
@@ -87,6 +104,8 @@ export function RepoConnectionsDialog({
         provider: connectProvider,
         externalRepo: trimmed,
         installId: install?.trim() || undefined,
+        // Omitted (a Rotate) keeps any stored token; the server never returns it.
+        accessToken: token?.trim() || undefined,
       });
       setMinted({
         repo: `${PROVIDER_LABELS[connectProvider]} ${result.connection.externalRepo}`,
@@ -95,6 +114,7 @@ export function RepoConnectionsDialog({
       });
       setExternalRepo("");
       setInstallId("");
+      setAccessToken("");
       setVersion((v) => v + 1);
     } catch (e) {
       setError(
@@ -173,55 +193,74 @@ export function RepoConnectionsDialog({
             {connections.map((connection) => (
               <li
                 key={connection.id}
-                className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
+                className="grid gap-2 rounded-lg border px-3 py-2 text-sm"
               >
-                <div className="min-w-0">
-                  <p
-                    className="truncate font-medium"
-                    title={connection.externalRepo}
-                  >
-                    {connection.externalRepo}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {PROVIDER_LABELS[connection.provider]}
-                    {connection.lastEventAt
-                      ? ` · last event ${new Date(connection.lastEventAt).toLocaleString()}`
-                      : " · no events yet"}
-                  </p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p
+                      className="truncate font-medium"
+                      title={connection.externalRepo}
+                    >
+                      {connection.externalRepo}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {PROVIDER_LABELS[connection.provider]}
+                      {connection.lastEventAt
+                        ? ` · last event ${new Date(connection.lastEventAt).toLocaleString()}`
+                        : " · no events yet"}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                      disabled={busy}
+                      onClick={() =>
+                        setBrowsingId(
+                          browsingId === connection.id ? null : connection.id
+                        )
+                      }
+                    >
+                      {browsingId === connection.id ? "Hide" : "Browse"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground"
+                      disabled={busy}
+                      onClick={() =>
+                        connect(
+                          connection.provider,
+                          connection.externalRepo,
+                          connection.installId ?? undefined
+                        )
+                      }
+                    >
+                      Rotate
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground hover:text-destructive"
+                      disabled={busy}
+                      onClick={() =>
+                        confirmingId === connection.id
+                          ? remove(connection.id)
+                          : setConfirmingId(connection.id)
+                      }
+                      onBlur={() => setConfirmingId(null)}
+                    >
+                      {confirmingId === connection.id ? "Really?" : "Disconnect"}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground"
-                    disabled={busy}
-                    onClick={() =>
-                      connect(
-                        connection.provider,
-                        connection.externalRepo,
-                        connection.installId ?? undefined
-                      )
-                    }
-                  >
-                    Rotate
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground hover:text-destructive"
-                    disabled={busy}
-                    onClick={() =>
-                      confirmingId === connection.id
-                        ? remove(connection.id)
-                        : setConfirmingId(connection.id)
-                    }
-                    onBlur={() => setConfirmingId(null)}
-                  >
-                    {confirmingId === connection.id ? "Really?" : "Disconnect"}
-                  </Button>
-                </div>
+                {browsingId === connection.id && (
+                  <RepoBrowsePanel connectionId={connection.id} />
+                )}
               </li>
             ))}
           </ul>
@@ -229,18 +268,18 @@ export function RepoConnectionsDialog({
 
         <div className="grid gap-2 border-t pt-3">
           <Label htmlFor="repo-provider">Provider</Label>
-          <select
+          <Select
             id="repo-provider"
-            className="h-9 rounded-md border bg-transparent px-2 text-sm text-foreground"
+            className="h-9 rounded-md px-2"
             value={provider}
-            onChange={(e) => setProvider(e.target.value as GitProvider)}
+            onValueChange={(value) => setProvider(value as GitProvider)}
           >
             {GIT_PROVIDERS.map((p) => (
-              <option key={p} value={p}>
+              <SelectItem key={p} value={p}>
                 {PROVIDER_LABELS[p]}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+          </Select>
           <Label htmlFor="repo-name">Repository</Label>
           <Input
             id="repo-name"
@@ -255,12 +294,28 @@ export function RepoConnectionsDialog({
             onChange={(e) => setInstallId(e.target.value)}
             placeholder="GitHub App installation id"
           />
+          <Label htmlFor="repo-access-token">
+            Access token (optional, for browsing)
+          </Label>
+          <Input
+            id="repo-access-token"
+            type="password"
+            autoComplete="off"
+            value={accessToken}
+            onChange={(e) => setAccessToken(e.target.value)}
+            placeholder={TOKEN_PLACEHOLDERS[provider]}
+          />
+          <p className="text-xs text-muted-foreground">
+            Lets members browse the repo&apos;s branches and files from here.
+            Stored encrypted, never shown again; leave blank on a rotate to keep
+            the current token.
+          </p>
           <div className="flex justify-end">
             <Button
               type="button"
               size="sm"
               disabled={busy || !externalRepo.trim()}
-              onClick={() => connect(provider, externalRepo, installId)}
+              onClick={() => connect(provider, externalRepo, installId, accessToken)}
             >
               Connect repository
             </Button>
@@ -268,5 +323,124 @@ export function RepoConnectionsDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Read-only repository browser (2.10): a branch picker over the /branches
+ * endpoint and a file listing over /tree. Navigation is client state only —
+ * every listing is fetched live from the provider through the proxy, nothing
+ * is stored. Errors surface inline (the commonest being a connection without
+ * an access token pointed at a private repo).
+ */
+function RepoBrowsePanel({ connectionId }: { connectionId: number }) {
+  const [branches, setBranches] = useState<RepoBranch[]>([]);
+  const [ref, setRef] = useState("");
+  const [path, setPath] = useState("");
+  const [entries, setEntries] = useState<RepoEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [branchList, tree] = await Promise.all([
+          api.fetchRepoBranches(connectionId).catch(() => [] as RepoBranch[]),
+          api.fetchRepoTree(connectionId, {
+            path: path || undefined,
+            ref: ref || undefined,
+          }),
+        ]);
+        if (cancelled) return;
+        if (branchList.length > 0) setBranches(branchList);
+        setEntries(tree);
+      } catch (e) {
+        if (!cancelled) {
+          setEntries(null);
+          setError(e instanceof Error ? e.message : "Could not browse the repository");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionId, ref, path]);
+
+  const parent = path.includes("/")
+    ? path.slice(0, path.lastIndexOf("/"))
+    : "";
+
+  return (
+    <div className="grid gap-1.5 rounded-md bg-muted/40 p-2 text-xs">
+      <div className="flex items-center gap-1.5">
+        <Select
+          aria-label="Branch"
+          className="h-7 rounded-md px-1 text-xs"
+          value={ref}
+          onValueChange={(value) => {
+            setRef(value);
+            setPath("");
+          }}
+        >
+          <SelectItem value="">default branch</SelectItem>
+          {branches.map((b) => (
+            <SelectItem key={b.name} value={b.name}>
+              {b.name}
+              {b.protected ? " (protected)" : ""}
+            </SelectItem>
+          ))}
+        </Select>
+        <span className="truncate text-muted-foreground">/{path}</span>
+        {loading && <span className="ml-auto text-muted-foreground">Loading…</span>}
+      </div>
+      {error && (
+        <p role="alert" className="text-destructive">
+          {error}
+        </p>
+      )}
+      {entries && (
+        <ul className="grid max-h-48 gap-0.5 overflow-y-auto">
+          {path !== "" && (
+            <li>
+              <button
+                type="button"
+                className="text-muted-foreground hover:underline"
+                onClick={() => setPath(parent)}
+              >
+                ..
+              </button>
+            </li>
+          )}
+          {entries.length === 0 && (
+            <li className="text-muted-foreground">Empty directory.</li>
+          )}
+          {entries.map((entry) => (
+            <li key={entry.path} className="flex items-center justify-between gap-2">
+              {entry.type === "dir" ? (
+                <button
+                  type="button"
+                  className="truncate text-left hover:underline"
+                  onClick={() => setPath(entry.path)}
+                >
+                  {entry.name}/
+                </button>
+              ) : (
+                <span className="truncate">{entry.name}</span>
+              )}
+              {entry.size !== null && (
+                <span className="shrink-0 text-muted-foreground">
+                  {entry.size.toLocaleString()} B
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
