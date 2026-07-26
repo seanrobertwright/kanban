@@ -1,5 +1,6 @@
 import { query } from "@/shared/db/client";
 import { AuthzError, requireTaskRole } from "@/features/workspaces/server/authz";
+import type { Principal } from "@/features/auth/server/principal";
 import type {
   ChecklistItem,
   CreateChecklistItemInput,
@@ -15,7 +16,7 @@ const ITEM_COLUMNS = `id, task_id AS "taskId", content, done, position,
  * following M0's rule so the id space is not an oracle.
  */
 async function requireItemRole(
-  userId: string,
+  actor: string | Principal,
   itemId: number,
   role: "viewer" | "member"
 ): Promise<{ taskId: number }> {
@@ -25,16 +26,16 @@ async function requireItemRole(
   );
   const row = rows[0];
   if (!row) throw new AuthzError("not_found", "Checklist item not found");
-  await requireTaskRole(userId, row.taskId, role);
+  await requireTaskRole(actor, row.taskId, role);
   return { taskId: row.taskId };
 }
 
 /** A task's checklist, in order. Viewer is enough — reading is not editing. */
 export async function listChecklist(
-  userId: string,
+  actor: string | Principal,
   taskId: number
 ): Promise<ChecklistItem[]> {
-  await requireTaskRole(userId, taskId, "viewer");
+  await requireTaskRole(actor, taskId, "viewer");
   return query<ChecklistItem>(
     `SELECT ${ITEM_COLUMNS} FROM checklist_item
       WHERE task_id = $1 ORDER BY position, id`,
@@ -48,11 +49,11 @@ export async function listChecklist(
  * rows) — the same trick a fresh column's tasks use.
  */
 export async function createChecklistItem(
-  userId: string,
+  actor: string | Principal,
   taskId: number,
   input: CreateChecklistItemInput
 ): Promise<ChecklistItem> {
-  await requireTaskRole(userId, taskId, "member");
+  await requireTaskRole(actor, taskId, "member");
   const rows = await query<ChecklistItem>(
     `INSERT INTO checklist_item (task_id, content, position)
      VALUES ($1, $2,
@@ -69,11 +70,11 @@ export async function createChecklistItem(
  * nullable, so an absent field means "leave it" (006's two-valued rule).
  */
 export async function updateChecklistItem(
-  userId: string,
+  actor: string | Principal,
   itemId: number,
   input: UpdateChecklistItemInput
 ): Promise<ChecklistItem> {
-  await requireItemRole(userId, itemId, "member");
+  await requireItemRole(actor, itemId, "member");
   const rows = await query<ChecklistItem>(
     `UPDATE checklist_item
         SET content = COALESCE($2, content),
@@ -87,11 +88,11 @@ export async function updateChecklistItem(
 
 /** Removes an item. Returns false if it was not the caller's to remove. */
 export async function deleteChecklistItem(
-  userId: string,
+  actor: string | Principal,
   itemId: number
 ): Promise<boolean> {
   try {
-    await requireItemRole(userId, itemId, "member");
+    await requireItemRole(actor, itemId, "member");
   } catch (error) {
     if (error instanceof AuthzError && error.kind === "not_found") return false;
     throw error;

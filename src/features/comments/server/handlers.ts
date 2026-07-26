@@ -4,6 +4,7 @@ import {
   unauthorized,
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
+import { gated } from "@/features/agents/server/door2";
 import {
   createComment,
   deleteComment,
@@ -75,12 +76,26 @@ export async function handleCreateComment(request: Request, id: string) {
     return badRequest("parentId must be a comment id");
 
   try {
-    const comment = await createComment(principal, {
-      taskId,
-      body,
-      parentId: parentId as number | undefined,
-    });
-    return Response.json(comment, { status: 201 });
+    // Door-2 gate (§7.4). comment_on_task is auto-tier by blast radius, so for
+    // an agent this still writes the comment now — what changes is that it is
+    // RECORDED as an agent action, so the run panel shows it and an operator who
+    // has set the tool to block or changeset is finally obeyed. Before this, the
+    // gate covered task mutations only and an agent commented ungated.
+    return await gated(
+      principal,
+      {
+        tool: "comment_on_task",
+        input: { taskId, body, parentId: parentId as number | undefined },
+        taskId,
+        execute: () =>
+          createComment(principal, {
+            taskId,
+            body,
+            parentId: parentId as number | undefined,
+          }),
+      },
+      (comment) => Response.json(comment, { status: 201 })
+    );
   } catch (error) {
     return authzErrorResponse(error);
   }

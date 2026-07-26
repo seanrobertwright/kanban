@@ -1,8 +1,10 @@
+import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
 import {
   getSessionFromRequest,
   unauthorized,
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
+import { gated } from "@/features/agents/server/door2";
 import { CHECKLIST_CONTENT_MAX } from "../types";
 import {
   createChecklistItem,
@@ -24,12 +26,19 @@ function readContent(value: unknown): string | { error: string } {
   return content;
 }
 
+/**
+ * A principal, not a session, for the three tools mcp/README advertises
+ * (`get_checklist`, `add_checklist_item`, `check_item`): an agent token used to
+ * 401 on every one of them, so the door promised work it could not do. Deleting
+ * an item stays human-only below — the same line the comments slice draws, where
+ * an agent contributes but does not remove.
+ */
 export async function handleListChecklist(request: Request, taskId: number) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
   if (!Number.isInteger(taskId)) return badRequest("Invalid task id");
   try {
-    return Response.json(await listChecklist(session.user.id, taskId));
+    return Response.json(await listChecklist(principal, taskId));
   } catch (error) {
     return authzErrorResponse(error);
   }
@@ -39,8 +48,8 @@ export async function handleCreateChecklistItem(
   request: Request,
   taskId: number
 ) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
   if (!Number.isInteger(taskId)) return badRequest("Invalid task id");
 
   const body = await request.json().catch(() => null);
@@ -49,18 +58,27 @@ export async function handleCreateChecklistItem(
   if (typeof parsed !== "string") return badRequest(parsed.error);
 
   try {
-    const item = await createChecklistItem(session.user.id, taskId, {
-      content: parsed,
-    });
-    return Response.json(item, { status: 201 });
+    // Auto-tier by blast radius: a step added to a task's checklist is internally
+    // reversible and silent outside the board — the same class as a label.
+    return await gated(
+      principal,
+      {
+        tool: "add_checklist_item",
+        input: { taskId, content: parsed },
+        taskId,
+        execute: () =>
+          createChecklistItem(principal, taskId, { content: parsed }),
+      },
+      (item) => Response.json(item, { status: 201 })
+    );
   } catch (error) {
     return authzErrorResponse(error);
   }
 }
 
 export async function handleUpdateChecklistItem(request: Request, id: number) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
   if (!Number.isInteger(id)) return badRequest("Invalid item id");
 
   const body = await request.json().catch(() => null);
@@ -77,11 +95,22 @@ export async function handleUpdateChecklistItem(request: Request, id: number) {
     return badRequest("done must be a boolean");
 
   try {
-    return Response.json(
-      await updateChecklistItem(session.user.id, id, {
-        content: parsedContent,
-        done: done as boolean | undefined,
-      })
+    // taskId is null here — the item id is what the route carries, and resolving
+    // it to a task just to snapshot it would duplicate requireItemRole's lookup.
+    // The action still records; it simply has no before-state of the task.
+    return await gated(
+      principal,
+      {
+        tool: "check_item",
+        input: { itemId: id, content: parsedContent, done },
+        taskId: null,
+        execute: () =>
+          updateChecklistItem(principal, id, {
+            content: parsedContent,
+            done: done as boolean | undefined,
+          }),
+      },
+      (item) => Response.json(item)
     );
   } catch (error) {
     return authzErrorResponse(error);

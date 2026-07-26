@@ -4,6 +4,7 @@ import {
   unauthorized,
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
+import { gated } from "@/features/agents/server/door2";
 import {
   EFFORT_MAX,
   FEEDBACK_BODY_MAX,
@@ -174,7 +175,21 @@ export async function handlePromoteIdea(request: Request, id: string) {
   const ideaId = Number(id);
   if (!Number.isInteger(ideaId)) return badRequest("Invalid idea id");
   try {
-    return Response.json(await promoteIdea(principal, ideaId), { status: 201 });
+    // Door-2 gate (§7.4): promoting an idea CREATES A TASK, so it is
+    // decomposition by another name and takes create_task's tier — held for
+    // review, not applied. taskId is null because the task it makes does not
+    // exist yet; the changeset is reviewable by id, the same as a top-level
+    // create arriving at handleCreateTask.
+    return await gated(
+      principal,
+      {
+        tool: "promote_idea",
+        input: { ideaId },
+        taskId: null,
+        execute: () => promoteIdea(principal, ideaId),
+      },
+      (task) => Response.json(task, { status: 201 })
+    );
   } catch (error) {
     if (error instanceof PromoteError) return badRequest(error.message);
     return authzErrorResponse(error);

@@ -5,6 +5,8 @@ import {
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import { isWorkspaceRole } from "@/features/workspaces/server/members";
+import { blockedByPolicy } from "./door2";
+import { externalAgentTier } from "./gate";
 import { startRunForTask } from "./runtime";
 import {
   getLatestRunForTask,
@@ -47,6 +49,15 @@ export async function handleStartRun(request: Request) {
   }
   const taskId = (body as { taskId?: unknown })?.taskId;
   if (!Number.isInteger(taskId)) return badRequest("taskId must be an integer");
+
+  // Door-2 gate (§7.4): start_run is block-tier by default. A run spends the
+  // workspace's budget on a model, so an agent that could start one could spend
+  // its way through the cap — and, by starting runs for tasks it assigned
+  // itself, act well past what its own tier allows. A person triggers a run.
+  if (principal.kind === "agent") {
+    const tier = await externalAgentTier(principal, "start_run");
+    if (tier !== "auto") return blockedByPolicy("start_run");
+  }
 
   try {
     const runId = await startRunForTask(principal, taskId as number);

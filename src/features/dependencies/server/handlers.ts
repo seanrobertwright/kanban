@@ -1,6 +1,7 @@
 import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
 import { unauthorized } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
+import { gated } from "@/features/agents/server/door2";
 import {
   addDependency,
   getDependencies,
@@ -40,11 +41,22 @@ export async function handleAddDependency(request: Request, taskId: number) {
     return badRequest("dependsOnId is required");
 
   try {
-    await addDependency(principal, taskId, dependsOnId as number);
-    // 201-less: the edge has no id of its own to return, and the section refetches
-    // the whole {dependencies, candidates} pair after a change rather than reading
-    // a body here. 204 says "done, nothing to read", which is the truth.
-    return new Response(null, { status: 204 });
+    // Door-2 gate (§7.4): flag_blocker, auto by blast radius — silent,
+    // idempotent, reversible by removal — so an agent's edge still lands now and
+    // is recorded as an action a human can see and undo.
+    return await gated(
+      principal,
+      {
+        tool: "flag_blocker",
+        input: { taskId, dependsOnId },
+        taskId,
+        execute: () => addDependency(principal, taskId, dependsOnId as number),
+      },
+      // 201-less: the edge has no id of its own to return, and the section
+      // refetches the whole {dependencies, candidates} pair after a change rather
+      // than reading a body here. 204 says "done, nothing to read".
+      () => new Response(null, { status: 204 })
+    );
   } catch (error) {
     return authzErrorResponse(error);
   }
@@ -60,9 +72,24 @@ export async function handleRemoveDependency(
   if (!Number.isInteger(taskId) || !Number.isInteger(dependsOnId))
     return badRequest("Invalid task id");
   try {
-    return (await removeDependency(principal, taskId, dependsOnId))
-      ? new Response(null, { status: 204 })
-      : Response.json({ error: "Dependency not found" }, { status: 404 });
+    // The inverse of flag_blocker, and named because an unnamed tool falls
+    // through tierFor to 'changeset' — which would have held an agent's edge
+    // removal for review while its edge creation ran free. Auto for the same
+    // reason its twin is: reversible by re-adding, and nothing outside the board
+    // hears about it.
+    return await gated(
+      principal,
+      {
+        tool: "unflag_blocker",
+        input: { taskId, dependsOnId },
+        taskId,
+        execute: () => removeDependency(principal, taskId, dependsOnId),
+      },
+      (removed) =>
+        removed
+          ? new Response(null, { status: 204 })
+          : Response.json({ error: "Dependency not found" }, { status: 404 })
+    );
   } catch (error) {
     return authzErrorResponse(error);
   }

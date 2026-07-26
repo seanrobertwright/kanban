@@ -1,6 +1,9 @@
 import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
 import { unauthorized } from "@/features/auth/server/session";
-import { authzErrorResponse } from "@/features/workspaces/server/authz";
+import {
+  authzErrorResponse,
+  requireColumnRole,
+} from "@/features/workspaces/server/authz";
 import {
   PRIORITY_ORDER,
   RECURRENCE_FREQUENCIES,
@@ -9,7 +12,22 @@ import {
   isTaskPriority,
   isTaskType,
 } from "../types";
-import type { RecurrenceFrequency, TaskPriority, TaskType } from "../types";
+import type {
+  RecurrenceFrequency,
+  TaskPriority,
+  TaskSearchInput,
+  TaskType,
+} from "../types";
+import {
+  externalAgentTier,
+  holdForExternalReview,
+  type HeldAction,
+} from "@/features/agents/server/gate";
+import {
+  blockedByPolicy,
+  heldForReview,
+} from "@/features/agents/server/door2";
+import type { Principal } from "@/features/auth/server/principal";
 import {
   claimTask,
   createTask,
@@ -18,6 +36,7 @@ import {
   listSubtasks,
   moveTask,
   releaseTask,
+  searchTasks,
   updateTask,
 } from "./repository";
 
@@ -28,6 +47,14 @@ function badRequest(message: string) {
 function notFound() {
   return Response.json({ error: "Task not found" }, { status: 404 });
 }
+
+type AgentPrincipal = Extract<Principal, { kind: "agent" }>;
+
+/**
+ * §7.4 parity for Door 2 is shared now — heldForReview and blockedByPolicy live
+ * in agents/server/door2.ts, because the tasks slice stopped being the only one
+ * that gates. Same 202/403 bodies; one definition.
+ */
 
 /**
  * An assignee is an Actor now (011) — {type: 'human'|'agent', id} — or null
@@ -218,6 +245,51 @@ export async function handleCreateTask(request: Request) {
       `recurrence must be one of: ${RECURRENCE_FREQUENCIES.join(", ")}, or null`
     );
 
+  // Door-2 gate (§7.4): an external agent's create is changeset-tier by
+  // default — proposed, not applied. The recorded input is exactly the
+  // CreateTaskInput the review's applyProposed will hand to createTask.
+  if (principal.kind === "agent") {
+    const tool = parentId != null ? "create_subtask" : "create_task";
+    const tier = await externalAgentTier(principal, tool);
+    if (tier === "block") return blockedByPolicy(tool);
+    if (tier === "changeset") {
+      const input = {
+        columnId,
+        title: title.trim(),
+        ...(description !== undefined ? { description } : {}),
+        ...(assignee !== undefined ? { assignee } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        ...(type !== undefined ? { type } : {}),
+        ...(estimate !== undefined ? { estimate } : {}),
+        ...(milestoneId !== undefined ? { milestoneId } : {}),
+        ...(sprintId !== undefined ? { sprintId } : {}),
+        ...(epicId !== undefined ? { epicId } : {}),
+        ...(objectiveId !== undefined ? { objectiveId } : {}),
+        ...(value !== undefined ? { value } : {}),
+        ...(risk !== undefined ? { risk } : {}),
+        ...(startDate !== undefined ? { startDate } : {}),
+        ...(dueDate !== undefined ? { dueDate } : {}),
+        ...(labelIds !== undefined ? { labelIds } : {}),
+        ...(parentId !== undefined ? { parentId } : {}),
+        ...(recurrence !== undefined ? { recurrence } : {}),
+      };
+      try {
+        // The same authz the apply will demand, checked before a changeset is
+        // minted — a column the agent cannot write to answers 404/403 now, not
+        // a junk proposal a reviewer could never accept.
+        await requireColumnRole(principal, columnId, "member");
+        const held = await holdForExternalReview(
+          principal,
+          [{ tool, input, taskId: (parentId as number | undefined) ?? null }],
+          (parentId as number | undefined) ?? null
+        );
+        return heldForReview(held);
+      } catch (error) {
+        return authzErrorResponse(error);
+      }
+    }
+  }
+
   try {
     const task = await createTask(principal, {
       columnId,
@@ -252,6 +324,102 @@ export async function handleListSubtasks(request: Request, id: number) {
 
   try {
     return Response.json(await listSubtasks(principal, id));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/**
+ * Board search over the query string (`GET /api/board/:id/tasks/search`).
+ *
+ * A GET with filters in the URL rather than a POST with a body, because a
+ * search is a read: it is cacheable, loggable, and repeatable by pasting a
+ * link, and none of those survive moving it into a body. The cost is parsing
+ * scalars out of strings, which is what most of this function is.
+ *
+ * Unparseable filters are refused with 400 rather than dropped. A silently
+ * ignored `priority=urgetn` returns the whole board and reads as "no tasks are
+ * urgent" to a caller that cannot see it was ignored — the failure mode this
+ * whole endpoint exists to prevent.
+ */
+export async function handleSearchTasks(request: Request, boardId: number) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+
+  const params = new URL(request.url).searchParams;
+  const input: TaskSearchInput = {};
+
+  const text = params.get("q") ?? params.get("text");
+  if (text !== null) input.text = text;
+
+  // Each integer filter shares one shape: absent leaves it alone, present must
+  // parse, and a bad value is the caller's error rather than the server's guess.
+  for (const [key, field] of [
+    ["columnId", "columnId"],
+    ["milestoneId", "milestoneId"],
+    ["sprintId", "sprintId"],
+    ["epicId", "epicId"],
+    ["limit", "limit"],
+    ["cursor", "cursor"],
+  ] as const) {
+    const raw = params.get(key);
+    if (raw === null) continue;
+    const value = Number(raw);
+    if (!Number.isInteger(value)) return badRequest(`Invalid ${key}`);
+    (input as Record<string, unknown>)[field] = value;
+  }
+
+  const priority = params.get("priority");
+  if (priority !== null) {
+    if (!isTaskPriority(priority)) return badRequest("Invalid priority");
+    input.priority = priority;
+  }
+
+  const type = params.get("type");
+  if (type !== null) {
+    if (!isTaskType(type)) return badRequest("Invalid type");
+    input.type = type;
+  }
+
+  for (const key of ["dueBefore", "dueAfter"] as const) {
+    const raw = params.get(key);
+    if (raw === null) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return badRequest(`${key} must be YYYY-MM-DD`);
+    }
+    input[key] = raw;
+  }
+
+  // The three-valued assignee, spelled in a query string: `assignee=none` is
+  // the unassigned filter, `human:<id>` / `agent:<id>` name a principal, and an
+  // absent parameter does not filter at all.
+  const assignee = params.get("assignee");
+  if (assignee !== null) {
+    if (assignee === "none") {
+      input.assignee = null;
+    } else {
+      const [kind, ...rest] = assignee.split(":");
+      const id = rest.join(":");
+      if ((kind !== "human" && kind !== "agent") || !id) {
+        return badRequest("assignee must be none, human:<id>, or agent:<id>");
+      }
+      input.assignee = { type: kind, id };
+    }
+  }
+
+  const labelIds = params.getAll("labelId");
+  if (labelIds.length > 0) {
+    const parsed = labelIds.map(Number);
+    if (parsed.some((n) => !Number.isInteger(n))) return badRequest("Invalid labelId");
+    input.labelIds = parsed;
+  }
+
+  if (params.get("includeSubtasks") === "true") input.includeSubtasks = true;
+  if (params.get("openOnly") === "true") input.openOnly = true;
+
+  try {
+    return Response.json(await searchTasks(principal, boardId, input));
   } catch (error) {
     return authzErrorResponse(error);
   }
@@ -345,20 +513,47 @@ export async function handleUpdateTask(request: Request, id: number) {
   if ("parentId" in body)
     return badRequest("parentId cannot be changed; it is set at creation");
 
+  const wantsMove = columnId !== undefined || position !== undefined;
+  if (wantsMove && (typeof columnId !== "number" || typeof position !== "number"))
+    return badRequest("columnId and position are both required to move");
+
+  // Door-2 gate (§7.4): for an external agent, the consequential parts of a
+  // PATCH — the move and the reassignment, §7.4's own examples — are held for
+  // review while the auto-tier field edits riding in the same request apply
+  // now, exactly as one native run's mixed tool calls would split.
+  let holdMove = false;
+  let holdAssign = false;
+  if (principal.kind === "agent") {
+    if (wantsMove) {
+      const tier = await externalAgentTier(principal, "move_task");
+      if (tier === "block") return blockedByPolicy("move_task");
+      holdMove = tier === "changeset";
+    }
+    if (setsAssignee) {
+      if (!isAssignee(assignee))
+        return badRequest("assignee must be {type, id} or null");
+      const tier = await externalAgentTier(principal, "assign_task");
+      if (tier === "block") return blockedByPolicy("assign_task");
+      holdAssign = tier === "changeset";
+    }
+  }
+  const appliesAssignee = setsAssignee && !holdAssign;
+
   try {
     // A move request carries columnId + position; a content edit carries
     // title/description. Both may arrive in one PATCH.
-    if (columnId !== undefined || position !== undefined) {
-      if (typeof columnId !== "number" || typeof position !== "number")
-        return badRequest("columnId and position are both required to move");
-      const moved = await moveTask(principal, id, { columnId, position });
+    if (wantsMove && !holdMove) {
+      const moved = await moveTask(principal, id, {
+        columnId: columnId as number,
+        position: position as number,
+      });
       if (!moved) return notFound();
     }
 
     if (
       title !== undefined ||
       description !== undefined ||
-      setsAssignee ||
+      appliesAssignee ||
       priority !== undefined ||
       type !== undefined ||
       setsEstimate ||
@@ -414,8 +609,10 @@ export async function handleUpdateTask(request: Request, id: number) {
         // Spread, so the key exists only when the caller sent it. Writing
         // `assignee: assignee` unconditionally would put an explicit undefined on
         // the object — and `"assignee" in input` would then be true for every
-        // title-only edit, turning each one into an unassign.
-        ...(setsAssignee ? { assignee: assignee ?? null } : {}),
+        // title-only edit, turning each one into an unassign. appliesAssignee,
+        // not setsAssignee: an assignee held for review (Door-2 gate above) must
+        // not also be written now.
+        ...(appliesAssignee ? { assignee: assignee ?? null } : {}),
         // No spread needed: priority is two-valued, so an explicit undefined on
         // the object means exactly what an absent key would — nothing was said.
         // The repository reads its value, not its presence.
@@ -456,7 +653,34 @@ export async function handleUpdateTask(request: Request, id: number) {
           : {}),
       });
       if (!updated) return notFound();
-      return Response.json(updated);
+      if (!holdMove && !holdAssign) return Response.json(updated);
+    }
+
+    if (holdMove || holdAssign) {
+      // Read back first: it proves the task exists and is visible to this
+      // agent before a changeset is minted for it, and it carries the state
+      // the auto-tier remainder of the PATCH (if any) just wrote.
+      const current = await getTask(principal, id);
+      if (!current) return notFound();
+      const actions: HeldAction[] = [];
+      if (holdMove)
+        actions.push({
+          tool: "move_task",
+          input: { id, columnId, position },
+          taskId: id,
+        });
+      if (holdAssign)
+        actions.push({
+          tool: "assign_task",
+          input: { id, assignee: assignee ?? null },
+          taskId: id,
+        });
+      const held = await holdForExternalReview(
+        principal as AgentPrincipal,
+        actions,
+        id
+      );
+      return heldForReview(held, { task: current });
     }
 
     const task = await getTask(principal, id);
@@ -572,8 +796,19 @@ export async function handleClaimTask(request: Request, id: number) {
   if (!principal) return unauthorized();
   if (!Number.isInteger(id)) return badRequest("Invalid task id");
 
+  // The lease length is optional and the body may be absent entirely — a claim
+  // with no opinion about how long it needs is the common case, and requiring a
+  // body for it would break every caller that predates the lease (076).
+  const body = await request.json().catch(() => null);
+  const ttlMinutes = (body as Record<string, unknown> | null)?.ttlMinutes;
+  if (ttlMinutes !== undefined) {
+    if (!Number.isInteger(ttlMinutes) || (ttlMinutes as number) < 1 || (ttlMinutes as number) > 1440) {
+      return badRequest("ttlMinutes must be a whole number of minutes from 1 to 1440");
+    }
+  }
+
   try {
-    const task = await claimTask(principal, id);
+    const task = await claimTask(principal, id, ttlMinutes as number | undefined);
     return task ? Response.json(task) : notFound();
   } catch (error) {
     return authzErrorResponse(error);

@@ -4,6 +4,7 @@ import {
   unauthorized,
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
+import { gated } from "@/features/agents/server/door2";
 import {
   createField,
   deleteField,
@@ -124,8 +125,10 @@ export async function handleGetTaskFields(request: Request, id: string) {
 }
 
 export async function handleSetTaskFields(request: Request, id: string) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  // A principal, not a session: set_custom_fields is an advertised agent tool
+  // (mcp/README) that answered 401 to every agent token.
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
   const taskId = Number(id);
   if (!Number.isInteger(taskId)) return badRequest("Invalid task id");
 
@@ -146,12 +149,23 @@ export async function handleSetTaskFields(request: Request, id: string) {
     return badRequest("values must be an array of { fieldId, value }");
 
   try {
-    return Response.json(
-      await setTaskFieldValues(
-        session.user.id,
+    // Auto-tier: an answer to a board-defined field is task data, internally
+    // reversible and externally silent — the class DEFAULT_TIER already puts
+    // priority, labels and estimate in.
+    return await gated(
+      principal,
+      {
+        tool: "set_custom_fields",
+        input: { taskId, values },
         taskId,
-        values as { fieldId: number; value: string | null }[]
-      )
+        execute: () =>
+          setTaskFieldValues(
+            principal,
+            taskId,
+            values as { fieldId: number; value: string | null }[]
+          ),
+      },
+      (fields) => Response.json(fields)
     );
   } catch (error) {
     return authzErrorResponse(error);

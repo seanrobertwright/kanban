@@ -3,7 +3,7 @@ import type { PoolClient } from "pg";
 import { query, queryOne, withTransaction } from "@/shared/db/client";
 import { logActivity } from "@/features/activity/server/repository";
 import type { Actor } from "@/features/activity/types";
-import type { Principal } from "@/features/auth/server/principal";
+import { asPrincipal, principalActor, type Principal } from "@/features/auth/server/principal";
 import {
   AuthzError,
   requireBoardRole,
@@ -214,15 +214,15 @@ function coerceValue(field: CustomField, value: string | null): string | null {
  * cross-reference here makes). A null/empty value deletes the answer row.
  */
 export async function setTaskFieldValues(
-  userId: string,
+  actorPrincipal: string | Principal,
   taskId: number,
   values: CustomFieldValueInput[]
 ): Promise<TaskCustomField[]> {
-  const { boardId, workspaceId, role } = await requireTaskRole(userId, taskId, "member");
-  // Human-only path: the value editor is the task dialog's section, driven by a
-  // member session — no agent tool writes custom fields, so the actor is always
-  // the calling user. See the 036-follow-up note in the module header.
-  const actor: Actor = { type: "human", id: userId };
+  const { boardId, workspaceId, role } = await requireTaskRole(actorPrincipal, taskId, "member");
+  // An agent writes custom fields now (set_custom_fields, mcp/README), so the
+  // actor is whoever is acting rather than always a user — otherwise the log
+  // would attribute a bot'''s answer to nobody, or to the wrong id space.
+  const actor: Actor = principalActor(asPrincipal(actorPrincipal));
 
   await withTransaction(async (client) => {
     // The board's fields, by id, so each input is checked for tenancy and type
@@ -282,7 +282,7 @@ export async function setTaskFieldValues(
     }
   });
 
-  return getTaskFields(userId, taskId);
+  return getTaskFields(actorPrincipal, taskId);
 }
 
 /** A task's stored answers as a {fieldId → value} map, for diffing a write

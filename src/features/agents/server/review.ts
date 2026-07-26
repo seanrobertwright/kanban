@@ -1,12 +1,27 @@
 import { query, queryOne } from "@/shared/db/client";
 import type { Principal } from "@/features/auth/server/principal";
-import { AuthzError, requireTaskRole } from "@/features/workspaces/server/authz";
+import {
+  AuthzError,
+  requireTaskRole,
+  requireWorkspaceRole,
+} from "@/features/workspaces/server/authz";
 import { captureActivity } from "@/features/activity/server/activity-capture";
 import {
   createTask,
   moveTask,
   updateTask,
 } from "@/features/tasks/server/repository";
+import { promoteIdea } from "@/features/discovery/server/repository";
+import { createComment } from "@/features/comments/server/repository";
+import {
+  addDependency,
+  removeDependency,
+} from "@/features/dependencies/server/repository";
+import {
+  createChecklistItem,
+  updateChecklistItem,
+} from "@/features/checklists/server/repository";
+import { setTaskFieldValues } from "@/features/custom-fields/server/repository";
 import type { Task } from "@/features/tasks/types";
 import type { AgentActionView, RunDetail } from "../types";
 import type { Tier } from "./gate";
@@ -54,8 +69,13 @@ export async function getRunDetail(
 ): Promise<RunDetail | undefined> {
   const run = await loadRun(runId);
   if (!run) return undefined;
-  // A run always has a task in every path that reaches review; guard anyway.
-  if (run.taskId !== null) await requireTaskRole(principal, run.taskId, "viewer");
+  // A native run always has a task; a Door-2 hold for a top-level create does
+  // not (gate.ts holdForExternalReview), and scopes through its workspace.
+  if (run.taskId !== null) {
+    await requireTaskRole(principal, run.taskId, "viewer");
+  } else {
+    await requireWorkspaceRole(principal, run.workspaceId, "viewer");
+  }
 
   const actions = await query<AgentActionView>(
     `SELECT id, tool, tier, input, result, before, after,
@@ -98,13 +118,32 @@ export async function getLatestRunForTask(
   return (await getRunDetail(principal, row.id)) ?? null;
 }
 
+/**
+ * The human-only rule behind the whole changeset tier.
+ *
+ * Both review verbs resolve their caller with getPrincipalFromRequest, so an
+ * agent key reaches them — and an agent that can accept its own changeset makes
+ * the 202 "a human will accept or reject it" a lie, and the changeset tier
+ * decorative. gate.ts blocks review_changeset and revert_action by default, but
+ * that is a policy an operator can override; this is the invariant, checked at
+ * the repository so BOTH doors and any future caller inherit it.
+ */
+function requireHumanReviewer(principal: string | Principal): void {
+  if (typeof principal !== "string" && principal.kind === "agent") {
+    throw new AuthzError(
+      "forbidden",
+      "Only a person can review an agent's changeset — that review is what the approval gate is for"
+    );
+  }
+}
+
 /** Apply one accepted proposed action, as the agent, through the real repository
- *  — so it becomes a genuine, attributed board mutation. Only changeset-tier
- *  tools reach here (move/assign/create/create_subtask). */
+ *  — so it becomes a genuine, attributed board mutation. Returns whether it was
+ *  applied: an unknown tool is NOT, and must not be counted as accepted. */
 async function applyProposed(
   agent: Extract<Principal, { kind: "agent" }>,
   action: { tool: string; input: unknown }
-): Promise<void> {
+): Promise<boolean> {
   const input = action.input as Record<string, unknown>;
   switch (action.tool) {
     case "move_task":
@@ -112,20 +151,62 @@ async function applyProposed(
         columnId: input.columnId as number,
         position: input.position as number,
       });
-      return;
+      return true;
     case "assign_task":
       await updateTask(agent, input.id as number, {
         assignee: input.assignee as Task["assignee"],
       });
-      return;
+      return true;
     case "create_task":
     case "create_subtask":
       await createTask(agent, input as never);
-      return;
+      return true;
+    case "promote_idea":
+      await promoteIdea(agent, input.ideaId as number);
+      return true;
+    // The auto-tier tools appear here because a tier is a POLICY, not a property
+    // of the tool: an admin who raises comment_on_task to changeset for a
+    // particular agent (012) must get a proposal that can actually be accepted.
+    // Without these, raising the tier would silently turn the tool off — held
+    // forever, unappliable — which is a worse answer than either tier.
+    case "comment_on_task":
+      await createComment(agent, {
+        taskId: input.taskId as number,
+        body: input.body as string,
+        parentId: input.parentId as number | undefined,
+      });
+      return true;
+    case "flag_blocker":
+      await addDependency(agent, input.taskId as number, input.dependsOnId as number);
+      return true;
+    case "unflag_blocker":
+      await removeDependency(agent, input.taskId as number, input.dependsOnId as number);
+      return true;
+    case "add_checklist_item":
+      await createChecklistItem(agent, input.taskId as number, {
+        content: input.content as string,
+      });
+      return true;
+    case "check_item":
+      await updateChecklistItem(agent, input.itemId as number, {
+        content: input.content as string | undefined,
+        done: input.done as boolean | undefined,
+      });
+      return true;
+    case "set_custom_fields":
+      await setTaskFieldValues(
+        agent,
+        input.taskId as number,
+        input.values as { fieldId: number; value: string | null }[]
+      );
+      return true;
     default:
-      // A tool that should never have been changeset-tiered; skip rather than
-      // guess an inverse. The changeset review only offers what it proposed.
-      return;
+      // A tool held at changeset tier with no inverse here — reachable only by
+      // an operator policy override naming a tool this switch does not know.
+      // Skipping is the safe half; the other half is NOT marking it approved,
+      // because a reviewer who clicked accept and got nothing should see it
+      // still pending rather than a false record that it ran.
+      return false;
   }
 }
 
@@ -139,16 +220,23 @@ export async function reviewChangeset(
   changesetId: string,
   acceptedActionIds: string[]
 ): Promise<RunDetail> {
+  requireHumanReviewer(principal);
   const cs = await queryOne<{ runId: string; status: string }>(
     `SELECT run_id AS "runId", status FROM changeset WHERE id = $1`,
     [changesetId]
   );
   if (!cs) throw new AuthzError("not_found", "Changeset not found");
   const run = await loadRun(cs.runId);
-  if (!run || run.taskId === null) {
-    throw new AuthzError("not_found", "Changeset not found");
+  if (!run) throw new AuthzError("not_found", "Changeset not found");
+  // A task-less run is a Door-2 hold for a top-level create (gate.ts): there is
+  // no task to scope through yet — the create is the thing under review — so
+  // membership in the run's workspace is the write-rank check instead.
+  if (run.taskId !== null) {
+    await requireTaskRole(principal, run.taskId, "member");
+  } else {
+    await requireWorkspaceRole(principal, run.workspaceId, "member");
   }
-  const { workspaceId } = await requireTaskRole(principal, run.taskId, "member");
+  const workspaceId = run.workspaceId;
   if (cs.status !== "pending") {
     throw new AuthzError("conflict", "This changeset has already been reviewed");
   }
@@ -178,7 +266,10 @@ export async function reviewChangeset(
     // A changeset action mutates for the first time here, at accept — so this is
     // where its activity_log row is born, and where its agent_action finally links
     // to it (013). captureActivity catches the id the applied mutation logs.
-    const { activityId } = await captureActivity(() => applyProposed(agent, action));
+    const { result: applied, activityId } = await captureActivity(() =>
+      applyProposed(agent, action)
+    );
+    if (!applied) continue;
     await query(
       `UPDATE agent_action SET approved_by = $2, activity_id = $3 WHERE id = $1`,
       [action.id, reviewer, activityId]
@@ -220,6 +311,11 @@ export async function revertAction(
   principal: string | Principal,
   actionId: string
 ): Promise<void> {
+  // An undo is a human's correction of an agent, and the history says so (the
+  // inverse is replayed as the reverting human). An agent undoing its own auto
+  // action would both launder the attribution and hand it a second write it was
+  // never gated for.
+  requireHumanReviewer(principal);
   const action = await queryOne<{
     tool: string;
     tier: Tier;

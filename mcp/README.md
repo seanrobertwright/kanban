@@ -13,19 +13,80 @@ task's history under the agent's own name.
 
 ## Tools
 
+49 tools, grouped by what they are for. Each is one authenticated call to the
+REST API the web UI uses.
+
+### Orientation
+
 | Tool | What it does |
 |---|---|
-| `list_board` | Columns + top-level tasks (each with a `subtaskCount`). Source of column ids. |
+| `whoami` | Your agent identity, workspace, and every board you can reach. Call this first. |
+| `list_boards` | Every board in the workspace, with ids. |
+| `list_board` | One board: columns + top-level tasks. Source of column ids. |
+| `list_columns` | The columns alone, without their tasks — the cheap read. |
+| `list_assignees` | Humans and agents a task can be assigned to. |
+| `list_labels` | The workspace label vocabulary. |
+
+### Finding work
+
+| Tool | What it does |
+|---|---|
+| `search_tasks` | Text + filters over one board, paged by cursor. **Use this instead of reading a whole board.** |
 | `get_task` | One task by id. |
 | `task_history` | A task's activity log — every change, newest first, with who made it. |
+| `list_subtasks` | A task's pieces. |
+| `list_comments` | The discussion on a task. |
+| `list_dependencies` | What a task is blocked by. |
+
+### Changing work
+
+| Tool | What it does |
+|---|---|
 | `create_task` | New task in a column. |
-| `update_task` | Edit a task's fields (only what you pass changes). |
-| `move_task` | Move a task to a column/position — how status changes. |
-| `claim_task` | Take an exclusive hold before working a task; refused if another agent holds it. |
-| `release_task` | Drop your hold when you stop or finish. |
-| `comment_on_task` | Post a comment under the agent's name. |
-| `create_subtask` | Decompose a task into a piece (a whole task with its own status). |
-| `flag_blocker` | Record that a task is blocked by another on the same board (a blocked-by edge); self-references and cycles are refused. |
+| `update_task` | Edit any subset of a task's fields. |
+| `assign_task` `rename_task` `set_priority` `set_labels` `set_due_date` `set_estimate` `set_type` `score_task` `aim_at_milestone` | One field each — parity with the native runtime's tools. A narrow tool records a narrow intent in the history, where the same change through `update_task` is a patch a reader has to diff. |
+| `move_task` | Move to a column/position — how status changes. |
+| `bulk_update_tasks` | One edit across up to 100 tasks; per-task results. Deletion is not offered. |
+| `claim_task` / `release_task` | The exclusive hold, now a **lease** — see Notes. |
+| `comment_on_task` | Post under the agent's name. |
+| `create_subtask` | Decompose a task into a piece. |
+| `flag_blocker` / `unflag_blocker` | Add or remove a blocked-by edge. |
+
+### Checklists, fields, time
+
+| Tool | What it does |
+|---|---|
+| `get_checklist` `add_checklist_item` `check_item` | Steps and acceptance criteria on a task. |
+| `list_custom_fields` `set_custom_fields` | Board-defined fields. `set_custom_fields` replaces the whole set — read first, send back what you want kept. |
+| `get_time_entries` | Time logged against a task (read-only by design). |
+
+### Planning containers
+
+| Tool | What it does |
+|---|---|
+| `list_milestones` `list_sprints` `list_epics` | The board's planning containers. |
+| `add_task_to_sprint` `assign_to_epic` | Put a task in one, or take it out with `null`. |
+
+### Reading around the work
+
+| Tool | What it does |
+|---|---|
+| `board_analytics` | Lead/cycle time, throughput, CFD, workload — what a standup report is made of. |
+| `export_board` | The whole board as JSON. Large. |
+| `list_attachments` | File metadata on a task (no bytes). |
+| `get_git_context` | Branches, commits, PRs linked to a task, with CI status. |
+| `get_notifications` / `mark_notifications_seen` | The agent's inbox. |
+| `knowledge_query` | Ask the workspace's published docs a question. |
+
+## Resources and prompts
+
+Two resource templates, for clients that attach context without spending a tool
+call: `kanban://board/{boardId}` and `kanban://task/{taskId}`.
+
+Two prompts: **`work_task`** (the claim → history → act → comment → release
+loop, which is the protocol the claim model assumes and the thing agents most
+reliably get wrong) and **`triage_board`** (survey a board, propose what to take
+next, change nothing).
 
 ## Setup
 
@@ -62,7 +123,8 @@ task's history under the agent's own name.
          "args": ["mcp/server.mjs"],
          "env": {
            "KANBAN_URL": "http://localhost:3000",
-           "KANBAN_AGENT_KEY": "kbn_…"
+           "KANBAN_AGENT_KEY": "kbn_…",
+           "KANBAN_BOARD_ID": "1"
          }
        }
      }
@@ -72,14 +134,54 @@ task's history under the agent's own name.
    `KANBAN_URL` defaults to `http://localhost:3000`; point it at your deployment if
    the board is hosted. The app must be running for the tools to work.
 
+### Environment
+
+| Variable | Default | What it does |
+|---|---|---|
+| `KANBAN_AGENT_KEY` | — | **Required.** The agent token from `create-agent`. |
+| `KANBAN_URL` | `http://localhost:3000` | Where the app is. |
+| `KANBAN_BOARD_ID` | first board | Pins the board every `boardId`-taking tool defaults to. In a multi-board workspace, set it — otherwise the default is a guess, and the server warns on stderr that it made one. |
+| `KANBAN_TIMEOUT_MS` | `15000` | Per-request deadline. |
+
 ## Notes
 
 - The token's only copy is the create-agent output; the database stores just its
   hash. Lose it and mint a new agent.
-- **Claiming** prevents two agents working the same task: `claim_task` takes an
-  exclusive hold, and a second agent's claim on a held task is refused. Claim
-  when you start, release when you finish. A workspace admin can break a hold a
-  crashed agent left stuck (from the board, once that UI lands).
-- Deleting or archiving is deliberately **not** exposed — this cut is read + add +
-  edit + claim. Approval tiers (the §7.4 gate — auto/changeset/block) and native
-  (hosted) agents both landed in M2; see `src/features/agents/server/gate.ts`.
+
+- **Errors are structured**, not prose: every failure comes back as
+  `{error: {code, status, message, retryable}}`. `code` is one of
+  `INVALID_REQUEST`, `AUTH_INVALID`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`,
+  `RATE_LIMITED`, `TIMEOUT`, `NETWORK_ERROR`, `SERVER_ERROR`, plus the two the
+  server itself names — `HELD_FOR_REVIEW` and `BLOCKED_BY_POLICY`. Branch on
+  `retryable`: a 429 or a 5xx may come out differently next time, a 409 claim
+  conflict never will.
+
+- **Retries are automatic for reads only.** A GET is retried twice with jittered
+  backoff; a mutation is never retried, because a POST that timed out may have
+  been applied — the socket died, not the transaction.
+
+- **Claiming** prevents two agents working the same task, and the hold is a
+  **lease** (076): it carries an expiry (60 minutes by default, `ttlMinutes` to
+  choose), re-claiming renews it, and an expired hold is claimable by anyone
+  with the rank. That is what stops a crashed agent wedging a task forever.
+
+- **The §7.4 approval gate applies to this door too — to every mutating tool,
+  not only the task ones.** A change the gate rates changeset-tier answers
+  `HELD_FOR_REVIEW` (HTTP 202): it was recorded as a proposal for a human to
+  accept or reject, **not** applied. Do not retry it. A block-tier action answers
+  `BLOCKED_BY_POLICY` (403). By default:
+
+  | Tier | Tools |
+  |---|---|
+  | held (202) | `move_task` `assign_task` `create_task` `create_subtask` `promote_idea` |
+  | blocked (403) | starting an agent run; reviewing a changeset; reverting an action — a person does those |
+  | applied now | everything else, and each one is recorded as an agent action a human can see and undo |
+
+  The workspace's admin can raise or lower any tool's tier per agent
+  (`approval_policy`, 012), so treat the table as the default rather than a
+  guarantee: branch on the response code, not on the tool name. See
+  `src/features/agents/server/gate.ts` and `door2.ts`.
+
+- Deleting or archiving is deliberately **not** exposed — this cut is read + add
+  + edit + claim. `bulk_update_tasks` omits the REST endpoint's `delete` flag for
+  the same reason.
