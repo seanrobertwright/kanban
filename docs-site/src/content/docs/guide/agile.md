@@ -19,11 +19,15 @@ The lens lays out one `Backlog` column plus a column for each planning or active
 
 Cards sort by priority (highest first), then age. Completed sprints are not drop targets — their scope is frozen and the server refuses scheduling into them. Dragging requires the member role; viewers see the same lens read-only.
 
+![The Backlog lens: a Backlog column beside a Sprint 24 column, each header showing its task count and total points](../../../assets/guide-backlog.jpg)
+
 You can also assign a sprint per task: the task dialog's `Sprint` picker offers planning and active sprints (it appears once the board has at least one sprint).
 
 ## Sprints
 
 Open the `Sprints` button in the board toolbar. The dialog lists every sprint with its status (`Planning`, `Active`, `Completed`), goal, date range, a points progress bar, and a per-assignee capacity breakdown that counts agents alongside people.
+
+![The Sprints dialog: a planning sprint with its goal, date range, points, and per-assignee capacity, above the new-sprint form](../../../assets/guide-sprints.jpg)
 
 Create one under `New sprint` (member role):
 

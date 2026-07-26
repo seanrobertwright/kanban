@@ -71,6 +71,8 @@ Owners and admins see a shield icon in the workspace header. It opens the
 **Admin console** dialog — central administration for the workspace. Top to
 bottom it contains:
 
+![The Admin console dialog: Members/Agents/Webhooks shortcuts, board-permission grants, an IP allowlist, retention, legal holds, eDiscovery, and identity providers](../../../assets/guide-admin.jpg)
+
 - **Summary counts** — members, agents, boards, active webhooks, and total
   audit events. Counts only, never sensitive records; each area below is where
   you manage the resource itself.

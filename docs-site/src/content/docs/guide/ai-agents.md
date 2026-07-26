@@ -99,6 +99,8 @@ You see risk in two places:
 
 ## Ask: workspace Q&A
 
+![Workspace Q&A: an Ask box over the board, noting that answers search authorized tasks, comments, and published documents and are backed by citations](../../../assets/guide-knowledge.jpg)
+
 The **Ask** button (sparkles icon) in the header opens Workspace Q&A. Type a
 question — "What is blocking the launch?" — and it searches your workspace's
 tasks, comments, and *published* documents using PostgreSQL full-text search,

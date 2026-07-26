@@ -15,9 +15,16 @@ themselves.
 ## Connect a repository
 
 A connection is a workspace-scoped record of one repository on one provider (`github`,
-`gitlab`, or `bitbucket`). Creating one requires the workspace **admin** role and is
-done through the REST API — there is no settings dialog for it yet; the task-side
-surfaces (Development section, automations) light up on their own once webhooks arrive.
+`gitlab`, or `bitbucket`). Creating one requires the workspace **admin** role. Open the
+**Repositories** item in the board-switcher menu (next to Members, Agents, and Webhooks):
+pick a provider, enter the `owner/name` repo, and click **Connect repository**. The dialog
+mints the webhook payload URL and signing secret, lists your connections, and offers
+**Rotate** (mint a fresh secret) and **Disconnect**. The task-side surfaces (Development
+section, automations) light up on their own once webhooks arrive.
+
+![The Repositories dialog: a provider select, an owner/name field, and a Connect repository button, with the minted webhook URL and one-time secret shown after connecting](../../../assets/guide-repos.jpg)
+
+The same thing is scriptable through the REST API:
 
 ```sh
 # Admin session required. Returns the connection and its signing secret — once.

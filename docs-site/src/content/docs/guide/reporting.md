@@ -54,6 +54,8 @@ To build one:
 
 **Scope** is either a single board or **All boards (portfolio)** - the same cross-board rollup the portfolio uses.
 
+![The Reports builder: name, source, scope, metric, group-by, chart, and visibility selects, beside the saved-report list](../../../assets/guide-reports.jpg)
+
 ### Sources and their metrics
 
 Metric and grouping options are derived from the same tables the API validates against, so the form can only compose legal reports:

@@ -7,6 +7,8 @@ sidebar:
 
 Tasks are the unit of work. Every task lives in a column on a board, opens in a slide-over panel, and carries the metadata described on this page. Viewers can read everything here; changing anything requires the member role or above, and a few actions are called out below as admin-only.
 
+![The board lens: four columns of task cards, each showing its priority dot, type mark, labels, and story-point estimate](../../../assets/guide-board.jpg)
+
 ## Creating tasks
 
 Create a task from the `Add task` button at the bottom of any column, or open the command palette (<kbd>⌘K</kbd> / <kbd>Ctrl+K</kbd>) and run `Create new task`, which adds to the first column. Only the title is required.
@@ -16,6 +18,8 @@ Every task has a type — `Task`, `Bug`, or `Story` — set in the panel's `Type
 ## The task panel
 
 Clicking a card (or choosing `Edit` from its `⋯` menu) opens the task in a slide-over panel on the right, with the board still visible behind it. Content fields save when you press `Save changes`; the panel's sections below the fields (subtasks, checklist, attachments, comments, and so on) write immediately.
+
+![The task panel open as a right slide-over, showing title, description, assignee, priority, dates, type, estimate, value/risk, sprint, and labels](../../../assets/guide-task-detail.jpg)
 
 | Field | What it holds |
 |---|---|

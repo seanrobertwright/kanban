@@ -11,6 +11,8 @@ Every board carries a workspace tool cluster — `Ask`, `Docs`, `Chat`, and `Whi
 
 The `Docs` button opens the workspace's documentation space: "Workspace pages, meeting notes, decisions, and published knowledge."
 
+![The Docs dialog: a document tree with kind badges and published globes on the left, and the selected page's Markdown editor on the right](../../../assets/guide-docs.jpg)
+
 The left rail lists every document with its kind badge, filtered live by the `Search` box (title and body) and by the `Decisions` toggle, which narrows the list to decision logs. Documents form a tree — each has an optional parent and a position among its siblings — and can also be attached to a specific board, which matters for [meeting notes](#meeting-notes).
 
 Every document has one of three kinds, each created from its own button and template:
@@ -31,7 +33,7 @@ Every save that changes the body first snapshots the previous body as a revision
 
 ### Publishing and search
 
-Documents carry an `isPublished` flag (set via the API's `POST /api/workspaces/[id]/docs` and `PATCH /api/docs/[id]` — there is no toggle in the dialog yet). Publishing is what promotes a page from working draft to knowledge base:
+Documents carry an `isPublished` flag. Toggle it with the **Publish** button in a document's toolbar (member role and above) — it reads `Publish` for a draft and `Published` once live, and each document's row in the tree shows a globe when it is published. The same flag is settable through the API's `POST /api/workspaces/[id]/docs` and `PATCH /api/docs/[id]`. Publishing is what promotes a page from working draft to knowledge base:
 
 - `GET /api/workspaces/[id]/docs?q=…` runs a Postgres full-text search over **published documents only**.
 - [Workspace Q&A](#knowledge-base-and-workspace-qa) cites published documents alongside tasks and comments.

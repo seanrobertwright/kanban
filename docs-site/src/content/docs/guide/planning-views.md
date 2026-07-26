@@ -12,6 +12,8 @@ lens switcher sits above the board area (see
 (`⌘K`) offers the same jumps as `Go to Board`, `Go to List`, and so on, plus
 `Open Milestones`, `Open Capacity`, `Open Budget`, and the other panels.
 
+![The Dashboard lens: stat tiles for tasks, completion, points, and at-risk, a per-column rollup, and an at-risk list](../../../assets/guide-dashboard.jpg)
+
 | Lens | Unit | Best for |
 |---|---|---|
 | `Board` | Card in a column | Flow of work through statuses; the only lens that drags |
@@ -120,6 +122,8 @@ renders as a small fixed-width marker. The window is the tasks' own extent
 (earliest start to latest end, padded two days each side). Tasks with neither
 date are listed under `Unscheduled (N)` below. Click any bar to open the task;
 set `Start date` and `Due date` in the task dialog to place it.
+
+![The Timeline lens: scheduled tasks as horizontal bars across weekly date ticks, with an Unscheduled row of undated tasks below](../../../assets/guide-timeline.jpg)
 
 ## Gantt
 

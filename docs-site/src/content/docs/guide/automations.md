@@ -18,6 +18,8 @@ member could not.
 Open **Automations** from the board toolbar. Board admins author rules; anyone
 who can see the board can read the rules and their run log.
 
+![The Automations dialog: a When trigger, an If condition builder, and a Then action row with the notify action's target picker set to a Slack channel](../../../assets/guide-automations.jpg)
+
 A rule has three parts:
 
 1. **When** — one trigger event (or a schedule).
@@ -72,10 +74,12 @@ set", never an error, so a rule can never crash the edit that triggered it.
 
 The dialog's builder exposes all of these except `assign`, which is available
 when authoring rules through the [HTTP API](/kanban/agents/http-api/) and is
-used by workflow templates. Slack, Teams, and email notify targets deliver
-through the connections described in
-[Integrations](/kanban/guide/integrations/); the builder's "notify assignee"
-covers the common case.
+used by workflow templates. The `notify` action's builder row has a **target
+picker** — assignee, a named member, a Slack channel, a Teams connection, or an
+email address — with the member and Teams options populated from the workspace's
+people and [integration connections](/kanban/guide/integrations/). See the
+[cookbook](/kanban/guide/automations-cookbook/#notify-the-right-channel) for the
+exact target shapes.
 
 ### Example recipes
 
