@@ -19,6 +19,10 @@ export async function exportDiscovery(userId:string,workspaceId:string,term:stri
   // empty manifest, matching searchWorkspace's empty hits.
   const q=`%${term.trim()}%`;
   const attachments=term.trim()===""?[]:await query<{id:number;taskId:number;name:string;contentType:string;size:string}>(`SELECT a.id,a.task_id AS "taskId",a.name,a.content_type AS "contentType",a.size::text FROM attachment a JOIN task t ON t.id=a.task_id JOIN board_column c ON c.id=t.column_id JOIN board b ON b.id=c.board_id WHERE b.workspace_id=$1 AND (a.name ILIKE $2 OR t.title ILIKE $2 OR t.description ILIKE $2 OR EXISTS(SELECT 1 FROM comment cm WHERE cm.task_id=t.id AND cm.body ILIKE $2))`,[workspaceId,q]);
-  await withTransaction(async client=>{await client.query(`INSERT INTO activity_log(workspace_id,board_id,task_id,actor_type,actor_id,action,after) VALUES($1,NULL,NULL,'human',$2,'ediscovery.export',jsonb_build_object('query',$3,'hitCount',$4))`,[workspaceId,userId,term,hits.length]);});
+  // The casts are load-bearing: jsonb_build_object is variadic "any", so
+  // Postgres cannot infer a placeholder's type from it and rejects the whole
+  // statement ("could not determine data type of parameter"). Without them
+  // every export throws before it returns.
+  await withTransaction(async client=>{await client.query(`INSERT INTO activity_log(workspace_id,board_id,task_id,actor_type,actor_id,action,after) VALUES($1,NULL,NULL,'human',$2,'ediscovery.export',jsonb_build_object('query',$3::text,'hitCount',$4::int))`,[workspaceId,userId,term,hits.length]);});
   return { generatedAt:new Date().toISOString(), query:term, hits, attachments };
 }
