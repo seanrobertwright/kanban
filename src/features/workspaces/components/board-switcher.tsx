@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bot, Check, ChevronDown, Plus, Users, Webhook } from "lucide-react";
+import { Bot, Check, ChevronDown, GitBranch, Plus, Users, Webhook } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -17,6 +17,7 @@ import {
 import * as api from "../client/api";
 import { AgentsDialog } from "@/features/agents/components/agents-dialog";
 import { WebhooksDialog } from "@/features/webhooks/components/webhooks-dialog";
+import { RepoConnectionsDialog } from "@/features/git/components/repo-connections-dialog";
 import { CreateDialog } from "./create-dialog";
 import { MembersDialog } from "./members-dialog";
 import type { Board, WorkspaceMembership } from "../types";
@@ -40,6 +41,7 @@ export function BoardSwitcher({
   const [membersOpen, setMembersOpen] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [webhooksOpen, setWebhooksOpen] = useState(false);
+  const [reposOpen, setReposOpen] = useState(false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   /** The workspace a new board is being created in, or null when idle. */
   const [newBoardIn, setNewBoardIn] = useState<WorkspaceMembership | null>(null);
@@ -158,6 +160,15 @@ export function BoardSwitcher({
                 <Webhook /> Webhooks
               </DropdownMenuItem>
             )}
+            {/* Repo connections mint webhook signing secrets, so admin+ (2.0). */}
+            {(currentWorkspace.role === "owner" ||
+              currentWorkspace.role === "admin") && (
+              <DropdownMenuItem
+                onClick={() => openLater(() => setReposOpen(true))}
+              >
+                <GitBranch /> Repositories
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={() => openLater(() => setNewWorkspaceOpen(true))}
             >
@@ -183,6 +194,12 @@ export function BoardSwitcher({
       <WebhooksDialog
         open={webhooksOpen}
         onOpenChange={setWebhooksOpen}
+        workspace={currentWorkspace}
+      />
+
+      <RepoConnectionsDialog
+        open={reposOpen}
+        onOpenChange={setReposOpen}
         workspace={currentWorkspace}
       />
 

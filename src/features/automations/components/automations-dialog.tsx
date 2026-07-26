@@ -17,6 +17,9 @@ import * as api from "../client/api";
 import { draftAutomation } from "../lib/draft";
 import * as slaApi from "@/features/sla/client/api";
 import type { SlaPolicy } from "@/features/sla/types";
+import { fetchIntegrations, fetchMembers } from "@/features/workspaces/client/api";
+import type { IntegrationConnection } from "@/features/integrations/types";
+import type { Member } from "@/features/workspaces/types";
 import {
   OPERATORS,
   SCHEDULE_INTERVALS,
@@ -27,6 +30,7 @@ import {
   type AutomationRun,
   type AutomationTrigger,
   type Condition,
+  type NotifyTarget,
   type Operator,
   type Predicate,
   type ScheduleInterval,
@@ -157,6 +161,8 @@ export function AutomationsDialog({
         {canManage && (
           <CreateRule
             boardId={boardId}
+            workspaceId={workspaceId}
+            open={open}
             columns={columns}
             labels={labels}
             busy={busy}
@@ -883,18 +889,23 @@ const CONDITION_FIELDS: { field: string; label: string; numeric?: boolean }[] = 
 
 const UNARY_OPS: Operator[] = ["isSet", "isEmpty"];
 
+/** Where a notify action delivers; mirrors the NotifyTarget union's kinds. */
+type NotifyKind = "assignee" | "human" | "slack" | "teams" | "email";
+
 /** A pending action row in the builder. */
 type ActionDraft =
   | { type: "move"; columnId: string }
   | { type: "set_field"; field: SettableField; value: string }
   | { type: "add_label"; labelId: string }
   | { type: "comment"; body: string }
-  | { type: "notify"; message: string }
+  | { type: "notify"; targetKind: NotifyKind; targetValue: string; message: string }
   | { type: "create_task"; title: string; columnId: string }
   | { type: "script"; code: string };
 
 function CreateRule({
   boardId,
+  workspaceId,
+  open,
   columns,
   labels,
   busy,
@@ -902,6 +913,8 @@ function CreateRule({
   onCreated,
 }: {
   boardId: number;
+  workspaceId: string;
+  open: boolean;
   columns: AutomationsColumn[];
   labels: AutomationsLabel[];
   busy: boolean;
@@ -916,6 +929,35 @@ function CreateRule({
   const [actions, setActions] = useState<ActionDraft[]>([
     { type: "comment", body: "" },
   ]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [integrations, setIntegrations] = useState<IntegrationConnection[]>([]);
+
+  // Notify targets resolve against workspace people and integrations; both
+  // lists are admin-readable and CreateRule only renders for admins.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [membership, connections] = await Promise.all([
+          fetchMembers(workspaceId),
+          fetchIntegrations(workspaceId),
+        ]);
+        if (!cancelled) {
+          setMembers(membership.members);
+          setIntegrations(connections);
+        }
+      } catch {
+        // The picker degrades to manual entry; assignee/email still work.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, workspaceId]);
+
+  const teamsConnections = integrations.filter((c) => c.provider === "teams");
+  const slackConnected = integrations.some((c) => c.provider === "slack");
 
   function setPredicate(i: number, patch: Partial<PredicateRow>) {
     setPredicates((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
@@ -924,7 +966,10 @@ function CreateRule({
     setActions((prev) => prev.map((a, idx) => (idx === i ? next : a)));
   }
 
-  const canAdd = name.trim() !== "" && actions.length > 0;
+  const actionsValid = actions.every(
+    (a) => a.type !== "notify" || a.targetKind === "assignee" || a.targetValue.trim() !== ""
+  );
+  const canAdd = name.trim() !== "" && actions.length > 0 && actionsValid;
 
   /** Compiles the builder rows into the API's condition tree, coercing numeric
    *  field values and dropping the value for unary operators. */
@@ -959,8 +1004,19 @@ function CreateRule({
           return { type: "add_label", labelId: Number(a.labelId) };
         case "comment":
           return { type: "comment", body: a.body.trim() };
-        case "notify":
-          return { type: "notify", target: "assignee", message: a.message.trim() || undefined };
+        case "notify": {
+          const target: NotifyTarget =
+            a.targetKind === "assignee"
+              ? "assignee"
+              : a.targetKind === "human"
+                ? { type: "human", id: a.targetValue }
+                : a.targetKind === "slack"
+                  ? { type: "slack", channelId: a.targetValue.trim() }
+                  : a.targetKind === "teams"
+                    ? { type: "teams", connectionId: Number(a.targetValue) }
+                    : { type: "email", to: a.targetValue.trim() };
+          return { type: "notify", target, message: a.message.trim() || undefined };
+        }
         case "create_task":
           return {
             type: "create_task",
@@ -1130,7 +1186,7 @@ function CreateRule({
                       : t === "add_label"
                         ? { type: "add_label", labelId: String(labels[0]?.id ?? "") }
                         : t === "notify"
-                          ? { type: "notify", message: "" }
+                          ? { type: "notify", targetKind: "assignee", targetValue: "", message: "" }
                           : t === "create_task"
                             ? { type: "create_task", title: "", columnId: "" }
                             : t === "script"
@@ -1143,7 +1199,7 @@ function CreateRule({
               <option value="set_field">set field</option>
               <option value="add_label">add label</option>
               <option value="comment">comment</option>
-              <option value="notify">notify assignee</option>
+              <option value="notify">notify</option>
               <option value="create_task">create task</option>
               <option value="script">run script</option>
             </select>
@@ -1211,13 +1267,90 @@ function CreateRule({
               />
             )}
             {a.type === "notify" && (
-              <Input
-                aria-label={`Action ${i + 1} message`}
-                value={a.message}
-                onChange={(e) => setAction(i, { type: "notify", message: e.target.value })}
-                placeholder="Message (optional) — pings the assignee"
-                className="h-7 text-xs"
-              />
+              <>
+                <select
+                  aria-label={`Action ${i + 1} notify target`}
+                  className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                  value={a.targetKind}
+                  onChange={(e) => {
+                    const kind = e.target.value as NotifyKind;
+                    // Each kind stores a different reference in targetValue, so
+                    // switching kinds re-seeds it with that kind's default.
+                    const value =
+                      kind === "human"
+                        ? (members[0]?.userId ?? "")
+                        : kind === "teams"
+                          ? String(teamsConnections[0]?.id ?? "")
+                          : "";
+                    setAction(i, { ...a, targetKind: kind, targetValue: value });
+                  }}
+                >
+                  <option value="assignee">assignee</option>
+                  <option value="human">member</option>
+                  <option value="slack">Slack channel</option>
+                  <option value="teams">Teams</option>
+                  <option value="email">email</option>
+                </select>
+                {a.targetKind === "human" &&
+                  (members.length > 0 ? (
+                    <select
+                      aria-label={`Action ${i + 1} notify member`}
+                      className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                      value={a.targetValue}
+                      onChange={(e) => setAction(i, { ...a, targetValue: e.target.value })}
+                    >
+                      {members.map((m) => (
+                        <option key={m.userId} value={m.userId}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No members found</span>
+                  ))}
+                {a.targetKind === "slack" && (
+                  <Input
+                    aria-label={`Action ${i + 1} Slack channel id`}
+                    value={a.targetValue}
+                    onChange={(e) => setAction(i, { ...a, targetValue: e.target.value })}
+                    placeholder={slackConnected ? "Channel id (C…)" : "Channel id — Slack not connected"}
+                    className="h-7 text-xs"
+                  />
+                )}
+                {a.targetKind === "teams" &&
+                  (teamsConnections.length > 0 ? (
+                    <select
+                      aria-label={`Action ${i + 1} Teams connection`}
+                      className="h-7 rounded-md border bg-transparent px-1 text-xs text-foreground"
+                      value={a.targetValue}
+                      onChange={(e) => setAction(i, { ...a, targetValue: e.target.value })}
+                    >
+                      {teamsConnections.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {typeof c.metadata.name === "string" ? c.metadata.name : c.externalId}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">No Teams webhook connected</span>
+                  ))}
+                {a.targetKind === "email" && (
+                  <Input
+                    aria-label={`Action ${i + 1} notify email`}
+                    value={a.targetValue}
+                    onChange={(e) => setAction(i, { ...a, targetValue: e.target.value })}
+                    placeholder="person@example.com"
+                    className="h-7 text-xs"
+                  />
+                )}
+                <Input
+                  aria-label={`Action ${i + 1} message`}
+                  value={a.message}
+                  onChange={(e) => setAction(i, { ...a, message: e.target.value })}
+                  placeholder="Message (optional)"
+                  className="h-7 text-xs"
+                />
+              </>
             )}
             {a.type === "create_task" && (
               <>
