@@ -17,6 +17,12 @@ import {
   listWorkspaceExtensions,
   removeWorkspaceExtension,
 } from "./repository";
+import type {
+  ExtensionBoardView,
+  ExtensionCommentsView,
+  ExtensionLabelsView,
+  ExtensionTaskView,
+} from "../types";
 
 /**
  * An extension is third-party code granted a keyhole into a workspace, so the
@@ -172,8 +178,12 @@ describe("workspace extensions", () => {
   describe("the task bridge", () => {
     it("hands a task.read extension exactly the read-only shape", async () => {
       const [panel] = await listTaskSlotExtensions(alice, taskId, "task_panel");
-      const { task } = await extensionTaskBridge(alice, taskId, panel.id);
-      expect(task).toEqual({
+      const view = (await extensionTaskBridge(
+        alice,
+        taskId,
+        panel.id
+      )) as ExtensionTaskView;
+      expect(view.task).toEqual({
         id: taskId,
         title: "Bridged task",
         description: expect.anything(),
@@ -191,6 +201,113 @@ describe("workspace extensions", () => {
       await expect(
         extensionTaskBridge(alice, taskId, blind.id)
       ).rejects.toMatchObject({ kind: "forbidden" });
+    });
+
+    /**
+     * Each capability buys exactly one projection. The cases below assert both
+     * halves of that: the shape a grant returns, and that the grant does not
+     * carry over to a scope the manifest never asked for.
+     */
+    describe("the read-only capability set", () => {
+      let broad: number;
+
+      beforeAll(async () => {
+        broad = (
+          await installWorkspaceExtension(
+            alice,
+            workspaceId,
+            manifest({
+              name: "example.broad",
+              capabilities: ["comments.read", "labels.read", "board.read"],
+            })
+          )
+        ).id;
+        await query(
+          `INSERT INTO comment (task_id, author_type, author_id, body)
+           VALUES ($1,'human',$2,'A bridged remark')`,
+          [taskId, alice]
+        );
+        const label = (
+          await query<{ id: number }>(
+            `INSERT INTO label (workspace_id, name, color) VALUES ($1,'bridged','violet')
+             RETURNING id`,
+            [workspaceId]
+          )
+        )[0].id;
+        await query(`INSERT INTO task_label (task_id, label_id) VALUES ($1,$2)`, [
+          taskId,
+          label,
+        ]);
+      });
+
+      it("gives comments as author names, never ids or addresses", async () => {
+        const view = (await extensionTaskBridge(
+          alice,
+          taskId,
+          broad,
+          "comments"
+        )) as ExtensionCommentsView;
+        expect(view.comments).toContainEqual(
+          expect.objectContaining({
+            body: "A bridged remark",
+            author: { type: "human", name: expect.any(String) },
+          })
+        );
+        // The projection is built here, so the user id cannot ride along even
+        // if someone adds a column to the table later.
+        expect(JSON.stringify(view.comments)).not.toContain(alice);
+      });
+
+      it("gives the task's own labels", async () => {
+        const view = (await extensionTaskBridge(
+          alice,
+          taskId,
+          broad,
+          "labels"
+        )) as ExtensionLabelsView;
+        expect(view.labels).toContainEqual({
+          id: expect.any(Number),
+          name: "bridged",
+          color: "violet",
+        });
+      });
+
+      it("gives board structure and counts, not the cards on it", async () => {
+        const view = (await extensionTaskBridge(
+          alice,
+          taskId,
+          broad,
+          "board"
+        )) as ExtensionBoardView;
+        expect(view.board).toMatchObject({ id: expect.any(Number), name: expect.any(String) });
+        expect(view.columns[0]).toMatchObject({
+          id: expect.any(Number),
+          title: expect.any(String),
+          taskCount: expect.any(Number),
+        });
+        // No titles, ids, or bodies of other people's cards.
+        expect(JSON.stringify(view.columns)).not.toContain("Bridged task");
+      });
+
+      it("refuses a scope the manifest did not ask for, in both directions", async () => {
+        // Granted comments/labels/board, never task.read.
+        await expect(
+          extensionTaskBridge(alice, taskId, broad, "task")
+        ).rejects.toMatchObject({ kind: "forbidden" });
+
+        // And the original task-only panel cannot read comments.
+        const [panel] = await listTaskSlotExtensions(alice, taskId, "task_panel");
+        await expect(
+          extensionTaskBridge(alice, taskId, panel.id, "comments")
+        ).rejects.toMatchObject({ kind: "forbidden" });
+      });
+
+      it("still refuses a caller who cannot read the board, whatever the grant", async () => {
+        // The extension's capability never substitutes for the human's access.
+        await expect(
+          extensionTaskBridge(stranger, taskId, broad, "board")
+        ).rejects.toMatchObject({ kind: "not_found" });
+      });
     });
 
     it("refuses a cross-workspace pairing: another workspace's extension id on my task", async () => {

@@ -23,4 +23,7 @@ export interface PermissionGrant { id: string; workspaceId: string; subjectType:
 export interface RetentionPolicy { id: number; subjectType: "activity_log" | "task" | "comment" | "attachment" | "doc"; maxAgeDays: number; }
 export interface LegalHold { id: string; subjectType: "task" | "comment" | "attachment" | "doc"; subjectId: string; reason: string; createdAt: string; }
 export interface IdentityProvider { providerId: string; protocol: "oidc" | "saml"; issuer: string; domain: string; createdAt: string; }
-export interface DiscoveryHit { subjectType: "task" | "comment" | "doc" | "activity"; id: string; title: string; excerpt: string; createdAt: string; }
+/** `onHold`: an active legal hold (064) covers this record — the first thing a
+ *  compliance reader wants to know about a hit. Always false for audit rows,
+ *  which holds have no subject type for. */
+export interface DiscoveryHit { subjectType: "task" | "comment" | "doc" | "activity"; id: string; title: string; excerpt: string; createdAt: string; onHold: boolean; }

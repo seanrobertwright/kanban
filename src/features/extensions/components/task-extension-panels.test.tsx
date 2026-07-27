@@ -76,7 +76,11 @@ describe("TaskExtensionPanels postMessage bridge", () => {
     deliver(EXTENSION_ORIGIN, frameWindow);
 
     await waitFor(() => expect(bridgeCalls()).toHaveLength(1));
-    expect(String(bridgeCalls()[0][0])).toBe("/api/tasks/1/extensions/7/bridge");
+    // The capability the iframe asked for becomes the bridge's scope; nothing
+    // else the message carried is forwarded.
+    expect(String(bridgeCalls()[0][0])).toBe(
+      "/api/tasks/1/extensions/7/bridge?scope=task"
+    );
     await waitFor(() =>
       expect(posted).toHaveBeenCalledWith(
         {
@@ -118,11 +122,14 @@ describe("TaskExtensionPanels postMessage bridge", () => {
     expect(posted).not.toHaveBeenCalled();
   });
 
-  it("ignores well-placed messages asking for anything but task.read", async () => {
+  it("ignores well-placed messages asking for a capability that does not exist", async () => {
     const iframe = await renderPanel();
     const frameWindow = iframe.contentWindow!;
 
+    // task.write is not in the vocabulary at all — the capability set is
+    // read-only by construction, so there is nothing to map it onto.
     deliver(EXTENSION_ORIGIN, frameWindow, { ...request, method: "task.write" });
+    deliver(EXTENSION_ORIGIN, frameWindow, { ...request, method: "comments" });
     deliver(EXTENSION_ORIGIN, frameWindow, { ...request, type: "other" });
     deliver(EXTENSION_ORIGIN, frameWindow, { ...request, requestId: 42 });
     deliver(EXTENSION_ORIGIN, frameWindow, "just-a-string");

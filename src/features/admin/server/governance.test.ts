@@ -407,6 +407,76 @@ describe("admin governance", () => {
       expect(kinds.has("doc")).toBe(true);
     });
 
+    it("recalls a substring full text tokenizes away", async () => {
+      // The point of the ILIKE arm: a discovery request is usually for an
+      // identifier — a domain, an order number, a fragment of an id — and no
+      // stemmer will ever match half a word.
+      await createTask(alice, {
+        columnId,
+        title: "Vendor contact",
+        description: "Escalations go to billing@acme-corp.example",
+      });
+      const hits = await searchWorkspace(ann, workspaceId, "cme-corp.exa");
+      expect(hits.some((h) => h.subjectType === "task")).toBe(true);
+    });
+
+    it("ranks the stronger match above the passing mention", async () => {
+      const term = `ledger-${randomUUID().slice(0, 8)}`;
+      const dense = (
+        await createTask(alice, {
+          columnId,
+          title: `The ${term} ${term} audit`,
+          description: `All about the ${term}.`,
+        })
+      ).id;
+      const passing = (
+        await createTask(alice, {
+          columnId,
+          title: "Routine cleanup",
+          description: `Mentions ${term} once.`,
+        })
+      ).id;
+      const ids = (await searchWorkspace(ann, workspaceId, term)).map((h) => h.id);
+      expect(ids.indexOf(String(dense))).toBeLessThan(ids.indexOf(String(passing)));
+    });
+
+    it("says which hits an active legal hold is preserving", async () => {
+      const term = `frozen-${randomUUID().slice(0, 8)}`;
+      const heldId = (await createTask(alice, { columnId, title: `A ${term} record` })).id;
+      const looseId = (await createTask(alice, { columnId, title: `A ${term} draft` })).id;
+      await placeLegalHold(ann, workspaceId, "task", String(heldId), "litigation");
+
+      const byId = new Map(
+        (await searchWorkspace(ann, workspaceId, term)).map((h) => [h.id, h.onHold])
+      );
+      expect(byId.get(String(heldId))).toBe(true);
+      // The flag is per record, not per bundle — an unheld neighbour stays false.
+      expect(byId.get(String(looseId))).toBe(false);
+
+      // Released, and the same search reports it unfrozen.
+      const holds = await listLegalHolds(ann, workspaceId);
+      const hold = holds.find((h) => h.subjectId === String(heldId))!;
+      await releaseLegalHold(ann, workspaceId, hold.id);
+      const after = new Map(
+        (await searchWorkspace(ann, workspaceId, term)).map((h) => [h.id, h.onHold])
+      );
+      expect(after.get(String(heldId))).toBe(false);
+    });
+
+    it("reports truncation instead of quietly returning a short bundle", async () => {
+      const exported = await exportDiscovery(ann, workspaceId, "Discoverable widget");
+      expect(exported.limit).toBe(500);
+      expect(exported.truncated).toBe(false);
+      // The audit row carries the same claim the bundle makes.
+      const logged = await queryOne<{ after: { truncated: boolean } }>(
+        `SELECT after FROM activity_log
+          WHERE workspace_id=$1 AND action='ediscovery.export'
+          ORDER BY id DESC LIMIT 1`,
+        [workspaceId]
+      );
+      expect(logged?.after.truncated).toBe(false);
+    });
+
     it("returns nothing for an empty term rather than the whole workspace", async () => {
       expect(await searchWorkspace(ann, workspaceId, "   ")).toEqual([]);
       const empty = await exportDiscovery(ann, workspaceId, "  ");

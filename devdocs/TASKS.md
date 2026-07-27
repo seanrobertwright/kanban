@@ -798,3 +798,43 @@ that agent-behaviour rocks do.
       **Embeddings remain unbuilt, and the scoreboard row now says so** — semantic
       recall needs an embedding vendor this self-hosted app does not otherwise
       depend on. Decided, not forgotten.
+
+## Phase 6/7/8 leftovers — the two that were real (2026-07-27)
+
+A survey of the enterprise/integration/extensibility rocks found most of them
+genuinely shipped: SSO (6.1), SCIM (6.2), the admin console (6.4, now five
+settings sections), retention + legal hold (6.6), IP allowlisting (6.8), and all
+five Phase 7 integrations. Application-level encryption (6.5) already covers
+every secret this app stores itself — git host tokens, integration OAuth,
+webhook signing keys — with SCIM bearer tokens owned by the better-auth plugin.
+Granular permissions (6.3) has its `permission_grant` table, its central
+`can()`, board grants and field ACLs, all tested in `governance.test.ts`.
+
+Two were thinner than their rows claimed.
+
+- [x] **eDiscovery over the real index** (rock 6.7) — was `ILIKE` over four
+      unions, ordered by date, capped at 500 in silence. Now stemmed full text
+      over the 084 `search_tsv` columns ranked by `ts_rank`, **unioned with** the
+      substring pass rather than replacing it: a compliance search is usually for
+      an identifier (a domain, an order number, half an id) that no stemmer will
+      match, so recall is the requirement and relevance is the bonus. The audit
+      arm stays substring-only — it has no tsvector and substring is the right
+      question for it. Each hit now carries `onHold`, since "is this preserved?"
+      is the first question asked of a bundle and the join was one line away. The
+      cap is reported (`truncated`, `limit`) on the export, in the audit row, and
+      in the panel — a truncated bundle that looks complete is worse than none.
+      5 new DB tests (substring recall, ranking, hold flag on/off, truncation).
+
+- [x] **Extension capability breadth** (rock 8.1) — the install/sandbox/bridge
+      model was built and tested, but the vocabulary was one word: `task.read`.
+      Went through `AskUserQuestion`; the answer was read-only breadth. The set
+      is now `task.read`, `comments.read`, `labels.read`, `board.read`, each
+      buying exactly one projection built by hand in the bridge — never a row, so
+      adding a column to a table cannot silently widen what third-party code
+      sees. Comments carry author display names, not ids or emails; the board arm
+      carries structure and counts, not cards. The bridge checks the caller's
+      board access first and the manifest's grant second, and a grant for one
+      scope is a 403 for another. **Nothing writes**: there is no write
+      capability to grant, which is the property that makes an iframe an
+      acceptable place to run someone else's code. 5 new DB tests + the client
+      bridge now speaks capability→scope.
