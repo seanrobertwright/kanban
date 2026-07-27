@@ -760,3 +760,41 @@ a green build, or a shipped release fires an ordinary Phase-1 rule. Scoreboard
 Wired into the app shell as a header **Reports** dialog (`reports-dialog.tsx`,
 beside Portfolio), mounting `ReportsPanel` lazily on open with the current
 workspace's boards. tsc/eslint/build clean (all three report routes compile).
+
+---
+
+## Truth pass — the two AI rocks the code review called overclaims (2026-07-27)
+
+`complete-code-review.md` §5 item 4 asked for a truth pass on three ✅ rows that
+were weaker than the SPEC promised. Git browse was fixed in `8c8acf2`; these are
+the other two. Both went through `AskUserQuestion` first, per the Phase 4 rule
+that agent-behaviour rocks do.
+
+- [x] **AI workflow builder** (rock 4.4) — was a 14-line regex over four phrases.
+      Now `POST /api/board/[id]/automations/draft`: the board's real column,
+      label and member ids go to the model, which fills a **closed DTO** (one
+      trigger, a flat predicate list, seven action shapes) rather than emitting
+      engine JSON. `compile` turns that into `Action[]`; the result then walks
+      `readTrigger`/`readCondition`/`readActions` — extracted from `handlers.ts`
+      into `server/validate.ts` so the drafter and the POST body are validated by
+      one predicate, not two. Ids are re-checked against the board (the generic
+      validators only know "integer"). Every failure is a 400 with the reason;
+      nothing is coerced. `script` is absent from the DTO by design — a model
+      writing sandboxed code for a human to skim is the review that doesn't
+      happen. Drafts are always `isEnabled: false`, gated at `automation.manage`
+      (the authoring gate). No key configured → the old phrasebook, and the UI
+      says which drafter answered. 8 pure tests (compile + refusals + fallback).
+
+- [x] **Knowledge retrieval** (rock 4.3) — synthesis was already a real model
+      call with citations; retrieval was the weak half: `simple` (no stemming),
+      ordered by `updated_at` (recency, not relevance), tsvector recomputed per
+      row. Migration **084** replaces the 072 expression indexes with STORED
+      generated `search_tsv` columns on the `english` config + GIN, and adds
+      `pg_trgm` title indexes. The reader now ranks by `ts_rank` and falls back
+      to `word_similarity` on titles when strict full text finds nothing, both
+      arms selecting from the same authorized CTE so the fuzzy path cannot
+      become a second way into a board. 4 new DB tests (relevance beats recency,
+      stemming, typo fallback, fuzzy stays inside the board filter).
+      **Embeddings remain unbuilt, and the scoreboard row now says so** — semantic
+      recall needs an embedding vendor this self-hosted app does not otherwise
+      depend on. Decided, not forgotten.

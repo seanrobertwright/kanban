@@ -5,19 +5,14 @@ import {
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import {
-  AUTOMATION_MAX_ACTIONS,
-  AUTOMATION_MAX_CONDITION_DEPTH,
   AUTOMATION_NAME_MAX,
-  isOperator,
-  isScheduleInterval,
-  isSettableField,
-  isTriggerEvent,
   type Action,
   type Condition,
   type CreateAutomationRuleInput,
-  type Trigger,
   type UpdateAutomationRuleInput,
 } from "../types";
+import { readActions, readCondition, readTrigger } from "./validate";
+import { draftAutomationForBoard } from "./draft";
 import {
   boardForTriggerToken,
   createAutomationRule,
@@ -31,7 +26,6 @@ import {
   updateAutomationRule,
 } from "./repository";
 import { fireExternalTrigger } from "./scheduler";
-import { scriptsEnabled } from "./sandbox";
 import {
   applyWorkflowTemplate,
   createWorkflowTemplate,
@@ -52,144 +46,6 @@ function badRequest(message: string) {
 }
 function notFound(what = "Automation") {
   return Response.json({ error: `${what} not found` }, { status: 404 });
-}
-
-/** Validates a trigger — an object naming one of the known events, plus an
- *  interval for the scheduled event. */
-function readTrigger(v: unknown): Trigger | { error: string } {
-  if (!v || typeof v !== "object") return { error: "trigger must be an object" };
-  const o = v as Record<string, unknown>;
-  if (!isTriggerEvent(o.event))
-    return { error: "trigger.event must be a known event" };
-  if (o.event === "schedule.tick") {
-    const every = o.every ?? "daily";
-    if (!isScheduleInterval(every))
-      return { error: "schedule.tick needs a valid interval (hourly/daily/weekly)" };
-    return { event: "schedule.tick", every };
-  }
-  return { event: o.event };
-}
-
-/**
- * Validates the condition tree recursively, bounded by a depth cap so a
- * hand-authored payload cannot smuggle in a pathologically deep predicate. The
- * empty object is the legal always-true tree.
- */
-function readCondition(v: unknown, depth = 0): Condition | { error: string } {
-  if (depth > AUTOMATION_MAX_CONDITION_DEPTH)
-    return { error: "conditions nested too deeply" };
-  if (!v || typeof v !== "object") return { error: "a condition must be an object" };
-  const o = v as Record<string, unknown>;
-
-  if ("all" in o || "any" in o) {
-    const key = "all" in o ? "all" : "any";
-    const arr = o[key];
-    if (!Array.isArray(arr)) return { error: `${key} must be an array` };
-    for (const child of arr) {
-      const c = readCondition(child, depth + 1);
-      if ("error" in c) return c;
-    }
-    return v as Condition;
-  }
-  if ("not" in o) {
-    const c = readCondition(o.not, depth + 1);
-    if ("error" in c) return c;
-    return v as Condition;
-  }
-  if ("field" in o) {
-    if (typeof o.field !== "string" || o.field.trim() === "")
-      return { error: "a predicate needs a field" };
-    if (!isOperator(o.op)) return { error: "a predicate needs a valid operator" };
-    return v as Condition;
-  }
-  // Neither group nor predicate: only the empty always-true tree is allowed.
-  if (Object.keys(o).length === 0) return {} as Condition;
-  return { error: "a condition must be a group, a predicate, or empty" };
-}
-
-/** Validates a single action. onlyIf, if present, is a nested condition. */
-function readAction(v: unknown): Action | { error: string } {
-  if (!v || typeof v !== "object") return { error: "an action must be an object" };
-  const o = v as Record<string, unknown>;
-  if (o.onlyIf !== undefined) {
-    const c = readCondition(o.onlyIf);
-    if ("error" in c) return { error: `onlyIf: ${c.error}` };
-  }
-  switch (o.type) {
-    case "move":
-      if (!Number.isInteger(o.columnId))
-        return { error: "move needs an integer columnId" };
-      return v as Action;
-    case "assign":
-      if (o.assignee !== null) {
-        const a = o.assignee as Record<string, unknown> | null;
-        if (!a || (a.type !== "human" && a.type !== "agent") || typeof a.id !== "string")
-          return { error: "assign needs an assignee {type, id} or null" };
-      }
-      return v as Action;
-    case "set_field":
-      if (!isSettableField(o.field))
-        return { error: "set_field needs a settable field" };
-      if (o.value !== null && typeof o.value !== "string" && typeof o.value !== "number")
-        return { error: "set_field value must be a string, number, or null" };
-      return v as Action;
-    case "add_label":
-      if (!Number.isInteger(o.labelId))
-        return { error: "add_label needs an integer labelId" };
-      return v as Action;
-    case "comment":
-      if (typeof o.body !== "string" || o.body.trim() === "")
-        return { error: "comment needs a non-empty body" };
-      return v as Action;
-    case "notify": {
-      const t = o.target;
-        const ok =
-          t === "assignee" ||
-          (!!t &&
-            typeof t === "object" &&
-            (((t as Record<string, unknown>).type === "human" &&
-              typeof (t as Record<string, unknown>).id === "string") ||
-             ((t as Record<string, unknown>).type === "slack" &&
-              typeof (t as Record<string, unknown>).channelId === "string") ||
-             ((t as Record<string, unknown>).type === "teams" &&
-              Number.isInteger((t as Record<string, unknown>).connectionId)) ||
-             ((t as Record<string, unknown>).type === "email" &&
-              typeof (t as Record<string, unknown>).to === "string" &&
-              /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((t as Record<string, unknown>).to as string))));
-        if (!ok) return { error: "notify needs assignee, a human, Slack, Teams, or an email address" };
-      if (o.message !== undefined && typeof o.message !== "string")
-        return { error: "notify message must be a string" };
-      return v as Action;
-    }
-    case "create_task":
-      if (typeof o.title !== "string" || o.title.trim() === "")
-        return { error: "create_task needs a title" };
-      if (o.columnId !== undefined && !Number.isInteger(o.columnId))
-        return { error: "create_task columnId must be an integer" };
-      return v as Action;
-    case "script":
-      if (!scriptsEnabled())
-        return { error: "scripting is disabled on this server" };
-      if (typeof o.code !== "string" || o.code.trim() === "")
-        return { error: "script needs code" };
-      if (o.code.length > 5000) return { error: "script is too long (max 5000 chars)" };
-      return v as Action;
-    default:
-      return { error: `unknown action type: ${String(o.type)}` };
-  }
-}
-
-function readActions(v: unknown): Action[] | { error: string } {
-  if (!Array.isArray(v)) return { error: "actions must be an array" };
-  if (v.length > AUTOMATION_MAX_ACTIONS)
-    return { error: `a rule may have at most ${AUTOMATION_MAX_ACTIONS} actions` };
-  const actions: Action[] = [];
-  for (const raw of v) {
-    const a = readAction(raw);
-    if ("error" in a) return a;
-    actions.push(a);
-  }
-  return actions;
 }
 
 export async function handleListAutomations(request: Request, id: string) {
@@ -238,6 +94,31 @@ export async function handleCreateAutomation(request: Request, id: string) {
     return Response.json(await createAutomationRule(session.user.id, boardId, input), {
       status: 201,
     });
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/**
+ * The AI workflow builder's door (4.4). It returns a *draft* — a validated,
+ * disabled `CreateAutomationRuleInput` — and never writes: enabling is the
+ * admin's own POST through handleCreateAutomation, which validates the body
+ * again. A draft the engine cannot express comes back 400 with the reason,
+ * rather than a coerced rule that does something adjacent.
+ */
+export async function handleDraftAutomation(request: Request, id: string) {
+  const session = await getSessionFromRequest(request);
+  if (!session) return unauthorized();
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+
+  const payload = await request.json().catch(() => null);
+  const prompt = (payload as Record<string, unknown> | null)?.prompt;
+  if (typeof prompt !== "string") return badRequest("prompt is required");
+
+  try {
+    const draft = await draftAutomationForBoard(session.user.id, boardId, prompt);
+    return "error" in draft ? badRequest(draft.error) : Response.json(draft);
   } catch (error) {
     return authzErrorResponse(error);
   }

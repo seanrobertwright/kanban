@@ -15,6 +15,13 @@ export interface KnowledgeDeps {
  * Workspace Q&A (4.3): authorization-filtered lexical retrieval, then — when a
  * model is configured — a single-shot synthesis over the retrieved evidence.
  *
+ * RETRIEVAL is lexical, not semantic: stemmed PostgreSQL full text ranked by
+ * ts_rank, with a trigram-similarity fallback on titles (084). There are no
+ * embeddings and no ANN index — asking a question in words the workspace never
+ * uses will not find the passage that means the same thing. The SPEC's
+ * embeddings half is unbuilt by choice: it needs an embedding vendor this
+ * self-hosted app does not otherwise depend on. See devdocs/SPEC.md 4.3.
+ *
  * AUTHZ: retrieval is restricted to the boards the principal can actually READ,
  * not merely the workspace (SPEC 4.3 "never leaks a board they can't read").
  * The board-read rule mirrors requireBoardRole + assertBoardAccess: a workspace
@@ -57,38 +64,67 @@ export async function askWorkspaceKnowledge(
   );
   const boardIds = readable.map((b) => b.id);
 
-  const citations = await query<KnowledgeCitation>(
-    `WITH matches AS (
+  const params = [workspaceId, term, EXCERPT_LENGTH, boardIds, fullReader, actor];
+
+  // Two arms over the same authorized source set (084). The strict arm is
+  // stemmed full text ranked by ts_rank — relevance, not recency, decides which
+  // twelve rows the model gets to read. The fuzzy arm is trigram
+  // word_similarity on titles (the whole-string `similarity` scores a one-word
+  // query against a multi-word title far too low to be useful), and it only
+  // runs when the strict arm found nothing: a misspelled or partial name should
+  // still reach its task instead of answering "no sources".
+  //
+  // Both arms select from the same `sources` CTE, so the fuzzy path inherits
+  // the board filter rather than becoming a second, unguarded way in.
+  const sources = `
        SELECT 'task'::text AS kind, t.id, t.title,
               COALESCE(t.description, '') AS body, t.id AS "taskId",
-              t.created_at AS updated_at
+              t.search_tsv AS tsv, t.title AS fuzzy
          FROM task t
          JOIN board_column bc ON bc.id = t.column_id
         WHERE bc.board_id = ANY($4::int[])
        UNION ALL
-       SELECT 'comment'::text, c.id, 'Comment on ' || t.title, c.body, t.id, c.created_at
+       SELECT 'comment'::text, c.id, 'Comment on ' || t.title, c.body, t.id,
+              c.search_tsv, NULL::text
          FROM comment c
          JOIN task t ON t.id = c.task_id
          JOIN board_column bc ON bc.id = t.column_id
         WHERE bc.board_id = ANY($4::int[])
        UNION ALL
-       SELECT 'document'::text, d.id, d.title, d.body, NULL::int, d.updated_at
+       SELECT 'document'::text, d.id, d.title, d.body, NULL::int,
+              d.search_tsv, d.title
          FROM doc d
         WHERE d.workspace_id = $1 AND d.is_published
           AND ($5::boolean
             OR EXISTS (SELECT 1 FROM object_share s
                         WHERE s.subject_type = 'doc' AND s.subject_id = d.id::text
-                          AND s.user_id = $6))
-     )
-     SELECT kind::text AS kind, id, title,
+                          AND s.user_id = $6))`;
+
+  const select = `SELECT kind::text AS kind, id, title,
             left(regexp_replace(body, '\\s+', ' ', 'g'), $3) AS excerpt,
-            "taskId"
-       FROM matches
-      WHERE to_tsvector('simple', title || ' ' || body) @@ websearch_to_tsquery('simple', $2)
-      ORDER BY updated_at DESC, id DESC
+            "taskId"`;
+
+  let citations = await query<KnowledgeCitation>(
+    `WITH matches AS (${sources})
+     ${select}
+       FROM matches, websearch_to_tsquery('english', $2) AS q
+      WHERE tsv @@ q
+      ORDER BY ts_rank(tsv, q) DESC, id DESC
       LIMIT 12`,
-    [workspaceId, term, EXCERPT_LENGTH, boardIds, fullReader, actor]
+    params
   );
+
+  if (!citations.length) {
+    citations = await query<KnowledgeCitation>(
+      `WITH matches AS (${sources})
+       ${select}
+         FROM matches
+        WHERE fuzzy IS NOT NULL AND word_similarity($2, fuzzy) > 0.5
+        ORDER BY word_similarity($2, fuzzy) DESC, id DESC
+        LIMIT 12`,
+      params
+    );
+  }
 
   if (!citations.length) {
     return { answer: "I could not find authorized workspace sources that match that question.", citations: [] };

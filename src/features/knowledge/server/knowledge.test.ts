@@ -159,6 +159,74 @@ describe("workspace knowledge Q&A", () => {
     });
   });
 
+  /**
+   * 084 replaced 072's unstemmed, recency-ordered retrieval. These cases pin
+   * what changed: stemming, relevance ordering, and a fuzzy arm for typos —
+   * plus the fact that the fuzzy arm is a second query, and therefore a second
+   * chance to leak a board, which it must not take.
+   */
+  describe("ranking and fuzzy matching", () => {
+    const RANK = "quibblex";
+    let denseId: number;
+    let passingId: number;
+
+    beforeAll(async () => {
+      const columnId = await firstColumn(alice, openBoardId);
+      denseId = (
+        await createTask(alice, {
+          columnId,
+          title: `The ${RANK} ${RANK} migration`,
+          description: `Everything about ${RANK}.`,
+        })
+      ).id;
+      // Created second, so under 072's updated_at ordering this would have come
+      // first despite mentioning the term once, in passing.
+      passingId = (
+        await createTask(alice, {
+          columnId,
+          title: "Unrelated cleanup",
+          description: `Mentions ${RANK} once.`,
+        })
+      ).id;
+    });
+
+    it("ranks by relevance, not by recency", async () => {
+      const { citations } = await askWorkspaceKnowledge(alice, workspaceId, RANK);
+      const ranked = taskIds(citations);
+      expect(ranked).toEqual(expect.arrayContaining([denseId, passingId]));
+      expect(ranked.indexOf(denseId)).toBeLessThan(ranked.indexOf(passingId));
+    });
+
+    it("stems, so a plural finds the singular the workspace wrote", async () => {
+      const { citations } = await askWorkspaceKnowledge(
+        alice,
+        workspaceId,
+        `${RANK} migrations`
+      );
+      expect(taskIds(citations)).toContain(denseId);
+    });
+
+    it("falls back to fuzzy title matching for a typo", async () => {
+      // No full-text match: 'migratoin' is not a word the workspace contains.
+      const { citations } = await askWorkspaceKnowledge(
+        alice,
+        workspaceId,
+        `${RANK} migratoin`
+      );
+      expect(taskIds(citations)).toContain(denseId);
+    });
+
+    it("keeps the fuzzy arm inside the same board filter", async () => {
+      const typo = `${TERM} acquisitoin`;
+      // The closed task's title, misspelled: the owner reaches it…
+      expect(taskIds((await askWorkspaceKnowledge(alice, workspaceId, typo)).citations))
+        .toContain(closedTaskId);
+      // …and the guest granted only the open board still cannot.
+      const guest = await askWorkspaceKnowledge(gary, workspaceId, typo);
+      expect(taskIds(guest.citations)).not.toContain(closedTaskId);
+    });
+  });
+
   describe("the board-read filter", () => {
     it("shows a granted guest the open board and NOT the closed one", async () => {
       const { citations } = await askWorkspaceKnowledge(gary, workspaceId, TERM);

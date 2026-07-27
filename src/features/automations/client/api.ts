@@ -39,6 +39,24 @@ export function createAutomation(
   }).then((res) => jsonOrThrow<AutomationRule>(res));
 }
 
+/**
+ * Asks the server for a rule draft (4.4). Returns the proposed input and which
+ * drafter produced it — the caller still POSTs it to create, so nothing this
+ * returns has touched the board.
+ */
+export function draftAutomation(
+  boardId: number,
+  prompt: string
+): Promise<{ rule: CreateAutomationRuleInput; source: "model" | "phrasebook" }> {
+  return fetch(`/api/board/${boardId}/automations/draft`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
+  }).then((res) =>
+    jsonOrThrow<{ rule: CreateAutomationRuleInput; source: "model" | "phrasebook" }>(res)
+  );
+}
+
 export function updateAutomation(
   id: number,
   input: UpdateAutomationRuleInput

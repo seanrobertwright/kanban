@@ -14,7 +14,6 @@ import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
 import * as api from "../client/api";
-import { draftAutomation } from "../lib/draft";
 import * as slaApi from "@/features/sla/client/api";
 import type { SlaPolicy } from "@/features/sla/types";
 import { fetchIntegrations, fetchMembers } from "@/features/workspaces/client/api";
@@ -156,7 +155,7 @@ export function AutomationsDialog({
         )}
 
         {canManage && (
-          <WorkflowDraft boardId={boardId} columns={columns} onCreated={reload} />
+          <WorkflowDraft boardId={boardId} onCreated={reload} />
         )}
 
         {canManage && (
@@ -193,10 +192,17 @@ export function AutomationsDialog({
   );
 }
 
-function WorkflowDraft({ boardId, columns, onCreated }: { boardId:number; columns:AutomationsColumn[]; onCreated:()=>Promise<void> }) {
-  const [prompt,setPrompt]=useState(""); const [error,setError]=useState<string|null>(null); const [busy,setBusy]=useState(false);
-  async function create(){const draft=draftAutomation(prompt,columns); if(!draft){setError("Try: ‘When a PR merges, move it to Done’ or ‘When CI fails, comment: investigate’.");return;} setBusy(true);setError(null);try{await api.createAutomation(boardId,draft);await onCreated();setPrompt("");}catch(e){setError(e instanceof Error?e.message:"Could not save draft");}finally{setBusy(false);}}
-  return <section className="grid gap-2 rounded-lg border border-dashed p-3"><p className="text-sm font-medium">Describe an automation</p><Textarea value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="When a PR merges, move it to Done" /><p className="text-xs text-muted-foreground">Creates a disabled draft for an admin to inspect and enable. It never activates a rule automatically.</p>{error&&<p className="text-xs text-destructive">{error}</p>}<Button size="sm" disabled={busy||!prompt.trim()} onClick={()=>void create()}>{busy?"Drafting…":"Create review draft"}</Button></section>;
+/**
+ * The 4.4 builder. Drafting happens server-side (the model there, the board's
+ * real column/label/member ids there, the same validators the create route
+ * runs); this only sends the sentence and posts back what came out. A draft
+ * always arrives disabled, so the row it adds sits inert until an admin flips
+ * it on.
+ */
+function WorkflowDraft({ boardId, onCreated }: { boardId:number; onCreated:()=>Promise<void> }) {
+  const [prompt,setPrompt]=useState(""); const [error,setError]=useState<string|null>(null); const [busy,setBusy]=useState(false); const [note,setNote]=useState<string|null>(null);
+  async function create(){setBusy(true);setError(null);setNote(null);try{const {rule,source}=await api.draftAutomation(boardId,prompt);await api.createAutomation(boardId,{...rule,isEnabled:false});await onCreated();setPrompt("");setNote(source==="model"?"Drafted and disabled — review it below, then enable.":"Drafted from the built-in phrasebook (no AI model configured) — review it below.");}catch(e){setError(e instanceof Error?e.message:"Could not draft that rule");}finally{setBusy(false);}}
+  return <section className="grid gap-2 rounded-lg border border-dashed p-3"><p className="text-sm font-medium">Describe an automation</p><Textarea value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="When a bug is set to high priority, assign it to Dana and comment: on it" /><p className="text-xs text-muted-foreground">Creates a disabled draft for an admin to inspect and enable. It never activates a rule automatically.</p>{error&&<p className="text-xs text-destructive">{error}</p>}{note&&<p className="text-xs text-muted-foreground">{note}</p>}<Button size="sm" disabled={busy||!prompt.trim()} onClick={()=>void create()}>{busy?"Drafting…":"Create review draft"}</Button></section>;
 }
 
 /** Human-readable summaries so a saved rule reads back as a sentence. */
