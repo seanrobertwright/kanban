@@ -15,11 +15,8 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import * as api from "../client/api";
-import { AgentsDialog } from "@/features/agents/components/agents-dialog";
-import { WebhooksDialog } from "@/features/webhooks/components/webhooks-dialog";
-import { RepoConnectionsDialog } from "@/features/git/components/repo-connections-dialog";
+import { openSettings } from "@/features/settings/components/settings-dialog";
 import { CreateDialog } from "./create-dialog";
-import { MembersDialog } from "./members-dialog";
 import {
   DeleteWorkspaceDialog,
   RenameWorkspaceDialog,
@@ -32,20 +29,14 @@ interface BoardSwitcherProps {
   /** Every board across `workspaces` — grouped by workspace for display. */
   boards: Board[];
   currentBoardId: number;
-  currentUserId: string;
 }
 
 export function BoardSwitcher({
   workspaces,
   boards,
   currentBoardId,
-  currentUserId,
 }: BoardSwitcherProps) {
   const router = useRouter();
-  const [membersOpen, setMembersOpen] = useState(false);
-  const [agentsOpen, setAgentsOpen] = useState(false);
-  const [webhooksOpen, setWebhooksOpen] = useState(false);
-  const [reposOpen, setReposOpen] = useState(false);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   /** The workspace a new board is being created in, or null when idle. */
   const [newBoardIn, setNewBoardIn] = useState<WorkspaceMembership | null>(null);
@@ -160,7 +151,7 @@ export function BoardSwitcher({
 
           <DropdownMenuGroup>
             <DropdownMenuItem
-              onClick={() => openLater(() => setMembersOpen(true))}
+              onClick={() => openLater(() => openSettings("members"))}
             >
               <Users /> Members
             </DropdownMenuItem>
@@ -169,7 +160,7 @@ export function BoardSwitcher({
             {(currentWorkspace.role === "owner" ||
               currentWorkspace.role === "admin") && (
               <DropdownMenuItem
-                onClick={() => openLater(() => setAgentsOpen(true))}
+                onClick={() => openLater(() => openSettings("agents"))}
               >
                 <Bot /> Agents
               </DropdownMenuItem>
@@ -178,7 +169,7 @@ export function BoardSwitcher({
             {(currentWorkspace.role === "owner" ||
               currentWorkspace.role === "admin") && (
               <DropdownMenuItem
-                onClick={() => openLater(() => setWebhooksOpen(true))}
+                onClick={() => openLater(() => openSettings("webhooks"))}
               >
                 <Webhook /> Webhooks
               </DropdownMenuItem>
@@ -187,7 +178,7 @@ export function BoardSwitcher({
             {(currentWorkspace.role === "owner" ||
               currentWorkspace.role === "admin") && (
               <DropdownMenuItem
-                onClick={() => openLater(() => setReposOpen(true))}
+                onClick={() => openLater(() => openSettings("repositories"))}
               >
                 <GitBranch /> Repositories
               </DropdownMenuItem>
@@ -200,31 +191,6 @@ export function BoardSwitcher({
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <MembersDialog
-        open={membersOpen}
-        onOpenChange={setMembersOpen}
-        workspace={currentWorkspace}
-        currentUserId={currentUserId}
-      />
-
-      <AgentsDialog
-        open={agentsOpen}
-        onOpenChange={setAgentsOpen}
-        workspace={currentWorkspace}
-      />
-
-      <WebhooksDialog
-        open={webhooksOpen}
-        onOpenChange={setWebhooksOpen}
-        workspace={currentWorkspace}
-      />
-
-      <RepoConnectionsDialog
-        open={reposOpen}
-        onOpenChange={setReposOpen}
-        workspace={currentWorkspace}
-      />
 
       <CreateDialog
         open={newBoardIn !== null}

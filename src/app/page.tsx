@@ -221,7 +221,6 @@ export default async function Home({
             workspaces={workspaces}
             boards={boards}
             currentBoardId={data.board.id}
-            currentUserId={session.user.id}
           />
         </div>
 

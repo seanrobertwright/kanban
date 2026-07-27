@@ -31,7 +31,6 @@ function renderSwitcher(props?: Partial<React.ComponentProps<typeof BoardSwitche
       workspaces={[workspace]}
       boards={[board]}
       currentBoardId={1}
-      currentUserId="user-1"
       {...props}
     />
   );

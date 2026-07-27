@@ -17,6 +17,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import {
   CalendarDays,
   ChartNoAxesColumn,
+  Building2,
   ChevronDown,
   ClipboardList,
   Clock,
@@ -24,6 +25,7 @@ import {
   Flag,
   GanttChartSquare,
   Gauge,
+  GitBranch,
   Inbox,
   Landmark,
   Layers,
@@ -31,11 +33,14 @@ import {
   LayoutTemplate,
   Lightbulb,
   List,
+  Lock,
+  Mail,
   Map as MapIcon,
   MoreHorizontal,
   Plus,
   Bot,
   Rocket,
+  ScrollText,
   Settings,
   Share2,
   Shield,
@@ -70,7 +75,12 @@ import {
   openSettings,
   type SettingsSection,
 } from "@/features/settings/components/settings-dialog";
-import { AdminConsoleDialog } from "@/features/admin/components/admin-console-dialog";
+import { AuditLogPanel } from "@/features/admin/components/audit-log-panel";
+import { EmailIntakePanel } from "@/features/admin/components/email-intake-panel";
+import { PermissionsPanel } from "@/features/admin/components/permissions-panel";
+import { SecurityPanel } from "@/features/admin/components/security-panel";
+import { WorkspaceOverviewPanel } from "@/features/admin/components/workspace-overview-panel";
+import { RepoConnectionsDialog } from "@/features/git/components/repo-connections-dialog";
 import { MembersDialog } from "@/features/workspaces/components/members-dialog";
 import { AgentsDialog } from "@/features/agents/components/agents-dialog";
 import { WebhooksDialog } from "@/features/webhooks/components/webhooks-dialog";
@@ -690,8 +700,23 @@ export function Board({
    * fetches one panel's data rather than fifteen.
    */
   const close = useCallback(() => setSettingsSection(null), []);
+  // Administration is admin+, and each of its panels refuses below that rank
+  // server-side. The nav simply stops advertising doors that would not open.
+  const isAdmin = workspace.role === "owner" || workspace.role === "admin";
   const settingsSections = useMemo<SettingsSection[]>(
     () => [
+      ...(isAdmin
+        ? [
+            {
+              id: "overview",
+              label: "Overview",
+              group: "Workspace",
+              icon: Building2,
+              description: "What this workspace currently contains.",
+              render: () => <WorkspaceOverviewPanel workspace={workspace} />,
+            } satisfies SettingsSection,
+          ]
+        : []),
       {
         id: "members",
         label: "Members",
@@ -727,28 +752,61 @@ export function Board({
           <WebhooksDialog open onOpenChange={close} workspace={workspace} />
         ),
       },
-      // Owner/admin only, and the console itself refuses below that rank — the
-      // nav simply stops advertising a door that would not open.
-      ...(workspace.role === "owner" || workspace.role === "admin"
-        ? [
+      // The old admin console's five topics, each now its own section. It used
+      // to stack them in one scrolling modal that opened Members, Agents and
+      // Webhooks as modals on top of itself — the three sections above.
+      ...(isAdmin
+        ? ([
             {
-              id: "admin",
-              label: "Administration",
+              id: "permissions",
+              label: "Permissions",
               group: "Workspace",
               icon: Shield,
-              description:
-                "Permissions, field access, audit log, intake and network policy.",
+              description: "Who may reach which board, and which field.",
               render: () => (
-                <AdminConsoleDialog
+                <PermissionsPanel workspace={workspace} boards={boards} />
+              ),
+            },
+            {
+              id: "repositories",
+              label: "Repositories",
+              group: "Workspace",
+              icon: GitBranch,
+              description: "The code repositories this workspace links work to.",
+              render: () => (
+                <RepoConnectionsDialog
                   open
                   onOpenChange={close}
                   workspace={workspace}
-                  currentUserId={currentUserId}
-                  boards={boards}
                 />
               ),
-            } satisfies SettingsSection,
-          ]
+            },
+            {
+              id: "intake",
+              label: "Email intake",
+              group: "Workspace",
+              icon: Mail,
+              description: "The inbound address that files mail as tasks.",
+              render: () => <EmailIntakePanel workspace={workspace} />,
+            },
+            {
+              id: "audit",
+              label: "Audit log",
+              group: "Workspace",
+              icon: ScrollText,
+              description: "Every action taken here, by people and by agents.",
+              render: () => <AuditLogPanel workspace={workspace} boards={boards} />,
+            },
+            {
+              id: "security",
+              label: "Security & compliance",
+              group: "Workspace",
+              icon: Lock,
+              description:
+                "Network policy, retention, legal holds, identity and integrations.",
+              render: () => <SecurityPanel workspace={workspace} />,
+            },
+          ] satisfies SettingsSection[])
         : []),
       {
         id: "labels",
@@ -932,6 +990,7 @@ export function Board({
     ],
     [
       close,
+      isAdmin,
       workspace,
       currentUserId,
       boards,
