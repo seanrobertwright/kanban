@@ -1,4 +1,93 @@
-# Session Handoff — Phase 3 Complete
+# Session Handoff — Kanban (2026-07-28)
+
+**Repo:** `C:\Users\seanr\OneDrive\Documents\scrap\kanban` · **Branch:** `master` (pushed, clean)
+**Head:** `bef98b5` · Session commits: `21be093`, `bef98b5` (plus the fast-forward that landed `9aa9731`)
+
+---
+
+## ⚠️ Read first
+
+1. **`CLAUDE.md` says "You must always speak caveman."** Honour it in conversational prose to the user. Deliverables — code, commit messages, docs, this file — stay in normal precise English. (Last session drifted out of caveman partway; don't.)
+2. **`AGENTS.md`: this is not the Next.js you know.** Read the relevant guide in `node_modules/next/dist/docs/` before writing framework code.
+3. **`devdocs/prd.md` §7/§12:** anything touching **agent behaviour/budgets** or **export/product forks** goes through `AskUserQuestion` *before* building. Both AI rocks and the extension capability change this session did exactly that — keep the practice.
+
+## Where things stand
+
+Phases 1, 2, 3, 5 complete; the code-review roadmap in `complete-code-review.md` §5 is now fully worked through. Durable records — read these rather than re-deriving:
+
+| Doc | What it is |
+|---|---|
+| `devdocs/TASKS.md` | The task ledger. **Tail two sections are this session's work** and list what shipped and why. |
+| `devdocs/SPEC.md` | The 53-rock build-out plan, phase by phase. |
+| `complete-code-review.md` | 2026-07-25 audit; §5 is the priority roadmap (items 1–10). |
+| `comprehensive-uat.md` | ~100-case UAT plan, **never executed**. User has explicitly deferred it until all other rocks are smashed. |
+| `docs/task_management_feature_summary.md` | The 140-row scoreboard. Rows edited this session say what is *actually* true — keep it honest. |
+| Prior handoffs (below in this file) | Phase 3 and feature-breadth eras. Useful for older gotchas only. |
+
+## What this session did
+
+Read the two commit messages — they are the design records and are deliberately detailed:
+
+- **`21be093`** — truth pass on the two AI rocks the review called overclaims (4.4 workflow builder, 4.3 knowledge retrieval). New: `src/features/automations/server/{draft,validate}.ts`, `POST /api/board/[id]/automations/draft`, migration `084_knowledge_search_ranked.sql`.
+- **`bef98b5`** — Phase 6/7/8 leftovers: eDiscovery (6.7) onto the real index with hold flags and reported truncation; extension capabilities (8.1) from one word to four read-only scopes.
+
+**Survey result worth not repeating:** most Phase 6/7 rocks are genuinely shipped — SSO (6.1), SCIM (6.2), admin console (6.4), retention + legal hold (6.6), IP allowlist (6.8), all five Phase 7 integrations, and 6.3's `permission_grant` + central `can()`. 6.5 encryption already covers every secret the app stores itself (git tokens, integration OAuth, webhook signing keys); SCIM bearer tokens are owned by the better-auth plugin.
+
+## Verification bar (met at handoff)
+
+`npx tsc --noEmit` clean · `npm test` → **125 files / 998 passing / 1 expected fail** · `npm run build` clean · eslint clean except the grandfathered `react-hooks/set-state-in-effect` error in `src/features/admin/components/enterprise-controls.tsx:62` (pre-existing).
+
+Hold the same bar per slice: migration → types → repository → handlers → route → client → UI, real-DB tests, one commit per feature.
+
+## Gotchas learned this session
+
+- **Migration 084 must be applied** (`npm run db:migrate`) before knowledge or eDiscovery tests pass. It adds STORED generated `search_tsv` columns and `pg_trgm`.
+- **`word_similarity`, not `similarity`**, for the trigram fallback: whole-string `similarity` scores a one-word query against a multi-word title far below any usable threshold, so the fallback would look implemented and never fire.
+- **`FROM t, q JOIN …` binds the JOIN to `q`.** Put a CTE cross-join *last* (`FROM task t JOIN … CROSS JOIN q`) or Postgres rejects the FROM-clause reference. Cost one debugging round in `ediscovery.ts`.
+- **`label.color` is an enum** (`slate|red|amber|green|sky|violet|pink`), not a hex string.
+- **Don't write template literals into test files via a bash heredoc** — the shell executes the backticks. Use the Write/Edit tools.
+- `structured outputs` on `client.messages.create` typecheck fine as `output_config: { effort, format: { type: "json_schema", schema } }` with the installed SDK (`@anthropic-ai/sdk` ^0.112.1). Model id in use: `claude-opus-5`.
+- Full-suite runs occasionally show one flaky `waitFor` timeout in a component test under load; it did not reproduce in three isolated runs. Watch, don't chase.
+
+## Remaining rocks (verified against code, ranked)
+
+Recommended order: **1 → 2 → 5 → 3/4 → 6 → 8 → 7**, then the UAT.
+
+1. **GraphQL has no guard rails.** `/api/graphql` is live with two query fields, **no depth or complexity limit**, one test. Production hole, not test debt.
+2. **Agent doors don't reach the new AI work.** `propose_schedule` (4.1) and risk scoring (4.2) exist as pure libs + `src/app/api/board/[id]/schedule` but are **agent tools in neither door**; SPEC 4.1 names the tool. Same for `set_objective` / `score_key_result` (open in `devdocs/TASKS.md`). Cheapest capability-per-line left — the hard half is built and tested.
+3. **Public feedback portal** — SPEC 3.9's tokenized external intake. Public *forms* shipped (`/public/forms/[token]`); feedback did not.
+4. **Requests is a read-only dialog**, not the specced `view_mode='requests'` board lens with triage.
+5. **Attachments throw without S3 env** (`src/features/attachments/server/storage.ts`) — no local-disk fallback, so a fresh self-host has no attachments at all.
+6. **Test-debt tail** — 18 slices at exactly one test file; thinnest where it matters: `graphql`, `whiteboards`, `chat`, `dependencies`, `checklists`.
+7. **Roadmap item 10, untouched** — theme pass (neon-grid vs "enterprise-ready", see `docs/Kanban tool design synthesis/`), keyboard chords, empty states applied everywhere (primitive exists).
+8. **Small ones from the review's per-feature table** — epics name-only; dependencies `blocked_by` only (no FS/SS/FF/lag); reports forecast metric; docs `[[wiki links]]` + tree UI; capacity has no time-off model; extensions fire N fetches per card render.
+
+**Explicitly decided, not forgotten:** embeddings/pgvector for 4.3 (needs an embedding vendor this self-hosted app doesn't otherwise depend on); `script` actions excluded from the AI drafter's DTO; extensions get **no write capability**.
+
+## To resume
+
+1. `docker compose up -d`; `npm run db:migrate`; `npm run dev` → http://localhost:3000. `npm run realtime` in a second terminal only for collaborative-editing work.
+2. `git log -2` and read those two commit messages before touching automations, knowledge, admin, or extensions.
+3. Pick rock 1 unless the user redirects. Ask via `AskUserQuestion` before any agent-behaviour or blast-radius choice.
+
+## Suggested skills
+
+| Skill | When |
+|---|---|
+| `/code-review` | Before committing a slice — hunts bugs, which `/simplify` deliberately does not. |
+| `/simplify` | After a slice lands: reuse, altitude, and dead-code cleanups on the changed files only. |
+| `/codex` (review or challenge mode) | Adversarial second opinion on rock 1 (GraphQL limits) and rock 5 (storage fallback) — both are "what breaks in production" questions. |
+| `/tdd` | Rock 6 (test-debt tail) and rock 1, where the test *is* the deliverable. |
+| `/diagnose` or `/investigate` | If the flaky component-test `waitFor` reappears — root cause before touching it. |
+| `/design-review` or `/plan-design-review` | Rock 7 (theme pass) — the project's own design synthesis already prescribes the target. |
+| `/browse` or `/run` | Verifying UI-shaped rocks (3, 4, 7) in the real app rather than in tests. |
+| `/document-release` | After a batch lands, to sync `README`/`devdocs` with what shipped. |
+
+Do **not** start `comprehensive-uat.md` — the user has deferred it until the rocks above are done.
+
+---
+
+# Prior Handoff — Phase 3 Complete
 
 **Date:** 2026-07-23
 
