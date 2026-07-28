@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { addDependency } from "@/features/dependencies/server/repository";
 import { getBoard } from "@/features/board/server/repository";
-import { createTask } from "@/features/tasks/server/repository";
+import { createTask, getTask } from "@/features/tasks/server/repository";
 import {
   ensurePersonalWorkspace,
   getDefaultBoard,
@@ -106,6 +107,39 @@ describe("door 1 tools", () => {
     const task = await call("get_task", { id: overdue });
     expect(task.id).toBe(overdue);
     expect(task.risk.level).toBeTruthy();
+  });
+
+  it("proposes a schedule without writing one", async () => {
+    const first = (await createTask(alice, {
+      columnId: todoId,
+      title: "Schedule me first",
+      estimate: 3,
+    })).id;
+    const second = (await createTask(alice, {
+      columnId: todoId,
+      title: "Schedule me second",
+      estimate: 3,
+    })).id;
+    await addDependency(alice, second, first);
+
+    const proposals = await call("propose_schedule", { boardId });
+    const one = proposals.find((r: { taskId: number }) => r.taskId === first);
+    const two = proposals.find((r: { taskId: number }) => r.taskId === second);
+    expect(one).toBeTruthy();
+    // The blocked task cannot start before its blocker's due date — the whole
+    // point of a dependency-ordered pass.
+    expect(two.startDate >= one.dueDate).toBe(true);
+
+    // And nothing landed. This is the tool's contract, not an implementation
+    // detail: the agent plans, a human applies.
+    expect((await getTask(alice, first))!.dueDate).toBeNull();
+    expect((await getTask(alice, second))!.startDate).toBeNull();
+  });
+
+  it("publishes no tool that applies a whole schedule", () => {
+    const names = buildTools(ctx, boardId, null).map((t) => t.name);
+    expect(names).toContain("propose_schedule");
+    expect(names.some((n) => /apply_schedule|set_schedule/.test(n))).toBe(false);
   });
 
   it("defaults the board to the one the run is on", async () => {

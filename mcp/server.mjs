@@ -705,6 +705,13 @@ tool(
 );
 
 tool(
+  "propose_schedule",
+  "Propose start and due dates for a board's tasks (4.1): dependency-ordered, respecting each assignee's weekly capacity, with the reasons behind each date. A PROPOSAL — this writes nothing. Report it, or set the dates you agree with one at a time with set_due_date, which is a change a human can see and undo. There is deliberately no tool that applies a whole proposed schedule.",
+  { boardId: z.number().int().optional() },
+  async ({ boardId }) => api("GET", `/api/board/${await board(boardId)}/schedule`)
+);
+
+tool(
   "score_risk",
   "Delivery risk across a board (4.2): every task showing a signal, highest first, each with a 0–1 score, a low/medium/high level, and the reasons behind it (overdue since a date, blocked by N tasks, open for N days). Deterministic — the score comes from board facts, never from a judgement about the work. Use it to decide what to raise, not as permission to reprioritise.",
   { boardId: z.number().int().optional() },

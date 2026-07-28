@@ -14,6 +14,7 @@ import { createComment } from "@/features/comments/server/repository";
 import { addDependency } from "@/features/dependencies/server/repository";
 import { getBoard } from "@/features/board/server/repository";
 import { getBoardRisks, getTaskRisk } from "@/features/board/server/analytics";
+import { getScheduleProposal } from "@/features/board/server/schedule-proposal";
 import { listActivityForTask } from "@/features/activity/server/repository";
 import { gate, type RunContext } from "./gate";
 
@@ -89,6 +90,18 @@ export function buildTools(
         if (!task) return `No task ${id} in your workspace.`;
         return json({ ...task, risk: await getTaskRisk(p, id) });
       },
+    }),
+    betaZodTool({
+      name: "propose_schedule",
+      description:
+        "Propose start and due dates for a board's tasks (4.1): a dependency-ordered pass that respects each assignee's weekly capacity, returning a start/due date per task with the reasons behind it. A PROPOSAL — nothing is written. Report it, or set the dates you agree with one at a time via set_due_date, which is a change a human can see and undo.",
+      inputSchema: z.object({ boardId: z.number().int().optional() }),
+      // Read-only on purpose. applyScheduleProposal exists and would fit here in
+      // one line, but it rewrites the dates of every task on the board in a
+      // single call — a blast radius with no natural unit for a human to review.
+      // The agent computes the plan; a person applies it.
+      run: async ({ boardId }) =>
+        json(await getScheduleProposal(p, boardId ?? defaultBoardId)),
     }),
     betaZodTool({
       name: "score_risk",
