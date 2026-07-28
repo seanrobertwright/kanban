@@ -1,5 +1,10 @@
 import { query, queryOne } from "@/shared/db/client";
-import type { Principal } from "@/features/auth/server/principal";
+import { principalActor, type Principal } from "@/features/auth/server/principal";
+import {
+  createObjective,
+  updateKeyResult,
+  updateObjective,
+} from "@/features/objectives/server/repository";
 import {
   AuthzError,
   requireTaskRole,
@@ -191,6 +196,43 @@ async function applyProposed(
       await updateChecklistItem(agent, input.itemId as number, {
         content: input.content as string | undefined,
         done: input.done as boolean | undefined,
+      });
+      return true;
+    case "set_objective":
+      // One tool, two shapes, because "set" is what the agent asked for and the
+      // presence of an id is the whole difference. The recorded input carries
+      // boardId on a create precisely so this can run without the request that
+      // proposed it.
+      if (input.id === undefined) {
+        await createObjective(
+          agent,
+          input.boardId as number,
+          {
+            name: input.name as string,
+            description: input.description as string | undefined,
+            dueDate: input.dueDate as string | null | undefined,
+          },
+          principalActor(agent)
+        );
+      } else {
+        await updateObjective(
+          agent,
+          input.id as number,
+          {
+            name: input.name as string | undefined,
+            description: input.description as string | undefined,
+            ...("dueDate" in input ? { dueDate: input.dueDate as string | null } : {}),
+          },
+          principalActor(agent)
+        );
+      }
+      return true;
+    // Auto-tier by default, and here for the same reason the other auto tools
+    // are: an admin who raises it for one agent must get a proposal that can
+    // actually be accepted.
+    case "score_key_result":
+      await updateKeyResult(agent, input.id as number, {
+        currentValue: input.currentValue as number,
       });
       return true;
     case "set_custom_fields":

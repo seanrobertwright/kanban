@@ -128,12 +128,12 @@ function snapshot(objective: Objective): ObjectiveSnapshot {
 }
 
 export async function createObjective(
-  userId: string,
+  actor: string | Principal,
   boardId: number,
   input: CreateObjectiveInput,
   by: Actor
 ): Promise<Objective> {
-  const { workspaceId } = await requireBoardRole(userId, boardId, "member");
+  const { workspaceId } = await requireBoardRole(actor, boardId, "member");
 
   return withTransaction(async (client) => {
     const { rows } = await client.query<{ id: number }>(
@@ -178,7 +178,7 @@ export async function assertObjectiveOnBoard(
 
 /** Resolves the objective's own board — the one-join not_found rule. */
 async function requireObjective(
-  userId: string,
+  actor: string | Principal,
   id: number
 ): Promise<{ boardId: number; workspaceId: string }> {
   const row = await queryOne<{ boardId: number }>(
@@ -186,17 +186,17 @@ async function requireObjective(
     [id]
   );
   if (!row) throw new AuthzError("not_found", "Objective not found");
-  const { workspaceId } = await requireBoardRole(userId, row.boardId, "member");
+  const { workspaceId } = await requireBoardRole(actor, row.boardId, "member");
   return { boardId: row.boardId, workspaceId };
 }
 
 export async function updateObjective(
-  userId: string,
+  actor: string | Principal,
   id: number,
   input: UpdateObjectiveInput,
   by: Actor
 ): Promise<Objective | undefined> {
-  const { boardId, workspaceId } = await requireObjective(userId, id);
+  const { boardId, workspaceId } = await requireObjective(actor, id);
 
   return withTransaction(async (client) => {
     const before = await selectObjective(client, id);
@@ -267,7 +267,7 @@ export async function deleteObjective(
 /** Resolves a key result's objective and the caller's standing on its board.
  *  Member — editing a measure is editing the objective's data. */
 async function requireKeyResult(
-  userId: string,
+  actor: string | Principal,
   keyResultId: number
 ): Promise<{ objectiveId: number }> {
   const row = await queryOne<{ objectiveId: number; boardId: number }>(
@@ -277,7 +277,7 @@ async function requireKeyResult(
     [keyResultId]
   );
   if (!row) throw new AuthzError("not_found", "Key result not found");
-  await requireBoardRole(userId, row.boardId, "member");
+  await requireBoardRole(actor, row.boardId, "member");
   return { objectiveId: row.objectiveId };
 }
 
@@ -287,11 +287,11 @@ async function requireKeyResult(
  * defaults to start ("start where it starts"), start to 0.
  */
 export async function createKeyResult(
-  userId: string,
+  actor: string | Principal,
   objectiveId: number,
   input: CreateKeyResultInput
 ): Promise<Objective> {
-  await requireObjective(userId, objectiveId);
+  await requireObjective(actor, objectiveId);
   const start = input.startValue ?? 0;
   const current = input.currentValue ?? start;
 
@@ -309,11 +309,11 @@ export async function createKeyResult(
 }
 
 export async function updateKeyResult(
-  userId: string,
+  actor: string | Principal,
   id: number,
   input: UpdateKeyResultInput
 ): Promise<Objective> {
-  const { objectiveId } = await requireKeyResult(userId, id);
+  const { objectiveId } = await requireKeyResult(actor, id);
 
   return withTransaction(async (client) => {
     await client.query(

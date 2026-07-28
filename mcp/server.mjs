@@ -705,6 +705,36 @@ tool(
 );
 
 tool(
+  "list_objectives",
+  "A board's objectives and their key results (037), each with progress rolled up from the key results' current values. Key-result ids for score_key_result come from here.",
+  { boardId: z.number().int().optional() },
+  async ({ boardId }) => api("GET", `/api/board/${await board(boardId)}/objectives`)
+);
+
+tool(
+  "score_key_result",
+  "Record a key result's current value — the measurement, not the target. Ids come from list_objectives. This is how you report progress on an objective; you cannot change what a key result measures or what it aims at, and an attempt to send any other field is refused.",
+  { id: z.number().int(), currentValue: z.number() },
+  ({ id, currentValue }) => api("PATCH", `/api/key-results/${id}`, { currentValue })
+);
+
+tool(
+  "set_objective",
+  "Create an objective on a board, or edit one by id: name, description, due date. Consequential — an objective states what the team is for — so by default this is held as a proposal for a human to accept (HELD_FOR_REVIEW), not applied. To report progress on an objective that already exists, use score_key_result instead.",
+  {
+    id: z.number().int().optional(),
+    boardId: z.number().int().optional(),
+    name: z.string().min(1).optional(),
+    description: z.string().optional(),
+    dueDate: isoDate.nullish(),
+  },
+  async ({ id, boardId, ...fields }) =>
+    id === undefined
+      ? api("POST", `/api/board/${await board(boardId)}/objectives`, fields)
+      : api("PATCH", `/api/objectives/${id}`, fields)
+);
+
+tool(
   "propose_schedule",
   "Propose start and due dates for a board's tasks (4.1): dependency-ordered, respecting each assignee's weekly capacity, with the reasons behind each date. A PROPOSAL — this writes nothing. Report it, or set the dates you agree with one at a time with set_due_date, which is a change a human can see and undo. There is deliberately no tool that applies a whole proposed schedule.",
   { boardId: z.number().int().optional() },

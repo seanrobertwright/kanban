@@ -15,6 +15,13 @@ import { addDependency } from "@/features/dependencies/server/repository";
 import { getBoard } from "@/features/board/server/repository";
 import { getBoardRisks, getTaskRisk } from "@/features/board/server/analytics";
 import { getScheduleProposal } from "@/features/board/server/schedule-proposal";
+import {
+  createObjective,
+  listObjectives,
+  updateKeyResult,
+  updateObjective,
+} from "@/features/objectives/server/repository";
+import { principalActor } from "@/features/auth/server/principal";
 import { listActivityForTask } from "@/features/activity/server/repository";
 import { gate, type RunContext } from "./gate";
 
@@ -90,6 +97,14 @@ export function buildTools(
         if (!task) return `No task ${id} in your workspace.`;
         return json({ ...task, risk: await getTaskRisk(p, id) });
       },
+    }),
+    betaZodTool({
+      name: "list_objectives",
+      description:
+        "A board's objectives and their key results (037), each with its progress rolled up from the key results' current values. Key-result ids for score_key_result come from here.",
+      inputSchema: z.object({ boardId: z.number().int().optional() }),
+      run: async ({ boardId }) =>
+        json(await listObjectives(p, boardId ?? defaultBoardId)),
     }),
     betaZodTool({
       name: "propose_schedule",
@@ -354,7 +369,77 @@ export function buildTools(
         }),
     }),
 
+    betaZodTool({
+      name: "score_key_result",
+      description:
+        "Record a key result's current value (037) — the measurement, not the target. Ids come from list_objectives. This is how you report progress on an objective; you cannot change what the key result measures or what it is aiming at.",
+      inputSchema: z.object({
+        id: z.number().int(),
+        currentValue: z.number(),
+      }),
+      run: ({ id, currentValue }) =>
+        gate(ctx, {
+          tool: "score_key_result",
+          input: { id, currentValue },
+          // Not a task, so no snapshot: a key result is not board state a
+          // TaskSnapshot could hold, and the input is the whole record.
+          taskId: null,
+          execute: () => updateKeyResult(p, id, { currentValue }),
+          describe: () => `Set key result ${id} to ${currentValue}.`,
+          proposal: `set key result ${id} current value to ${currentValue}`,
+        }),
+    }),
+
     // ---- changeset tier -------------------------------------------------
+    betaZodTool({
+      name: "set_objective",
+      description:
+        "Create an objective on a board, or edit one by id (037): its name, description, and due date. A consequential change — an objective says what the team is for — so it is held for human review by default. Use score_key_result to report progress against one that already exists.",
+      inputSchema: z.object({
+        id: z.number().int().optional(),
+        boardId: z.number().int().optional(),
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        dueDate: z.string().nullish(),
+      }),
+      run: ({ id, boardId, name, description, dueDate }) => {
+        const board = boardId ?? defaultBoardId;
+        return gate(ctx, {
+          tool: "set_objective",
+          // boardId is recorded even on an edit so the proposal reads on its
+          // own; the create path genuinely needs it to be appliable later.
+          input: { ...(id !== undefined ? { id } : { boardId: board }), name, description, dueDate },
+          taskId: null,
+          execute: async () => {
+            if (id === undefined) {
+              if (!name) throw new Error("A new objective needs a name.");
+              return createObjective(
+                p,
+                board,
+                { name, description, dueDate: dueDate ?? undefined },
+                principalActor(p)
+              );
+            }
+            return updateObjective(
+              p,
+              id,
+              {
+                name,
+                description,
+                ...(dueDate !== undefined ? { dueDate: dueDate ?? null } : {}),
+              },
+              principalActor(p)
+            );
+          },
+          describe: () =>
+            id === undefined ? `Created objective "${name}".` : `Edited objective ${id}.`,
+          proposal:
+            id === undefined
+              ? `create objective "${name}" on board ${board}`
+              : `edit objective ${id}`,
+        });
+      },
+    }),
     betaZodTool({
       name: "assign_task",
       description:

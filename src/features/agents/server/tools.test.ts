@@ -8,6 +8,10 @@ import {
   ensurePersonalWorkspace,
   getDefaultBoard,
 } from "@/features/workspaces/server/repository";
+import {
+  createKeyResult,
+  createObjective,
+} from "@/features/objectives/server/repository";
 import { pool, query } from "@/shared/db/client";
 import { createAgent } from "./admin";
 import type { RunContext } from "./gate";
@@ -41,6 +45,8 @@ describe("door 1 tools", () => {
   let boardId: number;
   let todoId: number;
   let overdue: number;
+  let objectiveId: number;
+  let keyResultId: number;
   let ctx: RunContext;
 
   /** The tool with this name, or a failure that names the missing tool rather
@@ -52,8 +58,13 @@ describe("door 1 tools", () => {
     return found;
   }
 
+  /** A read tool's answer, parsed. */
   const call = async (name: string, args: Record<string, unknown> = {}) =>
-    JSON.parse((await toolNamed(name).run(args as never)) as string);
+    JSON.parse((await callRaw(name, args)) as string);
+
+  /** A mutating tool's answer, which is prose for the model, not JSON. */
+  const callRaw = async (name: string, args: Record<string, unknown> = {}) =>
+    (await toolNamed(name).run(args as never)) as string;
 
   beforeAll(async () => {
     alice = await createUser("tools-alice");
@@ -75,9 +86,28 @@ describe("door 1 tools", () => {
       runId: randomUUID(),
       principal: { kind: "agent", agentId: minted.agent.id, workspaceId: ws.id },
       policy: {},
-      // No changeset until a changeset-tier call needs one; these are reads.
+      // No changeset until a changeset-tier call needs one — the gate creates it
+      // lazily, so a run of pure reads never mints one.
       changesetId: null,
     };
+    // A real run row: every gated call records an agent_action against it.
+    await query(
+      `INSERT INTO agent_run (id, agent_id, task_id, workspace_id, status)
+       VALUES ($1, $2, NULL, $3, 'running')`,
+      [ctx.runId, minted.agent.id, ws.id]
+    );
+
+    objectiveId = (
+      await createObjective(alice, boardId, { name: "Reduce toil" }, { type: "human", id: alice })
+    ).id;
+    keyResultId = (
+      await createKeyResult(alice, objectiveId, {
+        title: "Manual steps",
+        targetValue: 0,
+        startValue: 10,
+        currentValue: 10,
+      })
+    ).keyResults[0].id;
   });
 
   afterAll(async () => {
@@ -140,6 +170,32 @@ describe("door 1 tools", () => {
     const names = buildTools(ctx, boardId, null).map((t) => t.name);
     expect(names).toContain("propose_schedule");
     expect(names.some((n) => /apply_schedule|set_schedule/.test(n))).toBe(false);
+  });
+
+  it("reads a board's objectives and their key results", async () => {
+    const objectives = await call("list_objectives", { boardId });
+    const found = objectives.find((o: { id: number }) => o.id === objectiveId);
+    expect(found.keyResults[0].id).toBe(keyResultId);
+  });
+
+  it("scores a key result immediately — a measurement is auto tier", async () => {
+    const answer = await callRaw("score_key_result", { id: keyResultId, currentValue: 5 });
+    expect(answer).toMatch(/Set key result/);
+
+    const kr = (await call("list_objectives", { boardId }))
+      .flatMap((o: { keyResults: { id: number; currentValue: number }[] }) => o.keyResults)
+      .find((k: { id: number }) => k.id === keyResultId);
+    expect(kr.currentValue).toBe(5);
+  });
+
+  it("holds a new objective for review — structure is changeset tier", async () => {
+    const answer = await callRaw("set_objective", { boardId, name: "Agent's objective" });
+    expect(answer).toMatch(/Proposed for review/);
+
+    const names = (await call("list_objectives", { boardId })).map(
+      (o: { name: string }) => o.name
+    );
+    expect(names).not.toContain("Agent's objective");
   });
 
   it("defaults the board to the one the run is on", async () => {

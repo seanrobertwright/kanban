@@ -67,11 +67,17 @@ export const DEFAULT_TIER: Record<string, Tier> = {
   add_checklist_item: "auto",
   check_item: "auto",
   set_custom_fields: "auto",
+  // Recording a measurement against a key result a human already defined: the
+  // same shape as score_task, and the reason an agent is pointed at OKRs at all.
+  score_key_result: "auto",
   assign_task: "changeset",
   move_task: "changeset",
   create_task: "changeset",
   create_subtask: "changeset",
   promote_idea: "changeset",
+  // Creating or renaming an objective is writing down what the team is for.
+  // Held like create_task: an agent may draft one, a human decides it is real.
+  set_objective: "changeset",
   // Not board state, and that is exactly why they are blocked rather than held.
   // Starting a run spends the workspace's budget on a model; reviewing a
   // changeset or reverting an action IS the human approval §7.4 is built around.

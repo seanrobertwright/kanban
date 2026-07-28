@@ -3,7 +3,17 @@ import {
   getSessionFromRequest,
   unauthorized,
 } from "@/features/auth/server/session";
-import { authzErrorResponse } from "@/features/workspaces/server/authz";
+import {
+  principalActor,
+  type Principal,
+} from "@/features/auth/server/principal";
+import type { Actor } from "@/features/activity/types";
+import { externalAgentAction } from "@/features/agents/server/gate";
+import { door2Response } from "@/features/agents/server/door2";
+import {
+  authzErrorResponse,
+  requireBoardRole,
+} from "@/features/workspaces/server/authz";
 import {
   KEY_RESULT_TITLE_MAX,
   OBJECTIVE_NAME_MAX,
@@ -22,7 +32,39 @@ import {
 } from "./repository";
 
 // Reads take a principal (an agent that can read a board can read its
-// objectives); management takes a session — the split epic and milestone draw.
+// objectives). Management took a session only, the split epic and milestone
+// draw — and it is why rock 4.x's OKR tools could not exist: an agent had no
+// door to the objectives at all.
+//
+// Two of those doors now take a principal and put an agent through §7.4's gate
+// (externalAgentAction, the seam built for exactly this):
+//
+//  - `set_objective` — create or edit an objective. Changeset by default: an
+//    objective is a statement of what the team is for, so an agent may draft
+//    one and a human decides it is real.
+//  - `score_key_result` — move a key result's current value. Auto: it is a
+//    measurement against a target a human already set, the same shape as
+//    score_task, and the reason to point an agent at OKRs in the first place.
+//
+// Deleting an objective, deleting a key result, and *defining* one stay
+// session-only. An agent that could invent the measure it then reports against
+// would be grading its own homework.
+
+/** The actor for the audit trail — a human's own id, or the agent's (011), so
+ *  history reads "Progress Bot updated this objective". */
+function actorFor(principal: Principal): Actor {
+  return principalActor(principal);
+}
+
+/** An agent's key-result edit is a SCORE, not an edit: currentValue and nothing
+ *  else. The auto tier is granted on that basis, so the narrowing has to happen
+ *  here rather than in the tool description — a renamed key result at auto tier
+ *  would be structure changing itself under a measurement's permission. */
+function agentKeyResultInput(input: UpdateKeyResultInput): UpdateKeyResultInput | null {
+  const keys = Object.keys(input);
+  if (keys.length !== 1 || keys[0] !== "currentValue") return null;
+  return { currentValue: input.currentValue };
+}
 
 function badRequest(message: string) {
   return Response.json({ error: message }, { status: 400 });
@@ -59,8 +101,8 @@ export async function handleListObjectives(request: Request, id: string) {
 }
 
 export async function handleCreateObjective(request: Request, id: string) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
   const boardId = Number(id);
   if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
 
@@ -78,26 +120,46 @@ export async function handleCreateObjective(request: Request, id: string) {
   const due = readDueDate(p);
   if (due === false) return badRequest("dueDate must be YYYY-MM-DD or null");
 
+  const input = {
+    name: name.trim(),
+    description: description as string | undefined,
+    dueDate: due.present ? due.value : undefined,
+  };
+
   try {
-    const objective = await createObjective(
-      session.user.id,
-      boardId,
-      {
-        name: name.trim(),
-        description: description as string | undefined,
-        dueDate: due.present ? due.value : undefined,
-      },
-      { type: "human", id: session.user.id }
+    if (principal.kind === "agent") {
+      const outcome = await externalAgentAction(principal, {
+        tool: "set_objective",
+        // The recorded input is exactly what applyProposed will hand back to
+        // createObjective, boardId included — a proposal a reviewer accepts has
+        // to be able to run without the request that made it.
+        input: { boardId, ...input },
+        taskId: null,
+        // Checked before a proposal is minted: an agent that cannot write this
+        // board is refused now rather than filling a reviewer's queue.
+        authorize: () => requireBoardRole(principal, boardId, "member").then(() => undefined),
+        execute: () => createObjective(principal, boardId, input, actorFor(principal)),
+      });
+      const refusal = door2Response(outcome);
+      if (refusal) return refusal;
+      return Response.json(
+        (outcome as { kind: "done"; result: unknown }).result,
+        { status: 201 }
+      );
+    }
+
+    return Response.json(
+      await createObjective(principal, boardId, input, actorFor(principal)),
+      { status: 201 }
     );
-    return Response.json(objective, { status: 201 });
   } catch (error) {
     return authzErrorResponse(error);
   }
 }
 
 export async function handleUpdateObjective(request: Request, id: string) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
   const objectiveId = Number(id);
   if (!Number.isInteger(objectiveId)) return badRequest("Invalid objective id");
 
@@ -120,10 +182,26 @@ export async function handleUpdateObjective(request: Request, id: string) {
   if (due.present) input.dueDate = due.value;
 
   try {
-    const objective = await updateObjective(session.user.id, objectiveId, input, {
-      type: "human",
-      id: session.user.id,
-    });
+    if (principal.kind === "agent") {
+      const outcome = await externalAgentAction(principal, {
+        tool: "set_objective",
+        input: { id: objectiveId, ...input },
+        taskId: null,
+        execute: () =>
+          updateObjective(principal, objectiveId, input, actorFor(principal)),
+      });
+      const refusal = door2Response(outcome);
+      if (refusal) return refusal;
+      const objective = (outcome as { kind: "done"; result: unknown }).result;
+      return objective ? Response.json(objective) : notFound();
+    }
+
+    const objective = await updateObjective(
+      principal,
+      objectiveId,
+      input,
+      actorFor(principal)
+    );
     return objective ? Response.json(objective) : notFound();
   } catch (error) {
     return authzErrorResponse(error);
@@ -197,8 +275,8 @@ export async function handleCreateKeyResult(request: Request, id: string) {
 }
 
 export async function handleUpdateKeyResult(request: Request, id: string) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
   const keyResultId = Number(id);
   if (!Number.isInteger(keyResultId)) return badRequest("Invalid key result id");
 
@@ -226,7 +304,29 @@ export async function handleUpdateKeyResult(request: Request, id: string) {
   }
 
   try {
-    return Response.json(await updateKeyResult(session.user.id, keyResultId, input));
+    if (principal.kind === "agent") {
+      const scoreOnly = agentKeyResultInput(input);
+      if (!scoreOnly)
+        return Response.json(
+          {
+            code: "AGENT_SCOPE",
+            error:
+              "An agent may set a key result's currentValue and nothing else — defining or renaming a measure is a human's change.",
+          },
+          { status: 403 }
+        );
+      const outcome = await externalAgentAction(principal, {
+        tool: "score_key_result",
+        input: { id: keyResultId, ...scoreOnly },
+        taskId: null,
+        execute: () => updateKeyResult(principal, keyResultId, scoreOnly),
+      });
+      const refusal = door2Response(outcome);
+      if (refusal) return refusal;
+      return Response.json((outcome as { kind: "done"; result: unknown }).result);
+    }
+
+    return Response.json(await updateKeyResult(principal, keyResultId, input));
   } catch (error) {
     return authzErrorResponse(error);
   }
