@@ -45,6 +45,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# sqlite database
+# local runtime data — attachments when no S3 endpoint is configured
+# (ATTACHMENTS_DIR, default ./data/attachments)
 /data
 .gstack/

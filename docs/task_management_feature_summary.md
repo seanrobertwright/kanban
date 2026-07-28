@@ -46,7 +46,7 @@ These features define whether a system can reliably capture, classify, and manag
 | ✅ Task templates | Reusable task/project patterns for repeatable work. |
 | ✅ Bulk edit | Ability to update many work items at once. |
 | ✅ Forms/intake | Structured request capture from internal or external users. |
-| ✅ Attachments | File attachment support on tasks or records. |
+| ✅ Attachments | File attachment support on tasks or records. Stored in an S3-compatible object store when one is configured (MinIO / S3 / R2 / Supabase), and on local disk under `ATTACHMENTS_DIR` (default `./data/attachments`) when none is — so a fresh self-host has working attachments with zero configuration, and S3 is an upgrade for deployments that outgrow one disk. |
 | ✅ Priority | Native priority field, ranking, or urgency indicator. |
 | ✅ Labels/tags | Flexible classification labels or tags. |
 | ✅ Due dates | Date-based commitment, deadline, or scheduled completion field. |

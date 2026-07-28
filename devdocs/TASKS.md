@@ -932,3 +932,28 @@ slices, all four decisions taken through `AskUserQuestion` first (PRD §7/§12).
 Deletion of an objective or a key result, and *defining* a key result, stay
 session-only: an agent that could invent the measure it then reports against
 would be grading its own homework.
+
+## Code-review roadmap item 5 — attachments without an object store (2026-07-28)
+
+- [x] **Local-disk attachment fallback** — `storage.ts` threw "Attachment
+      storage is not configured" the moment an upload arrived without S3 env, so
+      a fresh self-host shipped an attachment UI with nowhere for the bytes to
+      go. The module is now a façade over two backends: `s3-store.ts` (the
+      existing code, unchanged in behaviour) and `local-store.ts`, chosen per
+      call by whether **all three** of `S3_ENDPOINT`/`S3_ACCESS_KEY`/
+      `S3_SECRET_KEY` are set — an endpoint with no credentials is a
+      misconfiguration, and treating it as "S3 is on" would fail every upload
+      while treating it as "S3 is off" would quietly write to a disk the next
+      deploy discards. Local objects live under `ATTACHMENTS_DIR` (default
+      `./data/attachments`, already gitignored) at the same opaque
+      `tasks/<id>/<uuid>` keys, read back through `Readable.toWeb` so the
+      repository cannot tell the two stores apart. The open is awaited before
+      the stream is handed over, so a missing object throws where the caller can
+      answer 404 instead of failing mid-body — matching what S3 does. Keys are
+      resolved against the root and refused if they escape it: unreachable
+      today since the repository mints every key, and checked anyway, because
+      "the caller is careful" is not a property this module can hold on its own.
+      S3 remains the right answer for more than one app process — two containers
+      share a bucket and never a filesystem — so this is the floor, not the
+      recommendation. 7 tests, needing neither Postgres nor MinIO, which is the
+      deployment they describe.

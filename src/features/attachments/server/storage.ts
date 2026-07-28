@@ -1,118 +1,58 @@
-import {
-  CreateBucketCommand,
-  DeleteObjectCommand,
-  GetObjectCommand,
-  HeadBucketCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
+import * as local from "./local-store";
+import * as s3 from "./s3-store";
 
 /**
- * The S3-compatible object store for attachments (021).
+ * Attachment storage (021), and which store is behind it.
  *
- * The app speaks the S3 protocol and nothing vendor-specific, so the same code
- * runs against MinIO locally and real S3 / R2 / Supabase Storage in production —
- * only the four env vars change. forcePathStyle is on because MinIO (and most
- * self-hosted S3) addresses buckets as a path segment, not a host subdomain.
+ * Configure S3 and you get the object store — the right answer for anything
+ * running more than one app process, since two containers share a bucket and
+ * never a filesystem. Configure nothing and attachments still work, on local
+ * disk under `ATTACHMENTS_DIR` (default `./data/attachments`).
  *
- * The client and the bucket check are both lazy singletons: nothing connects at
- * import time (so a build with no storage configured still compiles), and the
- * bucket is ensured once per process rather than on every upload.
+ * The fallback is the point. Before it, a fresh self-host threw
+ * "Attachment storage is not configured" on the first upload and the feature
+ * simply did not exist until someone stood up MinIO — a hard dependency the
+ * rest of this app deliberately avoids. Falling back rather than failing means
+ * the default deployment has every feature, and S3 is an upgrade for the
+ * deployments that have outgrown one disk.
+ *
+ * The choice is read per call rather than latched at import: process.env is
+ * settable in a test, and a module-load-time decision would make the two
+ * backends untestable in one process.
+ *
+ * `contentType` reaches S3 (which stores it as object metadata) and is dropped
+ * by the local store, which has nowhere to put it. Neither matters to a reader:
+ * the type served back to a browser comes from the `attachment` row, not from
+ * the store, so the two backends are indistinguishable downstream.
  */
-let client: S3Client | null = null;
-let bucketEnsured: Promise<void> | null = null;
 
-function config() {
-  const endpoint = process.env.S3_ENDPOINT;
-  const accessKeyId = process.env.S3_ACCESS_KEY;
-  const secretAccessKey = process.env.S3_SECRET_KEY;
-  if (!endpoint || !accessKeyId || !secretAccessKey) {
-    throw new Error(
-      "Attachment storage is not configured (S3_ENDPOINT / S3_ACCESS_KEY / S3_SECRET_KEY)"
-    );
-  }
-  return {
-    endpoint,
-    region: process.env.S3_REGION ?? "us-east-1",
-    bucket: process.env.S3_BUCKET ?? "attachments",
-    accessKeyId,
-    secretAccessKey,
-  };
+/** Which backend a call would use. Exported for the settings surface and for
+ *  tests that need to say which store they are exercising. */
+export function backend(): "s3" | "local" {
+  return s3.configured() ? "s3" : "local";
 }
 
-function s3(): S3Client {
-  if (client) return client;
-  const c = config();
-  client = new S3Client({
-    endpoint: c.endpoint,
-    region: c.region,
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId: c.accessKeyId,
-      secretAccessKey: c.secretAccessKey,
-    },
-  });
-  return client;
+/** Where local objects live, for the operator who has to back it up. Null when
+ *  S3 is configured, since then nothing is written here. */
+export function localRoot(): string | null {
+  return backend() === "local" ? local.root() : null;
 }
 
-function bucketName(): string {
-  return config().bucket;
-}
-
-/** Creates the bucket if it is missing — once per process, so no init container. */
-async function ensureBucket(): Promise<void> {
-  if (bucketEnsured) return bucketEnsured;
-  bucketEnsured = (async () => {
-    const Bucket = bucketName();
-    try {
-      await s3().send(new HeadBucketCommand({ Bucket }));
-    } catch {
-      // 404 / NoSuchBucket / NotFound all mean "make it"; a real credential or
-      // network error resurfaces on the create below, which is where it belongs.
-      await s3().send(new CreateBucketCommand({ Bucket }));
-    }
-  })();
-  return bucketEnsured;
-}
-
-export async function putObject(
+export function putObject(
   key: string,
   body: Uint8Array,
   contentType: string
 ): Promise<void> {
-  await ensureBucket();
-  await s3().send(
-    new PutObjectCommand({
-      Bucket: bucketName(),
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-      ContentLength: body.byteLength,
-    })
-  );
+  return backend() === "s3"
+    ? s3.putObject(key, body, contentType)
+    : local.putObject(key, body);
 }
 
-/**
- * Opens an object for streaming back to the client. transformToWebStream gives a
- * web ReadableStream, which is exactly what a Response body wants — so the bytes
- * flow store → app → client without ever being buffered whole in the app.
- */
-export async function getObjectStream(
-  key: string
-): Promise<ReadableStream> {
-  await ensureBucket();
-  const out = await s3().send(
-    new GetObjectCommand({ Bucket: bucketName(), Key: key })
-  );
-  // Body is an sdk stream in Node; transformToWebStream is added by the sdk mixin.
-  return (out.Body as {
-    transformToWebStream: () => ReadableStream;
-  }).transformToWebStream();
+export function getObjectStream(key: string): Promise<ReadableStream> {
+  return backend() === "s3" ? s3.getObjectStream(key) : local.getObjectStream(key);
 }
 
-/** Best-effort object removal. A leftover object is a storage leak, not a bug. */
-export async function deleteObject(key: string): Promise<void> {
-  await s3().send(
-    new DeleteObjectCommand({ Bucket: bucketName(), Key: key })
-  );
+/** Best-effort removal: a leftover object is a storage leak, not a bug. */
+export function deleteObject(key: string): Promise<void> {
+  return backend() === "s3" ? s3.deleteObject(key) : local.deleteObject(key);
 }
