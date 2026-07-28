@@ -838,3 +838,46 @@ Two were thinner than their rows claimed.
       capability to grant, which is the property that makes an iframe an
       acceptable place to run someone else's code. 5 new DB tests + the client
       bridge now speaks capability→scope.
+
+## Code-review roadmap item 1 — guard rails on the GraphQL door (2026-07-28)
+
+- [x] **GraphQL query limits** (roadmap §5 item 1) — `/api/graphql` was live with
+      two query fields and no bound on what one request could ask for. The review
+      called it a depth/complexity gap; the schema is acyclic (`Query → Board →
+      Column → Task`, scalars at the leaves), so the exploitable shape is not
+      depth at all — it is **alias amplification**: `{ a: board(id:1){id} b:
+      board(id:2){id} … }` is two levels deep, trivially cheap per field, and one
+      repository round trip per alias. Three static limits in
+      `features/graphql/server/limits.ts`, computed from the parsed document so a
+      rejected query costs a parse and no database call: **root fields ≤ 10**
+      (the round-trip cap, counted through fragment spreads and inline
+      fragments), **cost ≤ 2000** where a list field multiplies its subtree by an
+      assumed 10 elements (`columns`/`tasks` have no page size, so the server
+      pays the sub-selection once per row) and a root field costs 10, and
+      **depth ≤ 8**, which today's schema cannot reach — it is there for the
+      commit that adds a back-edge (`Task.parent`, `Column.board`) and makes an
+      unbounded query expressible in a diff that would otherwise look innocent.
+      Introspection is deliberately exempt from depth and costed flat: a tooling
+      introspection query is legitimately ~11 levels deep and touches no
+      repository, so measuring it would break GraphiQL and codegen to protect
+      nothing. Went through `AskUserQuestion` (introspection stays open; the
+      numbers stay hard-coded constants rather than four new env vars; a rate
+      limit was wanted).
+      `executeGraphQL` now spells out parse → `validate(specifiedRules)` →
+      `checkQueryLimits` → `execute` instead of delegating to `graphql()`,
+      because the limits need the parsed document — which also means **every**
+      caller is behind the gate, not just the HTTP route, and `operationName` is
+      now honoured. The ingress adds a per-**principal** token bucket (60 burst,
+      1/s, reusing `shared/lib/rate-limit`) keyed on the agent/user id rather
+      than the IP — an agent key and the human who minted it are separate
+      budgets, two people behind one NAT are not — plus a pre-read
+      `content-length` ceiling (413) and a query-text byte cap (413).
+      Status codes now follow the GraphQL-over-HTTP split, which the guard rails
+      forced the handler to take a position on: `data` absent means nothing
+      executed (syntax, validation, bad variable, guard rail) → **400**; a
+      resolver that refused → **200** with `errors` and a null field, because a
+      board the caller can't read is a permission answer, not a failed request.
+      19 new tests (9 pure limit cases including the honest ceiling — a whole
+      board with every task field stays inside the budget — and 10 through the
+      handler with a real agent key: 401, 400 ×3, 413 ×2, 429, and the
+      200-with-errors authz case). tsc/eslint clean.

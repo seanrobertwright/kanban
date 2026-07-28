@@ -1,4 +1,14 @@
-import { type ExecutionResult, buildSchema, graphql } from "graphql";
+import {
+  type ExecutionResult,
+  GraphQLError,
+  buildSchema,
+  execute,
+  parse,
+  specifiedRules,
+  validate,
+} from "graphql";
+
+import { checkQueryLimits } from "./limits";
 
 import type { Principal } from "@/features/auth/server/principal";
 import { getBoard } from "@/features/board/server/repository";
@@ -117,17 +127,40 @@ const root = {
  * `{ data, errors }` — an authz failure inside a resolver surfaces as a GraphQL
  * error with a null field, never a thrown 500, so a partial query still returns
  * what the caller *can* see.
+ *
+ * The pipeline is spelled out rather than delegated to `graphql()` because the
+ * guard rails need the parsed document: parse → the spec's own validation →
+ * `checkQueryLimits` → execute. Limits run after validation so their messages
+ * are about a query that at least matches the schema, and before execution so a
+ * rejected query costs a parse rather than a repository call. Every caller of
+ * this function — the HTTP door, an agent tool, a test — is behind the gate;
+ * there is no unguarded way in.
  */
-export function executeGraphQL(
+export async function executeGraphQL(
   principal: string | Principal,
   source: string,
-  variableValues?: Record<string, unknown> | null
+  variableValues?: Record<string, unknown> | null,
+  operationName?: string | null
 ): Promise<ExecutionResult> {
-  return graphql({
+  let document;
+  try {
+    document = parse(source);
+  } catch (error) {
+    return { errors: [error as GraphQLError] };
+  }
+
+  const validationErrors = validate(schema, document, specifiedRules);
+  if (validationErrors.length > 0) return { errors: validationErrors };
+
+  const limitErrors = checkQueryLimits(schema, document);
+  if (limitErrors.length > 0) return { errors: limitErrors };
+
+  return execute({
     schema,
-    source,
+    document,
     rootValue: root,
     contextValue: { principal } satisfies Context,
     variableValues: variableValues ?? undefined,
+    operationName: operationName ?? undefined,
   });
 }
