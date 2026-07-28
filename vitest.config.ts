@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // Next loads .env.local for us; vitest does not. `--env-file` cannot be passed
 // through NODE_OPTIONS, so load it here and forward what the tests need.
@@ -14,6 +14,12 @@ export default defineConfig({
   resolve: { tsconfigPaths: true },
   test: {
     environment: "node",
+    // `next build` with standalone output copies the whole of src/ — test files
+    // included — into .next/standalone. Vitest's default excludes cover
+    // node_modules and dist but not .next, so without this every run after a
+    // build collects each suite twice and the copies fail on the pruned
+    // node_modules the standalone bundle ships.
+    exclude: [...configDefaults.exclude, ".next/**"],
     // Required for React Testing Library's automatic cleanup: it registers an
     // afterEach hook only if one exists as a global. Without this it silently
     // never unmounts, so every rendered dialog stacks up in the same document

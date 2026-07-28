@@ -56,16 +56,24 @@ export function ShareDialog({
   const [granteeCanEdit, setGranteeCanEdit] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
-  // A form link is a submit capability; boards and docs expose read-only pages.
-  const scope = subjectType === "form" ? "submit" : "read";
+  // A form or feedback link is a submit capability; boards and docs expose
+  // read-only pages.
+  const scope = subjectType === "form" || subjectType === "feedback" ? "submit" : "read";
+
+  // A feedback portal is an anonymous door with nobody on the other side: there
+  // is no object to grant a named guest, and object_share's CHECK does not admit
+  // one. The section is hidden rather than shown-and-failing.
+  const guestShareable = subjectType !== "feedback";
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const [nextLinks, nextShares, roster] = await Promise.all([
         api.fetchPublicLinks(subjectType, subjectId),
-        api.fetchObjectShares(subjectType, subjectId),
-        fetchMembers(workspaceId),
+        guestShareable
+          ? api.fetchObjectShares(subjectType, subjectId)
+          : Promise.resolve([]),
+        guestShareable ? fetchMembers(workspaceId) : Promise.resolve({ members: [] }),
       ]);
       setLinks(nextLinks);
       setShares(nextShares);
@@ -73,7 +81,7 @@ export function ShareDialog({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load shares");
     }
-  }, [subjectType, subjectId, workspaceId]);
+  }, [subjectType, subjectId, workspaceId, guestShareable]);
 
   useEffect(() => {
     if (open) void load();
@@ -128,7 +136,9 @@ export function ShareDialog({
         <DialogHeader>
           <DialogTitle>Share</DialogTitle>
           <DialogDescription>
-            Public links and guest access for {subjectName}.
+            {guestShareable
+              ? `Public links and guest access for ${subjectName}.`
+              : `An anonymous feedback portal for ${subjectName}.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -141,7 +151,11 @@ export function ShareDialog({
         <div className="grid gap-2">
           <p className="text-xs font-medium text-muted-foreground">
             Public links — anyone with the URL{" "}
-            {scope === "submit" ? "can submit this form" : "can view, read-only"}
+            {subjectType === "feedback"
+              ? "can send feedback, and see nothing else"
+              : scope === "submit"
+                ? "can submit this form"
+                : "can view, read-only"}
           </p>
           {links.length === 0 ? (
             <p className="text-sm text-muted-foreground">No public links yet.</p>
@@ -206,6 +220,7 @@ export function ShareDialog({
           </div>
         </div>
 
+        {guestShareable && (
         <div className="grid gap-2 border-t pt-3">
           <p className="text-xs font-medium text-muted-foreground">
             Guest access — share just this {subjectType} with a workspace member
@@ -284,6 +299,7 @@ export function ShareDialog({
             </Button>
           </div>
         </div>
+        )}
       </DialogContent>
     </Dialog>
   );

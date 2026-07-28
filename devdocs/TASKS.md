@@ -957,3 +957,47 @@ would be grading its own homework.
       share a bucket and never a filesystem — so this is the floor, not the
       recommendation. 7 tests, needing neither Postgres nor MinIO, which is the
       deployment they describe.
+
+## Code-review roadmap item 3 — the public feedback portal (2026-07-28)
+
+- [x] **Tokenized public feedback intake** (SPEC 3.10 over 043) — 061 built the
+      whole public-link capability (unguessable token, scope, expiry, revoke,
+      rate-limited anonymous path) and forms took it up; feedback intake never
+      did, so the one link a product team most wants to hand out — "tell us what
+      you think" — could not be minted. Migration **085** widens the
+      `public_link` subject CHECK with `'feedback'`, whose `subject_id` is a
+      **board** id: the link is a door into a board's discovery inbox, and there
+      is nothing to point at before a visitor has written anything. Not
+      `'board'` + `scope='submit'`, because a board subject already means the
+      read-only public board page and one subject meaning two pages by scope
+      eventually resolves the wrong one. `workspaceFor` maps it explicitly ahead
+      of the generic branch, which would otherwise read the `feedback` *table*.
+      `getPublicFeedbackPortal` / `submitPublicFeedback` mirror the form pair:
+      the token is the whole authorization, and the write then rides
+      `createFeedback` as the link's minter (an admin at mint time) so board
+      membership, tenancy and the insert all compile through the same path an
+      authenticated capture uses. Signals land **unfiled** — filing under an
+      idea is a triage judgement the submitter is not making — with the source
+      the visitor typed or `'public'`.
+      Went through `AskUserQuestion`: **submit-only** (a public roadmap would
+      publish every idea title on the board, which an admin minting an intake
+      link is not consenting to — it stays a separate share), and **optional
+      free-text source** in the existing 80-char column rather than an email
+      column and the retention promise that comes with it. `ShareDialog` learns
+      the subject (submit scope, no guest-share section — an anonymous door has
+      nobody to grant), and the trigger sits on the Discovery dialog's Feedback
+      lens behind the same admin gate as the board's own share button.
+      8 tests: the row lands on the token's board and not the neighbour's,
+      unfiled, labelled `public` when unattributed; the portal returns exactly
+      `{boardName}`; another workspace's owner gets not_found; expired, revoked
+      and invented tokens are refused; a feedback token opens neither the board
+      nor the form door; and a read-scope token cannot write.
+
+- [x] **`vitest.config.ts` excludes `.next`** — found while verifying the above:
+      `next build` with standalone output copies all of `src/` (test files
+      included) into `.next/standalone`, and Vitest's default excludes cover
+      `node_modules` and `dist` but not `.next`. Every `npm test` run after a
+      build therefore collected each suite **twice** — 263 files instead of 131
+      — and reported 19 failures from the copies, which fail on the pruned
+      node_modules a standalone bundle ships. A green suite that turns red
+      because someone ran a build is a verification bar nobody can trust.

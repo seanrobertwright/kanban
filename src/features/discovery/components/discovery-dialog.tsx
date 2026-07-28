@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+import { Share2 } from "lucide-react";
+
 import { Button } from "@/shared/ui/button";
+import { ShareDialog } from "@/features/sharing/components/share-dialog";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +32,13 @@ interface DiscoveryDialogProps {
   open: boolean;
   /** member+ may author ideas/feedback and promote; everyone viewer+ reads. */
   canEdit: boolean;
+  /** The workspace the board sits in — the portal share needs it for its roster
+   *  call, and minting the link is admin-gated on the server regardless. */
+  workspaceId: string;
+  /** Whether to offer the public feedback portal. Admin-shaped, like every other
+   *  mint: the server refuses a non-admin anyway, this only avoids showing a
+   *  button that always fails. */
+  canShare?: boolean;
   onOpenChange: (open: boolean) => void;
   /** Called after a promotion so the board can pull in the new task. */
   onPromoted?: () => void;
@@ -48,9 +58,12 @@ export function DiscoveryDialog({
   boardId,
   open,
   canEdit,
+  workspaceId,
+  canShare,
   onOpenChange,
   onPromoted,
 }: DiscoveryDialogProps) {
+  const [portalOpen, setPortalOpen] = useState(false);
   const [data, setData] = useState<DiscoveryOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"ideas" | "feedback">("ideas");
@@ -117,6 +130,18 @@ export function DiscoveryDialog({
               </span>
             )}
           </Button>
+          {canShare && tab === "feedback" && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => setPortalOpen(true)}
+              title="Mint a public link that lets anyone send feedback to this board"
+            >
+              <Share2 /> Public portal
+            </Button>
+          )}
         </div>
 
         {data && tab === "ideas" && (
@@ -140,6 +165,17 @@ export function DiscoveryDialog({
             canEdit={canEdit}
             onError={setError}
             onChanged={reload}
+          />
+        )}
+
+        {canShare && (
+          <ShareDialog
+            open={portalOpen}
+            onOpenChange={setPortalOpen}
+            subjectType="feedback"
+            subjectId={String(boardId)}
+            subjectName="this board"
+            workspaceId={workspaceId}
           />
         )}
       </DialogContent>

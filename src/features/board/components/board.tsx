@@ -1595,6 +1595,8 @@ export function Board({
         boardId={boardId}
         open={discoveryOpen}
         canEdit={canEdit}
+        workspaceId={workspaceId}
+        canShare={canDeleteColumns}
         onOpenChange={setDiscoveryOpen}
         onPromoted={refresh}
       />

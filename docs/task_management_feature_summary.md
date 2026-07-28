@@ -92,7 +92,7 @@ These features are most important for software, product, and agile delivery team
 | ✅ Burndown chart | Sprint progress chart showing remaining work over time. |
 | ✅ Release planning | Grouping work into versions, releases, or launch plans. |
 | ✅ Product discovery | Support for ideas, research, feedback, validation, or discovery work. |
-| ✅ Feedback intake/portal | Dedicated intake channel for customer or stakeholder feedback. |
+| ✅ Feedback intake/portal | Dedicated intake channel for customer or stakeholder feedback. Internally, the Feedback inbox (043) files raw signal under the ideas it argues for; externally, an admin mints a tokenized public portal at `/public/feedback/[token]` (085) where anyone with the link can send feedback with a sentiment and an optional free-text "who are you", rate-limited and revocable. Submit-only: the portal shows the board's name and nothing about its ideas, statuses, or demand — a public roadmap is a separate share, and minting an intake link is not consent to publish the backlog. |
 | ✅ Prioritization scoring | Scoring work by value, effort, risk, reach, impact, or custom criteria. |
 | ✅ Scaled Agile/SAFe | Support for enterprise agile layers such as teams, programs, ARTs, and portfolios. |
 
