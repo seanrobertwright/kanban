@@ -184,9 +184,9 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       (the roadmap reads; CRUD stays put). → `6e738f7`
 
 ### OKR follow-ups (037 cuts, if the wedge wants them)
-- [ ] **Objective agent tools** — a `set_objective` / `score_key_result` in both
-      doors so the wedge can move OKRs. Touches agent behaviour, so it goes through
-      `AskUserQuestion` first (PRD §7/§12).
+- [x] **Objective agent tools** — done 2026-07-28; see the roadmap-item-2 section
+      at the end of this file. `set_objective` (changeset) and `score_key_result`
+      (auto) in both doors, after the `AskUserQuestion` PRD §7/§12 requires.
 - [ ] **Key-result activity** — KR nudges are read live, not logged; a
       `keyResult.*` family would put "moved NPS 40 → 45" in the feed.
 
@@ -881,3 +881,54 @@ Two were thinner than their rows claimed.
       board with every task field stays inside the budget — and 10 through the
       handler with a real agent key: 401, 400 ×3, 413 ×2, 429, and the
       200-with-errors authz case). tsc/eslint clean.
+
+## Code-review roadmap item 2 — the doors reach the AI work (2026-07-28)
+
+The review's finding was not that the AI rocks were unbuilt but that they were
+unreachable: scheduling (4.1), risk (4.2) and the OKR writes existed as tested
+libraries and REST routes, and neither agent door published a tool for any of
+them. Capability an agent cannot name is capability it does not have. Three
+slices, all four decisions taken through `AskUserQuestion` first (PRD §7/§12).
+
+- [x] **Delivery risk on both doors** (rock 4.2) — `getBoardRisks` and
+      `getTaskRisk` split out of `getBoardAnalytics` rather than duplicated, so
+      the question can be asked without paying for six queries of flow history;
+      the per-task read takes its board id out of `requireTaskRole`'s return
+      instead of a second query, and answers `null` rather than a zero score
+      when nothing fires. New `GET /api/board/[id]/risk` and
+      `GET /api/tasks/[id]/risk` for Door 2. Both doors publish `score_risk`,
+      and — the part that matters more — both **carry risk on the reads an
+      agent already makes**: `list_board` returns `risks`, `get_task` returns
+      `risk`. A signal you have to know to ask for is one most runs never see.
+      10 tests.
+
+- [x] **`propose_schedule` on both doors** (rock 4.1) — the tool SPEC 4.1 names.
+      Read-only, decided rather than defaulted: `applyScheduleProposal` would
+      have been one more line each, but it rewrites the dates of every task on a
+      board in a single call, which is not a reviewable unit even held as a
+      changeset. The agent plans; the dates it agrees with go through
+      `set_due_date` one at a time, each an ordinary auto-tier change with its
+      own activity row and its own undo. A test asserts no `apply_schedule`
+      tool exists, so the absence is pinned rather than merely intended.
+
+- [x] **`set_objective` + `score_key_result` on both doors** (the open OKR item
+      above) — objective management was session-only and the repository took a
+      bare `userId`, which is why these tools could not have been written. The
+      repository widened to `string | Principal` (the principal.ts seam: every
+      existing caller passes a string and is untouched) and three handlers moved
+      to `getPrincipalFromRequest`. The tiers differ on purpose: `set_objective`
+      is **changeset** (an objective states what the team is for — an agent
+      drafts, a human decides), `score_key_result` is **auto** (a measurement
+      against a target a human already set, score_task's shape). The auto grant
+      is narrowed in the handler and not only in the description: an agent's
+      key-result PATCH must be `currentValue` alone or it is a 403
+      `AGENT_SCOPE`, so a measurement's permission cannot be borrowed to rename
+      or re-target the measure. Both tools are added to `review.ts`'s
+      `applyProposed`, the auto one included, so an operator raising its tier
+      gets a proposal that can actually be accepted. Door 2's objectives
+      handlers are the first callers of `externalAgentAction` — the seam
+      `gate.ts` built for this and nothing had used. 9 tests.
+
+Deletion of an objective or a key result, and *defining* a key result, stay
+session-only: an agent that could invent the measure it then reports against
+would be grading its own homework.
