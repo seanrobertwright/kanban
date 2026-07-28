@@ -13,6 +13,7 @@ import {
 import { createComment } from "@/features/comments/server/repository";
 import { addDependency } from "@/features/dependencies/server/repository";
 import { getBoard } from "@/features/board/server/repository";
+import { getBoardRisks, getTaskRisk } from "@/features/board/server/analytics";
 import { listActivityForTask } from "@/features/activity/server/repository";
 import { gate, type RunContext } from "./gate";
 
@@ -63,20 +64,39 @@ export function buildTools(
     betaZodTool({
       name: "list_board",
       description:
-        "Read a board: its columns and their top-level tasks (each with a subtaskCount). Omit boardId for the board this task is on. Column ids come from here.",
+        "Read a board: its columns and their top-level tasks (each with a subtaskCount), plus the delivery risk currently scored on the board. Omit boardId for the board this task is on. Column ids come from here.",
       inputSchema: z.object({ boardId: z.number().int().optional() }),
-      run: async ({ boardId }) =>
-        json(await getBoard(p, boardId ?? defaultBoardId)),
+      // Risk rides along rather than waiting to be asked for (4.2). An agent
+      // reading a board to decide what to do next needs to know what is late,
+      // blocked, or aging, and a signal it has to know to ask for is a signal
+      // most runs will never see. One extra query, and only scored tasks appear.
+      run: async ({ boardId }) => {
+        const id = boardId ?? defaultBoardId;
+        const [board, risks] = await Promise.all([
+          getBoard(p, id),
+          getBoardRisks(p, id),
+        ]);
+        return json({ ...board, risks });
+      },
     }),
     betaZodTool({
       name: "get_task",
       description:
-        "Read one task by id, including its column, priority, due date, labels, assignee, and subtaskCount.",
+        "Read one task by id, including its column, priority, due date, labels, assignee, subtaskCount, and its delivery risk (null when nothing is firing).",
       inputSchema: z.object({ id: z.number().int() }),
       run: async ({ id }) => {
         const task = await getTask(p, id);
-        return task ? json(task) : `No task ${id} in your workspace.`;
+        if (!task) return `No task ${id} in your workspace.`;
+        return json({ ...task, risk: await getTaskRisk(p, id) });
       },
+    }),
+    betaZodTool({
+      name: "score_risk",
+      description:
+        "Score delivery risk across a board (4.2): every task showing a signal, highest first, each with a 0–1 score, a low/medium/high level, and the reasons that produced it (overdue, blocked by N tasks, open for N days). Deterministic and explainable — the facts are the board's, not a judgement. Omit boardId for the board this task is on.",
+      inputSchema: z.object({ boardId: z.number().int().optional() }),
+      run: async ({ boardId }) =>
+        json(await getBoardRisks(p, boardId ?? defaultBoardId)),
     }),
     betaZodTool({
       name: "list_subtasks",

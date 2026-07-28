@@ -1,8 +1,8 @@
 import type { Principal } from "@/features/auth/server/principal";
-import { requireBoardRole } from "@/features/workspaces/server/authz";
+import { requireBoardRole, requireTaskRole } from "@/features/workspaces/server/authz";
 import { query, queryOne } from "@/shared/db/client";
 import type { BoardAnalytics, FlowStats } from "../types";
-import { assessRisk } from "../lib/risk";
+import { assessRisk, type RiskInput, type TaskRisk } from "../lib/risk";
 
 /**
  * Flow analytics for one board — lead time, cycle time, throughput, a
@@ -182,6 +182,73 @@ function stats(days: number[]): FlowStats {
   };
 }
 
+/**
+ * Delivery risk for one board (rock 4.2), on its own rather than only as a limb
+ * of the analytics payload. The scoring stayed pure in `lib/risk.ts`; this is
+ * the single query that feeds it, and pulling it out is what lets an agent tool
+ * and a route ask the question without computing a whole analytics report —
+ * lead time, CFD, burndown and velocity are half a dozen queries an agent
+ * asking "what is at risk?" has no use for.
+ *
+ * Viewer is the gate, the same one the analytics read demands: risk is derived
+ * from tasks the caller can already see.
+ */
+export async function getBoardRisks(
+  actor: string | Principal,
+  boardId: number
+): Promise<TaskRisk[]> {
+  await requireBoardRole(actor, boardId, "viewer");
+  const board = await queryOne<{ doneColumnId: number | null }>(
+    `SELECT done_column_id AS "doneColumnId" FROM board WHERE id = $1`,
+    [boardId]
+  );
+  return assessRisk(await riskFacts(boardId, board?.doneColumnId ?? null));
+}
+
+/**
+ * Risk for one task, or null when it has none — it is done, or no signal fired.
+ * Null rather than a zero score on purpose: "this task is not showing risk" and
+ * "this task scored 0.0" are the same fact, and the scorer already drops both.
+ *
+ * The board comes out of the authz check rather than a second query, since
+ * `requireTaskRole` has to resolve the task's board to answer the question it
+ * was asked anyway.
+ */
+export async function getTaskRisk(
+  actor: string | Principal,
+  taskId: number
+): Promise<TaskRisk | null> {
+  const { boardId } = await requireTaskRole(actor, taskId, "viewer");
+  const board = await queryOne<{ doneColumnId: number | null }>(
+    `SELECT done_column_id AS "doneColumnId" FROM board WHERE id = $1`,
+    [boardId]
+  );
+  const facts = await query<RiskInput>(
+    `SELECT t.id, t.title, t.due_date AS "dueDate",
+            (SELECT COUNT(*)::int FROM task_dependency d WHERE d.task_id=t.id) AS "blockedByCount",
+            EXTRACT(EPOCH FROM (now() - t.created_at)) / 86400 AS "ageDays",
+            ($2::int IS NOT NULL AND t.column_id=$2::int) AS "inDoneColumn"
+       FROM task t WHERE t.id = $1`,
+    [taskId, board?.doneColumnId ?? null]
+  );
+  return assessRisk(facts)[0] ?? null;
+}
+
+/** The board facts the pure scorer takes: a date, a blocker count, an age, and
+ *  whether the task is already done. Subtasks are excluded — risk is reported
+ *  on the unit of work a board tracks. */
+function riskFacts(boardId: number, doneColumnId: number | null) {
+  return query<RiskInput>(
+    `SELECT t.id, t.title, t.due_date AS "dueDate",
+            (SELECT COUNT(*)::int FROM task_dependency d WHERE d.task_id=t.id) AS "blockedByCount",
+            EXTRACT(EPOCH FROM (now() - t.created_at)) / 86400 AS "ageDays",
+            ($2::int IS NOT NULL AND t.column_id=$2::int) AS "inDoneColumn"
+       FROM task t JOIN board_column bc ON bc.id=t.column_id
+      WHERE bc.board_id=$1 AND t.parent_id IS NULL`,
+    [boardId, doneColumnId]
+  );
+}
+
 export async function getBoardAnalytics(
   actor: string | Principal,
   boardId: number
@@ -334,19 +401,7 @@ export async function getBoardAnalytics(
 
   const burndown = await computeBurndown(boardId, doneColumnId);
 
-  const riskFacts = await query<{
-    id: number; title: string; dueDate: string | null; blockedByCount: number;
-    ageDays: number; inDoneColumn: boolean;
-  }>(
-    `SELECT t.id, t.title, t.due_date AS "dueDate",
-            (SELECT COUNT(*)::int FROM task_dependency d WHERE d.task_id=t.id) AS "blockedByCount",
-            EXTRACT(EPOCH FROM (now() - t.created_at)) / 86400 AS "ageDays",
-            ($2::int IS NOT NULL AND t.column_id=$2::int) AS "inDoneColumn"
-       FROM task t JOIN board_column bc ON bc.id=t.column_id
-      WHERE bc.board_id=$1 AND t.parent_id IS NULL`,
-    [boardId, doneColumnId]
-  );
-  const risks = assessRisk(riskFacts);
+  const risks = assessRisk(await riskFacts(boardId, doneColumnId));
 
   return { leadTime, cycleTime, throughput, cfd, workload, velocity, burndown, risks };
 }

@@ -297,9 +297,16 @@ tool(
 
 tool(
   "list_board",
-  "Read a board: its columns and their top-level tasks (each with a subtaskCount). Omit boardId for the default board. Column ids come from here. For a large board prefer search_tasks — this returns everything.",
+  "Read a board: its columns and their top-level tasks (each with a subtaskCount), plus the delivery risk currently scored on it. Omit boardId for the default board. Column ids come from here. For a large board prefer search_tasks — this returns everything.",
   { boardId: z.number().int().optional() },
-  async ({ boardId }) => api("GET", `/api/board/${await board(boardId)}`)
+  async ({ boardId }) => {
+    const id = await board(boardId);
+    const [tree, risks] = await Promise.all([
+      api("GET", `/api/board/${id}`),
+      api("GET", `/api/board/${id}/risk`),
+    ]);
+    return { ...tree, risks };
+  }
 );
 
 tool(
@@ -366,9 +373,16 @@ tool(
 
 tool(
   "get_task",
-  "Read one task by id, including its current column, priority, due date, labels, checklist progress, and subtaskCount.",
+  "Read one task by id, including its current column, priority, due date, labels, checklist progress, subtaskCount, and its delivery risk (null when nothing is firing).",
   { id: z.number().int() },
-  ({ id }) => api("GET", `/api/tasks/${id}`)
+  // Two calls rather than one, and worth it: an agent deciding what to do with a
+  // task needs to know it is late or blocked, and a signal you have to know to
+  // ask for is a signal most sessions never see. Door 1's get_task merges the
+  // same field — the doors publish one vocabulary or the agent learns two.
+  async ({ id }) => ({
+    ...(await api("GET", `/api/tasks/${id}`)),
+    risk: await api("GET", `/api/tasks/${id}/risk`),
+  })
 );
 
 tool(
@@ -688,6 +702,13 @@ tool(
   "A board's flow metrics: lead and cycle time, weekly throughput, a 30-day cumulative flow, and per-assignee workload. This is what a standup report is made of — read it rather than counting cards yourself.",
   { boardId: z.number().int().optional() },
   async ({ boardId }) => api("GET", `/api/board/${await board(boardId)}/analytics`)
+);
+
+tool(
+  "score_risk",
+  "Delivery risk across a board (4.2): every task showing a signal, highest first, each with a 0–1 score, a low/medium/high level, and the reasons behind it (overdue since a date, blocked by N tasks, open for N days). Deterministic — the score comes from board facts, never from a judgement about the work. Use it to decide what to raise, not as permission to reprioritise.",
+  { boardId: z.number().int().optional() },
+  async ({ boardId }) => api("GET", `/api/board/${await board(boardId)}/risk`)
 );
 
 tool(

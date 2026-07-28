@@ -4,7 +4,7 @@ import {
   unauthorized,
 } from "@/features/auth/server/session";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
-import { getBoardAnalytics } from "./analytics";
+import { getBoardAnalytics, getBoardRisks, getTaskRisk } from "./analytics";
 import { applyScheduleProposal, getScheduleProposal } from "./schedule-proposal";
 import {
   createColumn,
@@ -107,6 +107,39 @@ export async function handleUpdateColumn(request: Request, id: string) {
  * session: an agent that can read a board can read its numbers — "an author
  * that writes but cannot read is blind", one lens over.
  */
+/** Delivery risk alone (4.2). The analytics payload already carries `risks`;
+ *  this is the cheap door for the caller — an agent, usually — that wants only
+ *  that question answered and not six queries' worth of flow history. */
+export async function handleBoardRisks(request: Request, id: string) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+
+  const boardId = Number(id);
+  if (!Number.isInteger(boardId)) return badRequest("Invalid board id");
+
+  try {
+    return Response.json(await getBoardRisks(principal, boardId));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/** One task's risk, or null. Task-scoped rather than board-scoped so the caller
+ *  that has a task id does not have to find its board first. */
+export async function handleTaskRisk(request: Request, id: string) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+
+  const taskId = Number(id);
+  if (!Number.isInteger(taskId)) return badRequest("Invalid task id");
+
+  try {
+    return Response.json(await getTaskRisk(principal, taskId));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
 export async function handleBoardAnalytics(request: Request, id: string) {
   const principal = await getPrincipalFromRequest(request);
   if (!principal) return unauthorized();
