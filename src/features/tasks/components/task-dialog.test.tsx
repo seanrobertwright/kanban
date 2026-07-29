@@ -34,6 +34,15 @@ vi.mock("@/features/time/components/time-section", () => ({
 vi.mock("@/features/sla/components/sla-section", () => ({
   SlaSection: () => null,
 }));
+// Not stubbed to null like its neighbours: this one has to be able to FIRE its
+// onChanged, because the threading of that callback is the thing under test.
+vi.mock("@/features/agents/components/run-review", () => ({
+  RunReview: ({ onChanged }: { onChanged?: () => void }) => (
+    <button type="button" onClick={() => onChanged?.()}>
+      accept-changeset
+    </button>
+  ),
+}));
 
 /**
  * The pickers are DOM-rendered selects now, not native ones, so a value cannot
@@ -133,7 +142,7 @@ function task(over: Partial<Task> = {}): Task {
   };
 }
 
-function renderDialog(over: { task?: Task } = {}) {
+function renderDialog(over: { task?: Task; onRunReviewed?: () => void } = {}) {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
   render(
     <TaskDialog
@@ -145,6 +154,7 @@ function renderDialog(over: { task?: Task } = {}) {
       labels={LABELS}
       onOpenChange={vi.fn()}
       onSubmit={onSubmit}
+      onRunReviewed={over.onRunReviewed}
     />
   );
   return { onSubmit };
@@ -557,5 +567,34 @@ describe("TaskDialog description", () => {
     expect(onSubmit.mock.calls[0][0]).toMatchObject({
       description: "ship **now** or `later`",
     });
+  });
+});
+
+/**
+ * Accepting a changeset is the one path where the mutation is authored by
+ * someone other than the person clicking: a held `move_task` lands a new
+ * column_id straight in the DB, never touching the drag handler that would
+ * otherwise have updated the board's local state on the way. Before this wire
+ * existed the activity feed printed "moved to In Progress" above a card still
+ * sitting in To Do, and only a full page load reconciled them.
+ */
+describe("TaskDialog agent run review", () => {
+  it("tells the board to refetch when a changeset is accepted", () => {
+    const onRunReviewed = vi.fn();
+    renderDialog({ task: task(), onRunReviewed });
+
+    fireEvent.click(screen.getByRole("button", { name: "accept-changeset" }));
+
+    expect(onRunReviewed).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mount the review at all for a task being created", () => {
+    // No task means no run to review; firing a board refetch here would be a
+    // refetch for a row that does not exist yet.
+    renderDialog({ onRunReviewed: vi.fn() });
+
+    expect(
+      screen.queryByRole("button", { name: "accept-changeset" })
+    ).toBeNull();
   });
 });

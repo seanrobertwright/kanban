@@ -1567,6 +1567,11 @@ export function Board({
         // A blocker added or removed changes the card's blocked-by count, the
         // same staleness for the same reason.
         onDependenciesChanged={refresh}
+        // Accepting an agent's changeset applies mutations this board never saw
+        // proposed — a held move_task lands a new column_id straight in the DB,
+        // bypassing the drag handler that would normally have updated local
+        // state on the way. Same staleness, one step further removed.
+        onRunReviewed={refresh}
       />
       {/* Every configurable surface, behind one door. The panels are the same
           components they always were — see settingsSections. */}

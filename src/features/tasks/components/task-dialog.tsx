@@ -261,6 +261,15 @@ interface TaskDialogProps {
   onSubtasksChanged?: () => void;
   /** After a blocker is added or removed — the card's blocked-by count is stale. */
   onDependenciesChanged?: () => void;
+  /**
+   * After a changeset is accepted or an auto action undone. Unlike the two above,
+   * what goes stale here is not a count but the task itself: an accepted
+   * `move_task` writes a new column_id, and `revert_action` restores a previous
+   * priority/label/due date. The dialog cannot know which — the actions were
+   * authored by an agent, not by this form — so it says "something landed" and
+   * lets the board refetch.
+   */
+  onRunReviewed?: () => void;
 }
 
 export function TaskDialog({
@@ -284,6 +293,7 @@ export function TaskDialog({
   onMoveSubtask,
   onSubtasksChanged,
   onDependenciesChanged,
+  onRunReviewed,
 }: TaskDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -642,11 +652,19 @@ export function TaskDialog({
                       human came to this task to resolve when the agent has proposed
                       work. Renders nothing when the task has never had a run.
                       Accepting or undoing writes activity, so it bumps the same
-                      version the feed reads — the receipt updates in step. */}
+                      version the feed reads — the receipt updates in step. It
+                      also APPLIES the held mutation, which the feed cannot show
+                      and the board cannot guess: an accepted move_task changes
+                      the very column the card is sitting in. So it nudges the
+                      board too, or the receipt reads "moved to In Progress"
+                      above a card that has not moved. */}
                   <RunReview
                     key={`run-${task.id}`}
                     taskId={task.id}
-                    onChanged={() => setActivityVersion((v) => v + 1)}
+                    onChanged={() => {
+                      setActivityVersion((v) => v + 1);
+                      onRunReviewed?.();
+                    }}
                   />
                   <CommentThread
                     key={`comments-${task.id}`}
