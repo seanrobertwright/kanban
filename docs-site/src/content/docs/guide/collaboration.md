@@ -44,6 +44,8 @@ The document editor is collaborative. It binds a plain textarea to a Yjs `Y.Text
 
 Collaboration runs through a separate WebSocket process (`realtime/server.mjs`) speaking the standard Yjs `y-websocket` protocol, because a standalone Next.js build cannot host a custom WebSocket server. It persists every update to a `doc_yjs_update` log and compacts the log into a `doc_yjs_snapshot` when the last editor disconnects, so a document's live state survives restarts.
 
+The same process serves [whiteboards](#whiteboards) in `wb-<id>` rooms, with their own update log and snapshot. A ticket names the kind of room it opens, so a document ticket cannot open the canvas that happens to share its number.
+
 :::note
 Run `npm run realtime` beside the app. The server listens on port `1234` by default (`REALTIME_PORT` / `REALTIME_HOST` to change it), and the client connects to `NEXT_PUBLIC_REALTIME_URL`, falling back to `ws://localhost:1234`.
 :::
@@ -90,8 +92,9 @@ The `Whiteboards` button opens a visual canvas scoped to the current board — a
 
 - **Multiple boards** — the left rail lists every whiteboard on this kanban board; editors create more with the `Board name` box and `Add`.
 - **Task cards** — pick a task from the `Add task card…` select and press `Task card` to drop a card (rectangle plus `Task #id: title` label) onto the canvas, tagged with the task's id. Sketch architecture around real work items.
-- **Autosave** — every change is saved automatically, debounced to half a second so a stroke persists once rather than per pixel, with a final flush when the dialog closes so the last strokes are never lost.
-- **Roles** — viewers get Excalidraw's view mode: they can pan and read but not draw, and see no create or task-card controls.
+- **Draw together** — a canvas is shared through the same realtime service the documents use. Each shape is synced on its own, so two people drawing at once merge instead of overwriting: the line under the canvas reads **Live** when a room is holding it and everyone in it sees your strokes as you make them.
+- **Autosave** — with no realtime service running, the canvas falls back to saving the whole scene automatically, debounced to half a second so a stroke persists once rather than per pixel, with a final flush when the dialog closes. That fallback is single-writer — the last save of two people wins — which is why the status line says which mode you are in. In a live room the service saves the canvas itself when the last person leaves.
+- **Roles** — viewers get Excalidraw's view mode: they can pan and read but not draw, and see no create or task-card controls. A socket is a write channel, so only editors open one; a viewer reads the saved scene.
 
 ## Comments on tasks
 

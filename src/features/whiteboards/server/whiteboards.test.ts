@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import crypto, { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -8,6 +8,7 @@ import {
 import { pool, query } from "@/shared/db/client";
 import {
   createWhiteboard,
+  issueWhiteboardTicket,
   listWhiteboards,
   updateWhiteboard,
 } from "./repository";
@@ -123,6 +124,36 @@ describe("whiteboards (db)", () => {
     await expect(updateWhiteboard(alice, 2_000_000_000, [])).rejects.toThrow(
       /not found/i
     );
+  });
+
+  it("mints a room ticket a member can use and a viewer cannot get", async () => {
+    const board = await createWhiteboard(alice, boardId, "Together");
+    const ticket = await issueWhiteboardTicket(alice, board.id);
+
+    // The socket service trusts nothing but this signature, so the test verifies
+    // it the same way that service does rather than trusting the shape.
+    const [payload, signature] = ticket.split(".");
+    const expected = crypto
+      .createHmac("sha256", process.env.BETTER_AUTH_SECRET!)
+      .update(payload)
+      .digest("base64url");
+    expect(signature).toBe(expected);
+
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
+    // `kind` is what stops a ticket for doc 7 from opening whiteboard 7's room:
+    // two unrelated subjects that happen to share an integer.
+    expect(claims).toMatchObject({ kind: "whiteboard", id: board.id, userId: alice });
+    expect(claims.exp).toBeGreaterThan(Date.now());
+    // Short-lived on purpose: the room rechecks membership on connect, and a
+    // long-lived ticket would let a removed collaborator back in for its life.
+    expect(claims.exp).toBeLessThanOrEqual(Date.now() + 60_000);
+
+    // A socket is a write channel — every peer in a room mutates the shared
+    // scene — so it is gated at member, exactly where updateWhiteboard is. A
+    // viewer keeps the read-only canvas they already had.
+    await expect(issueWhiteboardTicket(viewer, board.id)).rejects.toThrow();
+    await expect(issueWhiteboardTicket(outsider, board.id)).rejects.toThrow();
+    await expect(issueWhiteboardTicket(alice, 2_000_000_000)).rejects.toThrow(/not found/i);
   });
 
   it("lists a board's whiteboards oldest first, and only that board's", async () => {

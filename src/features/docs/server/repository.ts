@@ -1,9 +1,9 @@
 import type { PoolClient } from "pg";
-import crypto from "node:crypto";
 
 import type { Principal } from "@/features/auth/server/principal";
 import { query, queryOne, withTransaction } from "@/shared/db/client";
 import { AuthzError, requireWorkspaceRole } from "@/features/workspaces/server/authz";
+import { signRoomTicket } from "@/shared/realtime/ticket";
 import { assertDocDeletionNotHeld } from "@/features/admin/server/legal-holds";
 import { createTask } from "@/features/tasks/server/repository";
 import type { Task } from "@/features/tasks/types";
@@ -157,9 +157,5 @@ export async function listDocRevisions(actor: string | Principal, id: number): P
  * service verifies this HMAC and then rechecks live workspace membership. */
 export async function issueCollaborationTicket(userId: string, id: number): Promise<string> {
   await requireDoc(userId, id, "viewer");
-  const secret = process.env.BETTER_AUTH_SECRET;
-  if (!secret) throw new Error("BETTER_AUTH_SECRET is not configured");
-  const payload = Buffer.from(JSON.stringify({ docId: id, userId, exp: Date.now() + 60_000 })).toString("base64url");
-  const signature = crypto.createHmac("sha256", secret).update(payload).digest("base64url");
-  return `${payload}.${signature}`;
+  return signRoomTicket("doc", id, userId);
 }
