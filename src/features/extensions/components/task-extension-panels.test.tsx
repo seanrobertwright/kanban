@@ -2,7 +2,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ExtensionCatalogProvider } from "./extension-catalog";
 import { TaskExtensionPanels } from "./task-extension-panels";
+import type { WorkspaceExtension } from "../types";
 
 /**
  * The postMessage bridge is the security boundary between third-party iframes
@@ -14,7 +16,7 @@ import { TaskExtensionPanels } from "./task-extension-panels";
 
 const EXTENSION_ORIGIN = "https://ext.example.test";
 
-const extension = {
+const extension: WorkspaceExtension = {
   id: 7,
   workspaceId: "ws-1",
   name: "example.panel",
@@ -163,5 +165,58 @@ describe("TaskExtensionPanels postMessage bridge", () => {
     const { container } = render(<TaskExtensionPanels taskId={2} />);
     await flush();
     expect(container.innerHTML).toBe("");
+  });
+});
+
+/**
+ * The installed list is workspace-scoped, but this component is mounted once
+ * per card — so asking the server for it per task meant N identical requests
+ * for one answer, paid even by a workspace with nothing installed. A board
+ * supplies the catalog from the page's server-side load instead.
+ */
+describe("TaskExtensionPanels extension catalog", () => {
+  const listCalls = () =>
+    fetchMock.mock.calls.filter(([url]) => !String(url).includes("/bridge"));
+
+  function renderInCatalog(taskId: number, slot?: "card_badge") {
+    return render(
+      <ExtensionCatalogProvider extensions={[extension]}>
+        <TaskExtensionPanels taskId={taskId} slot={slot} />
+      </ExtensionCatalogProvider>
+    );
+  }
+
+  it("asks the server for nothing when a catalog is above it", async () => {
+    renderInCatalog(1);
+    await screen.findByTitle("example.panel");
+    await flush();
+
+    expect(listCalls()).toHaveLength(0);
+  });
+
+  it("still bridges normally for an extension it never fetched", async () => {
+    renderInCatalog(1);
+    const iframe = (await screen.findByTitle(
+      "example.panel"
+    )) as HTMLIFrameElement;
+    const frameWindow = iframe.contentWindow!;
+
+    deliver(EXTENSION_ORIGIN, frameWindow);
+
+    await waitFor(() => expect(bridgeCalls()).toHaveLength(1));
+    expect(String(bridgeCalls()[0][0])).toBe(
+      "/api/tasks/1/extensions/7/bridge?scope=task"
+    );
+  });
+
+  it("filters the shared list by slot instead of re-querying per slot", async () => {
+    // One catalog serves all four slots, so an extension declaring only
+    // `task_panel` must not appear in the card-badge slot — the filtering the
+    // per-task endpoint used to do with a WHERE clause.
+    const { container } = renderInCatalog(1, "card_badge");
+    await flush();
+
+    expect(container.innerHTML).toBe("");
+    expect(listCalls()).toHaveLength(0);
   });
 });

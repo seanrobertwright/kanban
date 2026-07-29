@@ -140,6 +140,8 @@ import { SavedViews } from "@/features/views/components/saved-views";
 import type { BoardViewMode, SavedView } from "@/features/views/types";
 import { TemplatesDialog } from "@/features/templates/components/templates-dialog";
 import { ShareDialog } from "@/features/sharing/components/share-dialog";
+import { ExtensionCatalogProvider } from "@/features/extensions/components/extension-catalog";
+import type { WorkspaceExtension } from "@/features/extensions/types";
 import type { TaskTemplate } from "@/features/templates/types";
 
 /**
@@ -282,6 +284,16 @@ interface BoardProps {
   /** The board's objectives + key results (037), state because the
    * ObjectivesDialog edits them and the task dialog's picker reads them. */
   initialObjectives: Objective[];
+  /**
+   * The workspace's installed extensions (8.1). A prop read straight through,
+   * not state: nothing on the board installs or removes one — that is the
+   * Settings surface, which reloads the page.
+   *
+   * It is here rather than fetched by the components that render it because
+   * every card mounts a `card_badge` slot, and a workspace-scoped list asked
+   * for once per card is the same answer N times over.
+   */
+  extensions: WorkspaceExtension[];
   /** False for viewers. The server enforces this too — this only hides the UI. */
   canEdit: boolean;
   /**
@@ -334,6 +346,7 @@ export function Board({
   initialDependencies,
   initialCustomFields,
   initialObjectives,
+  extensions,
   canEdit,
   canDeleteColumns,
   currentUserId,
@@ -1140,7 +1153,11 @@ export function Board({
   }, [canEdit, cols, settingsSections]);
 
   return (
-    <>
+    // Every card badge and task panel below reads its extensions from here
+    // instead of asking the server for the same workspace-scoped list once per
+    // card. The board is the right height for it: the list is identical for
+    // every card, and switching boards remounts this component anyway.
+    <ExtensionCatalogProvider extensions={extensions}>
       <CommandPalette
         commands={paletteCommands}
         tasks={visibleTaskList}
@@ -1628,6 +1645,6 @@ export function Board({
           workspaceId={workspaceId}
         />
       )}
-    </>
+    </ExtensionCatalogProvider>
   );
 }

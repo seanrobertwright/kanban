@@ -33,6 +33,7 @@ import { WhiteboardsButton } from "@/features/whiteboards/components/whiteboards
 import { SettingsTrigger } from "@/features/settings/components/settings-dialog";
 import { CommandPaletteTrigger } from "@/features/board/components/command-palette";
 import { BoardExtensionActions } from "@/features/extensions/components/board-extension-actions";
+import { listWorkspaceExtensions } from "@/features/extensions/server/repository";
 import { KnowledgeButton } from "@/features/knowledge/components/knowledge-dialog";
 
 export const dynamic = "force-dynamic";
@@ -82,8 +83,16 @@ export default async function Home({
   // shows them as another kind of assignee, and every card with an agent on it
   // resolves that agent's name and face from this one roster on first paint —
   // which is why Task carries only an assignee's {type, id}, not its display data.
-  const [workspaces, boards, members, agents, labels, savedViews, templates] =
-    await Promise.all([
+  const [
+    workspaces,
+    boards,
+    members,
+    agents,
+    labels,
+    savedViews,
+    templates,
+    extensions,
+  ] = await Promise.all([
       listWorkspacesForUser(session.user.id),
       listBoardsForUser(session.user.id),
       listMembers(session.user.id, data.board.workspaceId),
@@ -95,6 +104,12 @@ export default async function Home({
       // Shared across the workspace (019), for the New-task dialog's "start from
       // a template" picker — workspace-scoped, so the same for every board.
       listTemplates(session.user.id, data.board.workspaceId),
+      // Installed extensions (8.1) ride down for the strongest version of the
+      // same reason: the `card_badge` slot mounts on EVERY card, and the list
+      // is workspace-scoped, so fetching it from the client meant one request
+      // per card for one answer — paid even by a workspace that has installed
+      // nothing. Every slot on this page reads it from here instead.
+      listWorkspaceExtensions(session.user.id, data.board.workspaceId),
     ]);
   const workspace = workspaces.find((w) => w.id === data.board.workspaceId)!;
   const canEdit = workspace.role !== "viewer";
@@ -168,7 +183,7 @@ export default async function Home({
 
   const administer = (
     <>
-      <BoardExtensionActions workspaceId={data.board.workspaceId} />
+      <BoardExtensionActions extensions={extensions} />
       {/* One door to everything configurable — members, agents, webhooks and
           administration for the workspace, and this board's vocabulary, rules
           and plan. The panels live with the board's state, so the trigger only
@@ -322,6 +337,7 @@ export default async function Home({
             initialDependencies={data.dependencies}
             initialCustomFields={data.customFields}
             initialObjectives={data.objectives}
+            extensions={extensions}
             canEdit={canEdit}
             canDeleteColumns={canDeleteColumns}
             currentUserId={session.user.id}
