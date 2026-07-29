@@ -8,10 +8,12 @@ import {
   getDefaultBoard,
 } from "@/features/workspaces/server/repository";
 import { pool, query } from "@/shared/db/client";
+import { createEpic } from "@/features/epics/server/repository";
 import {
   createMilestone,
   deleteMilestone,
   listMilestones,
+  updateMilestone,
 } from "./repository";
 
 const createdUsers: string[] = [];
@@ -29,6 +31,7 @@ async function createUser(label: string): Promise<string> {
 
 describe("milestones", () => {
   let alice: string;
+  let workspaceId: string;
   let boardId: number;
   let todoId: number;
   let doneId: number;
@@ -36,7 +39,7 @@ describe("milestones", () => {
 
   beforeAll(async () => {
     alice = await createUser("ms-alice");
-    await ensurePersonalWorkspace(alice, "MsAlice");
+    workspaceId = (await ensurePersonalWorkspace(alice, "MsAlice")).id;
     boardId = (await getDefaultBoard(alice))!.id;
     const cols = (await getBoard(alice, boardId))!.columns;
     todoId = cols[0].id;
@@ -133,5 +136,104 @@ describe("milestones", () => {
       [boardId]
     );
     expect(log.rows.length).toBeGreaterThan(0);
+  });
+
+  it("edits three-valued fields: absent leaves, null clears", async () => {
+    const epic = await createEpic(alice, boardId, { name: "Platform" }, human());
+    const milestone = await createMilestone(
+      alice,
+      boardId,
+      { name: "Dated", dueDate: "2026-10-01", epicId: epic.id },
+      human()
+    );
+
+    // A rename says nothing about the date or the epic, so both must survive —
+    // the failure this guards against is a COALESCE-shaped update that treats
+    // "not mentioned" as "set to null".
+    const renamed = await updateMilestone(alice, milestone.id, { name: "Renamed" }, human());
+    expect(renamed!.name).toBe("Renamed");
+    expect(renamed!.dueDate).toBe("2026-10-01");
+    expect(renamed!.epicId).toBe(epic.id);
+
+    // Naming them as null is how they are cleared, which is the other half of
+    // the same rule and impossible if the two cases were collapsed.
+    const cleared = await updateMilestone(
+      alice,
+      milestone.id,
+      { dueDate: null, epicId: null },
+      human()
+    );
+    expect(cleared!.dueDate).toBeNull();
+    expect(cleared!.epicId).toBeNull();
+  });
+
+  it("refuses another board's epic, and an unknown milestone", async () => {
+    const bob = await createUser("ms-epic-bob");
+    await ensurePersonalWorkspace(bob, "MsEpicBob");
+    const bobBoard = (await getDefaultBoard(bob))!.id;
+    const bobEpic = await createEpic(
+      bob,
+      bobBoard,
+      { name: "Bob's epic" },
+      { type: "human", id: bob }
+    );
+
+    await expect(
+      createMilestone(alice, boardId, { name: "Cross", epicId: bobEpic.id }, human())
+    ).rejects.toThrow(/not on this board/);
+
+    const mine = await createMilestone(alice, boardId, { name: "Mine" }, human());
+    await expect(
+      updateMilestone(alice, mine.id, { epicId: bobEpic.id }, human())
+    ).rejects.toThrow(/not on this board/);
+
+    // An id nobody owns is not_found rather than a role error — the same answer
+    // another workspace's milestone gets, so the id space says nothing.
+    await expect(
+      updateMilestone(alice, 2_000_000_000, { name: "Ghost" }, human())
+    ).rejects.toThrow(/not found/i);
+    await expect(
+      deleteMilestone(alice, 2_000_000_000, human())
+    ).rejects.toThrow(/not found/i);
+  });
+
+  it("lists dated milestones first, undated last", async () => {
+    const fresh = await createUser("ms-order");
+    await ensurePersonalWorkspace(fresh, "MsOrder");
+    const freshBoard = (await getDefaultBoard(fresh))!.id;
+    const by = { type: "human" as const, id: fresh };
+
+    // Inserted deliberately out of order: the ORDER BY is the feature, and a
+    // creation-order list would pass a weaker assertion by accident.
+    await createMilestone(fresh, freshBoard, { name: "Someday" }, by);
+    await createMilestone(fresh, freshBoard, { name: "Later", dueDate: "2027-01-01" }, by);
+    await createMilestone(fresh, freshBoard, { name: "Soon", dueDate: "2026-01-01" }, by);
+
+    expect((await listMilestones(fresh, freshBoard)).map((m) => m.name)).toEqual([
+      "Soon",
+      "Later",
+      "Someday",
+    ]);
+  });
+
+  it("a viewer reads milestones but cannot author them", async () => {
+    const viewer = await createUser("ms-viewer");
+    await query(
+      `INSERT INTO workspace_member (workspace_id, user_id, role) VALUES ($1, $2, 'viewer')`,
+      [workspaceId, viewer]
+    );
+    const milestone = await createMilestone(alice, boardId, { name: "Readable" }, human());
+
+    expect(
+      (await listMilestones(viewer, boardId)).some((m) => m.id === milestone.id)
+    ).toBe(true);
+    const asViewer = { type: "human" as const, id: viewer };
+    await expect(
+      createMilestone(viewer, boardId, { name: "Nope" }, asViewer)
+    ).rejects.toThrow();
+    await expect(
+      updateMilestone(viewer, milestone.id, { name: "Nope" }, asViewer)
+    ).rejects.toThrow();
+    await expect(deleteMilestone(viewer, milestone.id, asViewer)).rejects.toThrow();
   });
 });

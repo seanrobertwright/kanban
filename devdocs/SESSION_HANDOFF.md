@@ -58,7 +58,7 @@ Recommended order: **1 → 2 → 5 → 3/4 → 6 → 8 → 7**, then the UAT.
 3. **Public feedback portal** — SPEC 3.9's tokenized external intake. Public *forms* shipped (`/public/forms/[token]`); feedback did not.
 4. ~~**Requests is a read-only dialog**~~ — shipped: `view_mode='requests'` lens (migration 086) with accept/decline/reopen triage; the dialog is retired.
 5. **Attachments throw without S3 env** (`src/features/attachments/server/storage.ts`) — no local-disk fallback, so a fresh self-host has no attachments at all.
-6. **Test-debt tail** — 18 slices at exactly one test file; thinnest where it matters: `graphql`, `whiteboards`, `chat`, `dependencies`, `checklists`.
+6. ~~**Test-debt tail**~~ — swept: ranked by *assertion* count rather than file count (chat/dependencies/checklists were fine; views and whiteboards had one assertion each). views, whiteboards, docs, milestones, sla, epics, sprints all lifted; +28 tests (1052 → 1080).
 7. **Roadmap item 10, untouched** — theme pass (neon-grid vs "enterprise-ready", see `docs/Kanban tool design synthesis/`), keyboard chords, empty states applied everywhere (primitive exists).
 8. **Small ones from the review's per-feature table** — epics name-only; dependencies `blocked_by` only (no FS/SS/FF/lag); reports forecast metric; docs `[[wiki links]]` + tree UI; capacity has no time-off model; extensions fire N fetches per card render.
 

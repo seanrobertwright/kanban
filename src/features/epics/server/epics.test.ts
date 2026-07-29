@@ -12,7 +12,7 @@ import {
   getDefaultBoard,
 } from "@/features/workspaces/server/repository";
 import { pool, query } from "@/shared/db/client";
-import { createEpic, deleteEpic, listEpics } from "./repository";
+import { createEpic, deleteEpic, listEpics, updateEpic } from "./repository";
 
 const createdUsers: string[] = [];
 
@@ -169,5 +169,75 @@ describe("epics", () => {
       [boardId]
     );
     expect(log.rows.length).toBeGreaterThan(0);
+  });
+
+  it("renames, and a no-op rename writes no history", async () => {
+    const epic = await createEpic(alice, boardId, { name: "Original" }, human());
+    const logged = async () =>
+      Number(
+        (
+          await query<{ n: string }>(
+            `SELECT count(*) AS n FROM activity_log
+              WHERE board_id = $1 AND action = 'epic.updated'`,
+            [boardId]
+          )
+        )[0].n
+      );
+
+    const before = await logged();
+    // Saving a form without changing anything is the commonest edit there is;
+    // it must not add a row to a feed people read to see what changed.
+    const unchanged = await updateEpic(alice, epic.id, { name: "Original" }, human());
+    expect(unchanged!.name).toBe("Original");
+    expect(await logged()).toBe(before);
+
+    const renamed = await updateEpic(alice, epic.id, { name: "Renamed" }, human());
+    expect(renamed!.name).toBe("Renamed");
+    expect(await logged()).toBe(before + 1);
+  });
+
+  it("lists alphabetically and answers not_found for an epic nobody owns", async () => {
+    const fresh = await createUser("ep-order");
+    await ensurePersonalWorkspace(fresh, "EpOrder");
+    const freshBoard = (await getDefaultBoard(fresh))!.id;
+    const by = { type: "human" as const, id: fresh };
+
+    // An epic has no due date to sort on, so name order is the whole contract —
+    // inserted out of order so creation order cannot pass by accident.
+    for (const name of ["Zeta", "Alpha", "Mu"]) {
+      await createEpic(fresh, freshBoard, { name }, by);
+    }
+    expect((await listEpics(fresh, freshBoard)).map((e) => e.name)).toEqual([
+      "Alpha",
+      "Mu",
+      "Zeta",
+    ]);
+
+    await expect(
+      updateEpic(alice, 2_000_000_000, { name: "Ghost" }, human())
+    ).rejects.toThrow(/not found/i);
+    await expect(
+      deleteEpic(alice, 2_000_000_000, human())
+    ).rejects.toThrow(/not found/i);
+  });
+
+  it("a viewer reads epics but cannot author them", async () => {
+    const viewer = await createUser("ep-viewer");
+    const workspaceId = (await ensurePersonalWorkspace(alice, "EpAlice")).id;
+    await query(
+      `INSERT INTO workspace_member (workspace_id, user_id, role) VALUES ($1, $2, 'viewer')`,
+      [workspaceId, viewer]
+    );
+    const epic = await createEpic(alice, boardId, { name: "Readable" }, human());
+    const asViewer = { type: "human" as const, id: viewer };
+
+    expect((await listEpics(viewer, boardId)).some((e) => e.id === epic.id)).toBe(true);
+    await expect(
+      createEpic(viewer, boardId, { name: "Nope" }, asViewer)
+    ).rejects.toThrow();
+    await expect(
+      updateEpic(viewer, epic.id, { name: "Nope" }, asViewer)
+    ).rejects.toThrow();
+    await expect(deleteEpic(viewer, epic.id, asViewer)).rejects.toThrow();
   });
 });

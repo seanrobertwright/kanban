@@ -12,6 +12,7 @@ import { pool, query } from "@/shared/db/client";
 import {
   completeSprint,
   createSprint,
+  deleteSprint,
   getBoardSprintCapacity,
   listSprints,
   startSprint,
@@ -162,5 +163,96 @@ describe("sprints", () => {
     await expect(
       updateTask(alice, task.id, { sprintId: bobSprint.id })
     ).rejects.toThrow(/not on this board/);
+  });
+
+  it("only walks the lifecycle forwards", async () => {
+    const sprint = await createSprint(alice, boardId, { name: "One-way" }, human(alice));
+
+    // planning cannot be completed — completing is what freezes scope, and a
+    // sprint that never ran has no scope to freeze.
+    await expect(
+      completeSprint(alice, sprint.id, null, human(alice))
+    ).rejects.toThrow(/active/);
+
+    const started = await startSprint(alice, sprint.id, human(alice));
+    expect(started!.status).toBe("active");
+    // An active sprint cannot be started again — the second start would be the
+    // one that quietly re-anchors the burndown window.
+    await expect(startSprint(alice, sprint.id, human(alice))).rejects.toThrow(
+      /planning/
+    );
+
+    const completed = await completeSprint(alice, sprint.id, null, human(alice));
+    expect(completed!.status).toBe("completed");
+    // Terminal: restarting a completed sprint would make velocity drift, since
+    // its frozen scope is what every later average is computed from.
+    await expect(startSprint(alice, sprint.id, human(alice))).rejects.toThrow(
+      /planning/
+    );
+    await expect(
+      completeSprint(alice, sprint.id, null, human(alice))
+    ).rejects.toThrow(/active/);
+  });
+
+  it("anchors the dates the lifecycle implies", async () => {
+    const sprint = await createSprint(alice, boardId, { name: "Dateless" }, human(alice));
+    expect(sprint.startDate).toBeNull();
+
+    const started = await startSprint(alice, sprint.id, human(alice));
+    // Burndown needs a window anchor, so starting without a date takes today
+    // rather than leaving a sprint that is running from nowhere.
+    expect(started!.startDate).not.toBeNull();
+    expect(started!.endDate).toBeNull();
+
+    const completed = await completeSprint(alice, sprint.id, null, human(alice));
+    expect(completed!.endDate).not.toBeNull();
+  });
+
+  it("falls back to the backlog when the rollover target is not a place work can go", async () => {
+    const current = await createSprint(alice, boardId, { name: "Rolling" }, human(alice));
+    await startSprint(alice, current.id, human(alice));
+    const task = await createTask(alice, {
+      columnId: todoId,
+      title: "Homeless",
+      sprintId: current.id,
+    });
+
+    // Another board's planning sprint is a valid id and an invalid destination.
+    // Refusing the whole completion would strand the sprint mid-lifecycle, so
+    // the work falls to the backlog instead — visible, and re-plannable.
+    const bob = await createUser("sp-roll-bob");
+    await ensurePersonalWorkspace(bob, "SpRollBob");
+    const bobBoard = (await getDefaultBoard(bob))!.id;
+    const bobSprint = await createSprint(bob, bobBoard, { name: "Bob's" }, human(bob));
+
+    await completeSprint(alice, current.id, bobSprint.id, human(alice));
+    expect((await getTask(alice, task.id))!.sprintId).toBeNull();
+  });
+
+  it("deleting a sprint un-schedules its work rather than taking it along", async () => {
+    const sprint = await createSprint(alice, boardId, { name: "Doomed" }, human(alice));
+    const task = await createTask(alice, {
+      columnId: todoId,
+      title: "Survivor",
+      sprintId: sprint.id,
+    });
+
+    expect(await deleteSprint(alice, sprint.id, human(alice))).toBe(true);
+    const survivor = await getTask(alice, task.id);
+    expect(survivor).toBeDefined();
+    expect(survivor!.sprintId).toBeNull();
+
+    const logged = await query<{ n: string }>(
+      `SELECT count(*) AS n FROM activity_log
+        WHERE board_id = $1 AND action = 'sprint.deleted'`,
+      [boardId]
+    );
+    expect(Number(logged[0].n)).toBeGreaterThan(0);
+
+    // A sprint id nobody owns is not_found, the same answer another board's
+    // sprint gets — the id space is not an oracle.
+    await expect(
+      deleteSprint(alice, 2_000_000_000, human(alice))
+    ).rejects.toThrow(/not found/i);
   });
 });

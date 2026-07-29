@@ -1039,3 +1039,54 @@ would be grading its own homework.
       4 DB tests: an accept routes + stamps + logs exactly one row; a decline
       carries its reason and a reopen clears it while the intake stamp survives
       both writes; an ordinary task and a wrong-board id are both refused.
+
+## Code-review roadmap item 6 — the test-debt tail (2026-07-28)
+
+- [x] **Seven thin slices given real coverage** (rock 6) — the review named
+      "18 slices at exactly one test file", but file count is the wrong meter:
+      `chat` (8 assertions), `dependencies` (12) and `checklists` (7) are
+      single-file and well covered, while `views` and `whiteboards` had **one
+      assertion each** guarding a whole feature. Ranked by assertion count
+      instead, the tail is: views 1, whiteboards 1, docs 2, milestones 3, sla 3,
+      epics 4, sprints 4. All seven now carry the invariants that would
+      otherwise be found in production. **+28 tests (1052 → 1080), full suite
+      green.**
+      - **views 1 → 5.** The keystone test drives off `BOARD_VIEW_MODES` itself
+        and saves every lens in it, which catches the two-file bug nothing else
+        can: a lens added to the TS union with the CHECK-widening migration
+        forgotten (or the reverse). TypeScript cannot see a Postgres constraint;
+        a data-driven loop covers every future lens the day it is named. Plus
+        the same-name upsert (unique on `lower(name)`), per-person isolation
+        (another member's view deletes as `false`, not a throw), and ordering.
+      - **whiteboards 1 → 6.** A scene of nested objects, floats and unicode
+        round-trips byte-for-byte (the repository stores canvases it has never
+        seen); an update *replaces* rather than merges, so a deleted shape stays
+        deleted; blank titles hit 060's CHECK; a viewer reads and cannot write;
+        an unknown id is not_found before the role check.
+      - **sla 3 → 7.** A policy is a filter, not a blanket (unmatched tasks
+        carry no timer); a re-sweep does **not** reset a running clock — the
+        `ON CONFLICT DO NOTHING` that keeps deadlines from extending on every
+        tick, which would make an SLA that can never breach; a disabled policy
+        starts nothing until enabled; JSONB fields are three-valued so a rename
+        cannot blank the condition; authoring is admin, reading is viewer.
+      - **milestones 3 → 7.** dueDate/epicId/objectiveId absent-leaves vs
+        null-clears; another board's epic refused on both create and update;
+        unknown ids not_found; `due_date NULLS LAST` ordering; viewer reads but
+        cannot author.
+      - **sprints 4 → 8.** The lifecycle only walks forwards (planning cannot be
+        completed, active cannot be restarted, completed is terminal — the three
+        transitions that would let velocity drift); start/end dates anchor to
+        today so burndown has a window; an invalid rollover target sends work to
+        the backlog rather than stranding the sprint mid-completion; deleting
+        un-schedules without destroying.
+      - **epics 4 → 7.** A no-op rename writes no `epic.updated` row (saving an
+        unchanged form is the commonest edit there is, and the feed is read to
+        see what changed); alphabetical listing; not_found on unknown ids;
+        viewer gate.
+      - **docs 2 → 6.** Search covers **published** docs only — a draft is
+        thinking-in-progress, and its leaking into knowledge results is the
+        security-shaped bug of this slice; a title-only edit writes no revision;
+        self-parent and cross-workspace board refused; meeting actions promote
+        only where a board exists to promote them to; and a **guest sees only
+        explicitly shared docs** — unshared reads, revision reads and edits all
+        answer not_found rather than 403.
