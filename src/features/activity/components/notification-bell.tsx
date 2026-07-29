@@ -68,6 +68,9 @@ const ACTION_VERB: Record<string, string> = {
   "git.ci_passed": "CI passed for",
   "git.ci_failed": "CI failed for",
   "chat.mentioned": "mentioned someone in",
+  "request.accepted": "accepted a request",
+  "request.declined": "declined a request",
+  "request.reopened": "reopened a request",
 };
 
 const POLL_MS = 60_000;

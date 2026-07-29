@@ -35,6 +35,8 @@ import type {
   NotificationEntry,
   ReleaseAction,
   ReleaseSnapshot,
+  RequestAction,
+  RequestSnapshot,
   SprintAction,
   SprintSnapshot,
   TimeAction,
@@ -122,6 +124,11 @@ export type ActivityInput =
       action: ChatAction;
       before?: ChatMessageSnapshot | null;
       after?: ChatMessageSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: RequestAction;
+      before?: RequestSnapshot | null;
+      after?: RequestSnapshot | null;
     });
 
 /**

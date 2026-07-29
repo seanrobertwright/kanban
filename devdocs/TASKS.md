@@ -1001,3 +1001,41 @@ would be grading its own homework.
       — and reported 19 failures from the copies, which fail on the pruned
       node_modules a standalone bundle ships. A green suite that turns red
       because someone ran a build is a verification bar nobody can trust.
+
+## Code-review roadmap item 4 — Requests as a lens with triage (2026-07-28)
+
+- [x] **`view_mode='requests'` + triage** (SPEC 1.8, rock 4) — 052 shipped the
+      intake *read*: `listRequests` and a read-only dialog. What the SPEC names
+      is a board lens, and what an intake team actually does — decide — did not
+      exist at all. Migration **086** widens the `saved_view` CHECK (the 073
+      pattern, sixth time) and adds a partial index on `task (column_id) WHERE
+      request_meta IS NOT NULL`, the queue's whole selectivity.
+      Triage state lives in the existing `request_meta` JSONB as a `triage`
+      sub-object (`{state, at, actorType, actorId, reason?}`), so **no backfill**:
+      an untriaged request is one with no `triage` key, which is every request
+      that already exists, and the queue reads them all as open. Written with
+      `jsonb_set` / `- 'triage'` rather than by replacing `request_meta`, which
+      would clobber a source/requester stamp written since the row was read.
+      `triageRequest` owns the verdict and nothing else: the routing half rides
+      `moveTask` (with the runner's `MAX_SAFE_INTEGER` append sentinel) and
+      `updateTask`, inheriting their tenancy checks, position handling,
+      automation triggers and `task.moved` / `task.assigned` log rows. Member,
+      not admin — every write it makes is one the same person could make by hand
+      on the board. The board id in the URL is checked against the task's, so a
+      member of two boards cannot triage board B's request through board A's
+      door. New activity family `request.accepted|declined|reopened` with its own
+      `RequestSnapshot` (source carried in the snapshot, `CustomFieldValueSnapshot`'s
+      reason: the form can be deleted and the entry must still read). No
+      `request.created` — a request is born a form submission, which already
+      logs `task.created`.
+      `RequestsView` replaces `RequestsDialog` (retired, not kept beside it —
+      one surface per job) on chord **G Q** (`r` was Roadmap's), grouped
+      Open → Accepted → Declined. Accept **stages** its routing (column, owner,
+      priority) and commits on one press: picking an assignee is not a verdict,
+      and a triager who assigns and then declines must not have accepted by
+      accident. Decline takes a reason (280 chars) that the activity feed
+      prints — "declined a request" alone sends the reader to the task to find
+      out why. Reopen clears the verdict, so a mis-triage costs a click.
+      4 DB tests: an accept routes + stamps + logs exactly one row; a decline
+      carries its reason and a reopen clears it while the intake stamp survives
+      both writes; an ordinary task and a wrong-board id are both refused.

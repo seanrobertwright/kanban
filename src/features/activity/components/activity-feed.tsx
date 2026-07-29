@@ -210,6 +210,16 @@ function describe(
     }
     case "time.deleted":
       return "removed a time entry";
+    case "request.accepted":
+      return "accepted a request";
+    case "request.declined": {
+      // The reason is the entry — "declined a request" alone sends the reader
+      // to the task to find out why, which is the trip the log exists to save.
+      const reason = entry.after && "reason" in entry.after ? entry.after.reason : null;
+      return reason ? `declined a request: ${reason}` : "declined a request";
+    }
+    case "request.reopened":
+      return "reopened a request";
     case "sprint.created":
       return "added a sprint";
     case "sprint.updated":

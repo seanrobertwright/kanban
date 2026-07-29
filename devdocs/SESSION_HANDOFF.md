@@ -56,7 +56,7 @@ Recommended order: **1 → 2 → 5 → 3/4 → 6 → 8 → 7**, then the UAT.
 1. **GraphQL has no guard rails.** `/api/graphql` is live with two query fields, **no depth or complexity limit**, one test. Production hole, not test debt.
 2. **Agent doors don't reach the new AI work.** `propose_schedule` (4.1) and risk scoring (4.2) exist as pure libs + `src/app/api/board/[id]/schedule` but are **agent tools in neither door**; SPEC 4.1 names the tool. Same for `set_objective` / `score_key_result` (open in `devdocs/TASKS.md`). Cheapest capability-per-line left — the hard half is built and tested.
 3. **Public feedback portal** — SPEC 3.9's tokenized external intake. Public *forms* shipped (`/public/forms/[token]`); feedback did not.
-4. **Requests is a read-only dialog**, not the specced `view_mode='requests'` board lens with triage.
+4. ~~**Requests is a read-only dialog**~~ — shipped: `view_mode='requests'` lens (migration 086) with accept/decline/reopen triage; the dialog is retired.
 5. **Attachments throw without S3 env** (`src/features/attachments/server/storage.ts`) — no local-disk fallback, so a fresh self-host has no attachments at all.
 6. **Test-debt tail** — 18 slices at exactly one test file; thinnest where it matters: `graphql`, `whiteboards`, `chat`, `dependencies`, `checklists`.
 7. **Roadmap item 10, untouched** — theme pass (neon-grid vs "enterprise-ready", see `docs/Kanban tool design synthesis/`), keyboard chords, empty states applied everywhere (primitive exists).

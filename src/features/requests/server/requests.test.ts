@@ -9,7 +9,7 @@ import {
 import { pool, query } from "@/shared/db/client";
 import { createTask } from "@/features/tasks/server/repository";
 import { createForm, submitForm } from "@/features/forms/server/repository";
-import { listRequests } from "./repository";
+import { listRequests, triageRequest } from "./repository";
 
 /**
  * Request management (052, rock 1.8): a form submission becomes a request in the
@@ -32,12 +32,15 @@ describe("requests queue (db)", () => {
   let alice: string;
   let boardId: number;
   let col1: number;
+  let col2: number;
 
   beforeAll(async () => {
     alice = await createUser("req-alice", "Rick Requester");
     await ensurePersonalWorkspace(alice, "ReqAlice");
     boardId = (await getDefaultBoard(alice))!.id;
-    col1 = (await getBoard(alice, boardId))!.columns[0].id;
+    const columns = (await getBoard(alice, boardId))!.columns;
+    col1 = columns[0].id;
+    col2 = columns[1].id;
   });
 
   afterAll(async () => {
@@ -66,5 +69,82 @@ describe("requests queue (db)", () => {
     expect(requests[0].title).toBe("VPN access");
     expect(requests[0].source).toBe("Access request");
     expect(requests[0].requesterName).toBe("Rick Requester");
+    // Untriaged: the queue's "open" is the absence of a verdict, not a stored
+    // 'open' state, so a request that predates triage reads open for free.
+    expect(requests[0].triage).toBeNull();
+  });
+
+  it("accepts a request: routes it, stamps the verdict, logs it once", async () => {
+    const form = await createForm(alice, boardId, {
+      name: "Laptop request",
+      targetColumnId: col1,
+      fields: [{ label: "What do you need?", type: "text", required: true }],
+    });
+    const task = await submitForm(alice, form.id, { answers: ["A new laptop"] });
+
+    const accepted = await triageRequest(alice, boardId, task.id, {
+      action: "accept",
+      columnId: col2,
+      assignee: { type: "human", id: alice },
+      priority: "high",
+    });
+
+    expect(accepted.triage?.state).toBe("accepted");
+    expect(accepted.triage?.actorId).toBe(alice);
+    expect(accepted.columnId).toBe(col2);
+    expect(accepted.assignee).toEqual({ type: "human", id: alice });
+    expect(accepted.priority).toBe("high");
+
+    const logged = await query<{ action: string; after: { state: string } }>(
+      `SELECT action, after FROM activity_log
+        WHERE task_id = $1 AND action LIKE 'request.%'`,
+      [task.id]
+    );
+    expect(logged).toHaveLength(1);
+    expect(logged[0].action).toBe("request.accepted");
+    expect(logged[0].after.state).toBe("accepted");
+  });
+
+  it("declines with a reason, and reopening clears the verdict", async () => {
+    const form = await createForm(alice, boardId, {
+      name: "Budget request",
+      targetColumnId: col1,
+      fields: [{ label: "What do you need?", type: "text", required: true }],
+    });
+    const task = await submitForm(alice, form.id, { answers: ["A yacht"] });
+
+    const declined = await triageRequest(alice, boardId, task.id, {
+      action: "decline",
+      reason: "Out of scope this quarter",
+    });
+    expect(declined.triage?.state).toBe("declined");
+    expect(declined.triage?.reason).toBe("Out of scope this quarter");
+
+    const reopened = await triageRequest(alice, boardId, task.id, {
+      action: "reopen",
+    });
+    expect(reopened.triage).toBeNull();
+
+    // The stamp that makes the task a request must survive both writes — the
+    // whole point of editing request_meta's `triage` key rather than the object.
+    expect(reopened.source).toBe("Budget request");
+    expect(reopened.requesterName).toBe("Rick Requester");
+  });
+
+  it("refuses to triage a task that is not a request, or one on another board", async () => {
+    const plain = await createTask(alice, { columnId: col1, title: "not intake" });
+    await expect(
+      triageRequest(alice, boardId, plain.id, { action: "accept" })
+    ).rejects.toThrow(/not a request/);
+
+    const form = await createForm(alice, boardId, {
+      name: "Wrong-door request",
+      targetColumnId: col1,
+      fields: [{ label: "What do you need?", type: "text", required: true }],
+    });
+    const task = await submitForm(alice, form.id, { answers: ["A door"] });
+    await expect(
+      triageRequest(alice, boardId + 10_000, task.id, { action: "accept" })
+    ).rejects.toThrow(/not on this board/);
   });
 });

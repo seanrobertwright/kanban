@@ -284,6 +284,22 @@ export type GitAction =
  */
 export type ChatAction = "chat.mentioned";
 
+/**
+ * Request triage (1.8, the 086 lens) — task-shaped entries (taskId set,
+ * boardId locates), because a triage verdict is a fact about one request.
+ *
+ * The column move and the assignment triage performs are already logged as
+ * ordinary task.moved / task.assigned rows by the repositories that make them;
+ * these three actions record the *verdict*, which nothing else does. That is
+ * why there is no `request.created`: a request is born as a form submission,
+ * which already logs task.created — a second row for the same event would say
+ * nothing new.
+ */
+export type RequestAction =
+  | "request.accepted"
+  | "request.declined"
+  | "request.reopened";
+
 export type ActivityAction =
   | TaskAction
   | CommentAction
@@ -297,7 +313,8 @@ export type ActivityAction =
   | SprintAction
   | CustomFieldValueAction
   | GitAction
-  | ChatAction;
+  | ChatAction
+  | RequestAction;
 
 /** What a task looked like at one instant. */
 export interface TaskSnapshot {
@@ -625,6 +642,19 @@ export interface ChatMessageSnapshot {
   mentions: string[];
 }
 
+/**
+ * A request's intake identity and triage standing at one instant (1.8). The
+ * source form travels in the snapshot for the reason CustomFieldValueSnapshot
+ * carries its field name: the form can be deleted, and the entry must still
+ * read years later.
+ */
+export interface RequestSnapshot {
+  source: string;
+  state: "open" | "accepted" | "declined";
+  /** Only ever set on a decline. */
+  reason?: string | null;
+}
+
 export type Snapshot =
   | TaskSnapshot
   | CommentSnapshot
@@ -638,7 +668,8 @@ export type Snapshot =
   | SprintSnapshot
   | CustomFieldValueSnapshot
   | GitSnapshot
-  | ChatMessageSnapshot;
+  | ChatMessageSnapshot
+  | RequestSnapshot;
 
 interface ActivityBase {
   id: string;
@@ -739,6 +770,12 @@ export interface ChatActivity extends ActivityBase {
   after: ChatMessageSnapshot | null;
 }
 
+export interface RequestActivity extends ActivityBase {
+  action: RequestAction;
+  before: RequestSnapshot | null;
+  after: RequestSnapshot | null;
+}
+
 export type Activity =
   | TaskActivity
   | CommentActivity
@@ -752,7 +789,8 @@ export type Activity =
   | SprintActivity
   | CustomFieldValueActivity
   | GitActivity
-  | ChatActivity;
+  | ChatActivity
+  | RequestActivity;
 
 /**
  * An activity joined to the human who caused it, for rendering.

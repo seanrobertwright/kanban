@@ -48,6 +48,7 @@ import {
   Tag,
   Tags,
   Target,
+  Ticket,
   Users,
   Waypoints,
   Webhook,
@@ -105,7 +106,7 @@ import { ScheduleDialog } from "./schedule-dialog";
 import { TimesheetDialog } from "@/features/time/components/timesheet-dialog";
 import { FormsDialog } from "@/features/forms/components/forms-dialog";
 import { AutomationsDialog } from "@/features/automations/components/automations-dialog";
-import { RequestsDialog } from "@/features/requests/components/requests-dialog";
+import { RequestsView } from "@/features/requests/components/requests-view";
 import { CapacityDialog } from "@/features/capacity/components/capacity-dialog";
 import { BudgetDialog } from "@/features/budget/components/budget-dialog";
 import { DiscoveryDialog } from "@/features/discovery/components/discovery-dialog";
@@ -167,6 +168,7 @@ const MORE_VIEWS = [
   ["gantt", "Gantt", Waypoints],
   ["backlog", "Backlog", Inbox],
   ["roadmap", "Roadmap", MapIcon],
+  ["requests", "Requests", Ticket],
 ] as const satisfies readonly (readonly [BoardViewMode, string, typeof Columns3])[];
 
 /**
@@ -174,8 +176,9 @@ const MORE_VIEWS = [
  * which is the convention people arrive already knowing.
  *
  * `k` is Backlog and `c` is Calendar because `b` and `g` were taken by Board and
- * Gantt; the palette shows every binding (see chordHint), so the two that are
- * not first-letter are discoverable rather than folklore.
+ * Gantt; `q` is Requests (the *queue*) because `r` was taken by Roadmap. The
+ * palette shows every binding (see chordHint), so the three that are not
+ * first-letter are discoverable rather than folklore.
  */
 const VIEW_CHORDS: Record<string, BoardViewMode> = {
   b: "board",
@@ -186,6 +189,7 @@ const VIEW_CHORDS: Record<string, BoardViewMode> = {
   k: "backlog",
   r: "roadmap",
   d: "dashboard",
+  q: "requests",
 };
 
 /** The chord for a view, as the palette prints it. Derived from the same table
@@ -373,7 +377,6 @@ export function Board({
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [timesheetOpen, setTimesheetOpen] = useState(false);
-  const [requestsOpen, setRequestsOpen] = useState(false);
   const [capacityOpen, setCapacityOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [discoveryOpen, setDiscoveryOpen] = useState(false);
@@ -1081,12 +1084,12 @@ export function Board({
       ["backlog", "Go to Backlog"],
       ["roadmap", "Go to Roadmap"],
       ["dashboard", "Go to Dashboard"],
+      ["requests", "Go to Requests"],
     ];
     const panels: [string, () => void][] = [
       ["Insights", () => setInsightsOpen(true)],
       ["Schedule", () => setScheduleOpen(true)],
       ["Timesheet", () => setTimesheetOpen(true)],
-      ["Requests", () => setRequestsOpen(true)],
       ["Capacity", () => setCapacityOpen(true)],
       ["Budget", () => setBudgetOpen(true)],
       ["Discovery", () => setDiscoveryOpen(true)],
@@ -1275,8 +1278,8 @@ export function Board({
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Intake</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => setRequestsOpen(true)}>
-                <Inbox /> Requests
+              <DropdownMenuItem onClick={() => setView("requests")}>
+                <Ticket /> Requests
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setDiscoveryOpen(true)}>
                 <Lightbulb /> Discovery
@@ -1387,6 +1390,21 @@ export function Board({
           milestones={milestones}
           epics={epics}
           onOpenMilestones={() => setSettingsSection("milestones")}
+        />
+      ) : view === "requests" ? (
+        <RequestsView
+          boardId={boardId}
+          columns={cols}
+          membersById={membersById}
+          agentsById={agentsById}
+          canEdit={canEdit}
+          // The lens knows a request by task id; the task dialog wants the task
+          // itself, which the board already holds — so the lookup happens here,
+          // where the items live, rather than in a second fetch over there.
+          onOpenRequest={(taskId, columnId) => {
+            const task = (items[columnId] ?? []).find((t) => t.id === taskId);
+            if (task) setDialog({ columnId, task });
+          }}
         />
       ) : view === "dashboard" ? (
         <DashboardView
@@ -1572,11 +1590,6 @@ export function Board({
         onOpenChange={setTimesheetOpen}
         currentUserId={currentUserId}
         canReview={canDeleteColumns}
-      />
-      <RequestsDialog
-        boardId={boardId}
-        open={requestsOpen}
-        onOpenChange={setRequestsOpen}
       />
       <CapacityDialog
         boardId={boardId}
