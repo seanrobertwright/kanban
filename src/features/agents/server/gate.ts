@@ -61,6 +61,9 @@ export const DEFAULT_TIER: Record<string, Tier> = {
   set_type: "auto",
   score_task: "auto",
   aim_at_milestone: "auto",
+  // Filing under an epic is aim_at_milestone one level up (031): grouping, not
+  // a change of plan, and undone by filing it back.
+  assign_to_epic: "auto",
   rename_task: "auto",
   flag_blocker: "auto",
   unflag_blocker: "auto",
@@ -78,6 +81,11 @@ export const DEFAULT_TIER: Record<string, Tier> = {
   // Creating or renaming an objective is writing down what the team is for.
   // Held like create_task: an agent may draft one, a human decides it is real.
   set_objective: "changeset",
+  // Naming a body of work, and saying it is live or parked, or whose it is —
+  // set_objective's tier for set_objective's reason. An agent may draft an epic
+  // and re-file work under it freely (assign_to_epic is auto); deciding that the
+  // bucket exists, or that it is done, is a human's call.
+  set_epic: "changeset",
   // Not board state, and that is exactly why they are blocked rather than held.
   // Starting a run spends the workspace's budget on a model; reviewing a
   // changeset or reverting an action IS the human approval §7.4 is built around.

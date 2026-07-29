@@ -1,4 +1,4 @@
-import type { Epic } from "../types";
+import type { Epic, EpicStatus } from "../types";
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -23,6 +23,25 @@ export function createEpic(boardId: number, name: string): Promise<Epic> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
+  }).then((res) => jsonOrThrow<Epic>(res));
+}
+
+/**
+ * The PATCH the route has answered since 031 and nothing has ever called — the
+ * dead-door shape the code review names, in its other direction: a working
+ * endpoint with no client function, so renaming an epic needed curl. Fields are
+ * omitted rather than sent as undefined, since JSON.stringify drops undefined
+ * and the handler reads absence as "leave it" — an explicit null on ownerId is
+ * the only way to un-own an epic.
+ */
+export function updateEpic(
+  id: number,
+  input: { name?: string; status?: EpicStatus; ownerId?: string | null }
+): Promise<Epic> {
+  return fetch(`/api/epics/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   }).then((res) => jsonOrThrow<Epic>(res));
 }
 

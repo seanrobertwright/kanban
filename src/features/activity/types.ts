@@ -548,11 +548,19 @@ export interface ReleaseSnapshot {
   state: string;
 }
 
-/** What an epic looked like at one instant (031). Name only — an epic has no
- *  date, so the snapshot mirrors the table's one mutable field. */
+/** What an epic looked like at one instant (031, widened by 089). The snapshot
+ *  mirrors the table's *stored* mutable fields — name, status, owner — and no
+ *  more: progress and the epic's window are derived from the work inside it
+ *  (089), so a log entry claiming them would be recording a change that the
+ *  epic's own edit did not make. Status and owner belong here for the reason
+ *  name does: without them, parking an epic or handing it to someone writes an
+ *  'epic.updated' whose before and after are identical, which reads to anyone
+ *  auditing the feed as a bug in the log rather than an edit. */
 export interface EpicSnapshot {
   epicId: number;
   name: string;
+  status: string;
+  ownerId: string | null;
 }
 
 /** What an objective looked like at one instant (037). Name only, epic's shape:

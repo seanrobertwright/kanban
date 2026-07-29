@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { addDependency } from "@/features/dependencies/server/repository";
 import { getBoard } from "@/features/board/server/repository";
+import { createEpic } from "@/features/epics/server/repository";
 import { createTask, getTask } from "@/features/tasks/server/repository";
 import {
   ensurePersonalWorkspace,
@@ -196,6 +197,73 @@ describe("door 1 tools", () => {
       (o: { name: string }) => o.name
     );
     expect(names).not.toContain("Agent's objective");
+  });
+
+  it("reads a board's epics, which Door 1 could not see at all", async () => {
+    // The parity gap the review counted as "20 vs 11": Door 2 has published
+    // list_epics and assign_to_epic since 031 and the native runtime published
+    // neither, so an agent on this door could not name a grouping.
+    const epic = await createEpic(
+      alice,
+      boardId,
+      { name: "Door 1 epic", ownerId: alice },
+      { type: "human", id: alice }
+    );
+    const epics = await call("list_epics", { boardId });
+    const found = epics.find((e: { id: number }) => e.id === epic.id);
+    expect(found.status).toBe("active");
+    expect(found.ownerName).toBe(`Test tools-alice`);
+  });
+
+  it("files a task under an epic immediately — grouping is auto tier", async () => {
+    const epic = await createEpic(
+      alice,
+      boardId,
+      { name: "Filing cabinet" },
+      { type: "human", id: alice }
+    );
+    const task = await createTask(alice, { columnId: todoId, title: "File me" });
+
+    const answer = await callRaw("assign_to_epic", { id: task.id, epicId: epic.id });
+    expect(answer).toMatch(/Filed task/);
+    expect((await getTask(alice, task.id))!.epicId).toBe(epic.id);
+
+    // And null takes it back out — the same tier, because filing is undone by
+    // filing it back (aim_at_milestone's rule).
+    await callRaw("assign_to_epic", { id: task.id, epicId: null });
+    expect((await getTask(alice, task.id))!.epicId).toBeNull();
+  });
+
+  it("holds a new epic for review — naming a body of work is changeset tier", async () => {
+    const answer = await callRaw("set_epic", { boardId, name: "Agent's epic" });
+    expect(answer).toMatch(/Proposed for review/);
+
+    const names = (await call("list_epics", { boardId })).map(
+      (e: { name: string }) => e.name
+    );
+    expect(names).not.toContain("Agent's epic");
+  });
+
+  it("holds an epic's status change too, and the held input can run on its own", async () => {
+    const epic = await createEpic(
+      alice,
+      boardId,
+      { name: "To be parked" },
+      { type: "human", id: alice }
+    );
+    expect(await callRaw("set_epic", { id: epic.id, status: "paused" })).toMatch(
+      /Proposed for review/
+    );
+
+    // The recorded input is the whole proposal: a reviewer accepting this later
+    // must be able to apply it without the request that made it, which is why
+    // the id (or boardId, on a create) is recorded rather than implied.
+    const [action] = await query<{ tool: string; input: Record<string, unknown> }>(
+      `SELECT tool, input FROM agent_action
+        WHERE run_id = $1 AND tool = 'set_epic' AND input->>'id' = $2`,
+      [ctx.runId, String(epic.id)]
+    );
+    expect(action.input.status).toBe("paused");
   });
 
   it("defaults the board to the one the run is on", async () => {

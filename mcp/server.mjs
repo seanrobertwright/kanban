@@ -688,7 +688,7 @@ tool(
 
 tool(
   "list_epics",
-  "A board's epics — the large bodies of work its tasks roll up into.",
+  "A board's epics — the large bodies of work its tasks roll up into. Each carries its status (proposed/active/paused/done), its owner, progress, and startDate/targetDate: the window read from the work inside it, not a date anyone set on the epic.",
   { boardId: z.number().int().optional() },
   async ({ boardId }) => api("GET", `/api/board/${await board(boardId)}/epics`)
 );
@@ -698,6 +698,22 @@ tool(
   "Put a task under an epic on its own board, or pass null to take it out. Epic ids come from list_epics.",
   { id: z.number().int(), epicId: z.number().int().nullable() },
   ({ id, epicId }) => api("PATCH", `/api/tasks/${id}`, { epicId })
+);
+
+tool(
+  "set_epic",
+  "Create an epic on a board, or edit one by id: its name, its status (proposed/active/paused/done), and the person who owns it (ownerId, a workspace member — pass null to leave it unowned). Consequential — an epic names a body of work the team is doing — so by default this is held as a proposal for a human to accept (HELD_FOR_REVIEW), not applied. To file a task under an epic that already exists, use assign_to_epic instead. An epic takes no dates: its window is read from the work inside it.",
+  {
+    id: z.number().int().optional(),
+    boardId: z.number().int().optional(),
+    name: z.string().min(1).optional(),
+    status: z.enum(["proposed", "active", "paused", "done"]).optional(),
+    ownerId: z.string().nullish(),
+  },
+  async ({ id, boardId, ...fields }) =>
+    id === undefined
+      ? api("POST", `/api/board/${await board(boardId)}/epics`, fields)
+      : api("PATCH", `/api/epics/${id}`, fields)
 );
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -20,6 +20,12 @@ import {
   LAG_DAYS_MIN,
 } from "@/features/dependencies/types";
 import { getBoard } from "@/features/board/server/repository";
+import {
+  createEpic,
+  listEpics,
+  updateEpic,
+} from "@/features/epics/server/repository";
+import { EPIC_STATUSES } from "@/features/epics/types";
 import { getBoardRisks, getTaskRisk } from "@/features/board/server/analytics";
 import { getScheduleProposal } from "@/features/board/server/schedule-proposal";
 import {
@@ -112,6 +118,14 @@ export function buildTools(
       inputSchema: z.object({ boardId: z.number().int().optional() }),
       run: async ({ boardId }) =>
         json(await listObjectives(p, boardId ?? defaultBoardId)),
+    }),
+    betaZodTool({
+      name: "list_epics",
+      description:
+        "A board's epics (031) — the coarse groupings tasks and milestones are filed under, each with its status, owner, progress, and the window its contents describe. Epic ids for assign_to_epic come from here.",
+      inputSchema: z.object({ boardId: z.number().int().optional() }),
+      run: async ({ boardId }) =>
+        json(await listEpics(p, boardId ?? defaultBoardId)),
     }),
     betaZodTool({
       name: "propose_schedule",
@@ -336,6 +350,35 @@ export function buildTools(
         }),
     }),
     betaZodTool({
+      name: "assign_to_epic",
+      description:
+        "File a task under one of its board's epics (031), or null to un-file it. Get the epic id from list_epics; an epic on another board is refused. Filing is grouping, not a change of plan — the task's column, dates and assignee are untouched.",
+      inputSchema: z.object({
+        id: z.number().int(),
+        epicId: z.number().int().nullable(),
+      }),
+      // Door 2 has published this since 031 and Door 1 never did, so the native
+      // runtime could not see epics at all — the parity gap the code review's
+      // "20 vs 11" counts. auto is aim_at_milestone's tier and for its reason:
+      // filing is silent outside the board, idempotent, and undone by filing it
+      // back.
+      run: ({ id, epicId }) =>
+        gate(ctx, {
+          tool: "assign_to_epic",
+          input: { id, epicId },
+          taskId: id,
+          execute: () => updateTask(p, id, { epicId }),
+          describe: () =>
+            epicId === null
+              ? `Un-filed task ${id} from its epic.`
+              : `Filed task ${id} under epic ${epicId}.`,
+          proposal:
+            epicId === null
+              ? `un-file task ${id} from its epic`
+              : `file task ${id} under epic ${epicId}`,
+        }),
+    }),
+    betaZodTool({
       name: "rename_task",
       description: "Edit a task's title and/or description.",
       inputSchema: z.object({
@@ -460,6 +503,66 @@ export function buildTools(
             id === undefined
               ? `create objective "${name}" on board ${board}`
               : `edit objective ${id}`,
+        });
+      },
+    }),
+    betaZodTool({
+      name: "set_epic",
+      description:
+        "Create an epic on a board, or edit one by id (031/089): its name, its status (proposed/active/paused/done), and the person who owns it. An epic names a body of work the team is doing, so — like set_objective — it is held for human review by default. Use assign_to_epic to file a task under one that already exists. An epic has no dates of its own: its window is read from the work inside it.",
+      inputSchema: z.object({
+        id: z.number().int().optional(),
+        boardId: z.number().int().optional(),
+        name: z.string().min(1).optional(),
+        status: z.enum(EPIC_STATUSES as unknown as [string, ...string[]]).optional(),
+        ownerId: z.string().nullish(),
+      }),
+      run: ({ id, boardId, name, status, ownerId }) => {
+        const board = boardId ?? defaultBoardId;
+        return gate(ctx, {
+          tool: "set_epic",
+          // set_objective's recording rule: boardId rides even on an edit so the
+          // proposal reads on its own, and the create path needs it to be
+          // appliable later.
+          input: {
+            ...(id !== undefined ? { id } : { boardId: board }),
+            name,
+            status,
+            ownerId,
+          },
+          taskId: null,
+          execute: async () => {
+            const epicStatus = status as
+              | (typeof EPIC_STATUSES)[number]
+              | undefined;
+            if (id === undefined) {
+              if (!name) throw new Error("A new epic needs a name.");
+              return createEpic(
+                p,
+                board,
+                { name, status: epicStatus, ownerId: ownerId ?? null },
+                principalActor(p)
+              );
+            }
+            return updateEpic(
+              p,
+              id,
+              {
+                name,
+                status: epicStatus,
+                // Three-valued, and the spread is what keeps it so: an absent
+                // ownerId leaves the owner, an explicit null un-owns the epic.
+                ...(ownerId !== undefined ? { ownerId: ownerId ?? null } : {}),
+              },
+              principalActor(p)
+            );
+          },
+          describe: () =>
+            id === undefined ? `Created epic "${name}".` : `Edited epic ${id}.`,
+          proposal:
+            id === undefined
+              ? `create epic "${name}" on board ${board}`
+              : `edit epic ${id}`,
         });
       },
     }),

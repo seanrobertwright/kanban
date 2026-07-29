@@ -25,7 +25,21 @@ function milestone(over: Partial<Milestone> = {}): Milestone {
   };
 }
 function epic(id: number, name: string): Epic {
-  return { id, boardId: 1, name, createdAt: "2026-07-01T00:00:00.000Z", total: 0, done: 0 };
+  return {
+    id,
+    boardId: 1,
+    name,
+    status: "active",
+    ownerId: null,
+    ownerName: null,
+    createdAt: "2026-07-01T00:00:00.000Z",
+    total: 0,
+    done: 0,
+    // The roadmap draws its own window from the milestones' dates (038); an
+    // epic's derived window (089) is not an input to it.
+    startDate: null,
+    targetDate: null,
+  };
 }
 
 describe("buildRoadmap", () => {

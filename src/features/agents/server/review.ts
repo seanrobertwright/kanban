@@ -27,6 +27,8 @@ import {
   updateChecklistItem,
 } from "@/features/checklists/server/repository";
 import { setTaskFieldValues } from "@/features/custom-fields/server/repository";
+import { createEpic, updateEpic } from "@/features/epics/server/repository";
+import type { EpicStatus } from "@/features/epics/types";
 import type { Task } from "@/features/tasks/types";
 import type { AgentActionView, RunDetail } from "../types";
 import type { Tier } from "./gate";
@@ -227,9 +229,46 @@ async function applyProposed(
         );
       }
       return true;
+    case "set_epic":
+      // set_objective's two shapes, one migration over (089): the presence of an
+      // id is the whole difference, and the recorded input carries boardId on a
+      // create so this runs without the request that proposed it. ownerId is
+      // three-valued, so `"ownerId" in input` — not a null check — is what
+      // separates "leave the owner" from "un-own it", dueDate's rule above.
+      if (input.id === undefined) {
+        await createEpic(
+          agent,
+          input.boardId as number,
+          {
+            name: input.name as string,
+            status: input.status as EpicStatus | undefined,
+            ownerId: (input.ownerId as string | null | undefined) ?? null,
+          },
+          principalActor(agent)
+        );
+      } else {
+        await updateEpic(
+          agent,
+          input.id as number,
+          {
+            name: input.name as string | undefined,
+            status: input.status as EpicStatus | undefined,
+            ...("ownerId" in input
+              ? { ownerId: input.ownerId as string | null }
+              : {}),
+          },
+          principalActor(agent)
+        );
+      }
+      return true;
     // Auto-tier by default, and here for the same reason the other auto tools
     // are: an admin who raises it for one agent must get a proposal that can
     // actually be accepted.
+    case "assign_to_epic":
+      await updateTask(agent, input.id as number, {
+        epicId: input.epicId as number | null,
+      });
+      return true;
     case "score_key_result":
       await updateKeyResult(agent, input.id as number, {
         currentValue: input.currentValue as number,

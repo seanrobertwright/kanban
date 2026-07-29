@@ -1217,3 +1217,97 @@ would be grading its own homework.
       repaints (the only channel a remote stroke has — no props change), and a
       live canvas stops asking the parent to PATCH, which is the two-writer bug
       reappearing one layer up.
+
+## Code review §2.1 `epics` — a grouping stops being a name (2026-07-29)
+
+- [x] **Status and owner** (migration 089) — the review's row read "name-only (no
+      dates/state/owner); no agent tools", and an epic really was three columns:
+      id, board, name. A board with fifteen buckets could not say which were
+      live, which were ideas, which were parked, or who to ask about any of
+      them. Those are facts about the *grouping* rather than the work inside it,
+      so they cannot be derived and had to be stored. `status` defaults to
+      'active', which is also the honest backfill — every epic made before today
+      was made to file live work under. `owner_id` is SET NULL on the person's
+      deletion (004's rule): losing the owner must not lose the epic.
+- [x] **No date column, on purpose.** 031's own comment argues an epic has no due
+      date — "an open-ended bucket a milestone lives *inside*, and the date that
+      matters is the milestone's". That argument still holds, so the window an
+      epic reports is **derived**: `startDate` is the earliest start among its
+      tasks, `targetDate` the latest date it points at across both its tasks'
+      due dates and its member milestones' own. The second half of that is what
+      makes it useful — a milestone dated for September with nothing broken down
+      under it yet is the ordinary state of a plan, and reading only tasks would
+      report the epic as undated. `GREATEST` is load-bearing rather than
+      convenient: Postgres skips nulls in it and yields null only when every
+      argument is null, which is exactly "undated until something inside carries
+      a date". A stored date could disagree with the work; a derived one cannot.
+- [x] **Status is a field, not a lifecycle.** A sprint's status is enforced
+      because a sprint is a timebox — one active per board, a start that commits
+      scope, a completion that rolls work over. An epic is a bucket: nothing to
+      roll over, and no reason two cannot be active at once. So the transitions
+      are free and the CHECK is the whole rule, tested by walking
+      done → active → paused → proposed, which a lifecycle would refuse and an
+      epic must not (a bucket reopens when more work turns up in it). 'paused'
+      earns its place because "we stopped" and "we finished" are the two states a
+      reader most needs told apart — and deriving status from progress, the
+      alternative considered, can express neither.
+- [x] **One read, not two.** `getBoard` carried a hand-copied duplicate of the
+      epics progress SQL, and 089 would have been the second time a column had to
+      be added in both places for the dialog and the board to keep agreeing.
+      `EPIC_SELECT` is now exported from the epics repository and used by both;
+      the window test asserts through `getBoard` as well as `listEpics` so a
+      re-fork fails rather than drifts.
+- [x] **Door 1 could not see epics at all** — worse than the review's "20 vs 11"
+      count suggested. Door 2 has published `list_epics` and `assign_to_epic`
+      since 031; the native runtime published neither, so an agent on that door
+      could not name a grouping. Both are now on both doors, `assign_to_epic` at
+      **auto** tier — it is `aim_at_milestone` one level up: filing is grouping,
+      not a change of plan, silent outside the board, and undone by filing back.
+- [x] **`set_epic` at changeset, on both doors.** Naming a body of work, or
+      declaring it parked or finished, is `set_objective`'s blast radius and gets
+      `set_objective`'s tier. That meant the epic handlers taking a principal and
+      going through `externalAgentAction`, which is what makes PRD §7.1's "same
+      approval policy, both doors" true here rather than merely claimed. Both new
+      tools were added to `review.ts`'s apply switch — a tool held with no apply
+      case is a proposal that can never become a change, which is worse than
+      either tier. Deletion stays session-only: it is the one epic verb with no
+      agent tool behind it. → this commit
+- [x] **A bad owner is refused at the door, not in the reviewer's face.** Found
+      by the test that accepted the changeset rather than merely asserting it was
+      held: validating the owner only inside `execute` meant an agent naming
+      someone outside its workspace got a *queued* proposal that threw when a
+      human accepted it — and a throw mid-review abandons every other action in
+      that changeset, so one bad proposal takes good ones down with it. The
+      check moved into the gate's `authorize` hook, which exists for exactly
+      this. The update path gained an `authorize` at the same time, so a Door 2
+      edit against a board the agent cannot write is now refused before it is
+      held rather than after.
+- [x] **The PATCH route got its first client.** `/api/epics/[id]` has answered
+      since 031 and no client function ever called it — the dead-door shape the
+      review names, in its other direction — so renaming an epic meant curl. The
+      dialog now renames, and sets status and owner **on change rather than
+      behind a Save**: they are single-value edits the server treats as
+      idempotent, and a form that needs saving is how a status change gets lost.
+      The name keeps an explicit Rename/Save, because a half-typed name is not a
+      name. Each write sends only the field that changed — a dialog that posts
+      the whole epic back is how a status change comes to un-own it.
+- [x] **Three-valued ownership, end to end.** `undefined` leaves the owner and
+      `null` clears it, and that distinction has to survive the wire (where
+      `JSON.stringify` drops undefined), the recorded proposal input, and
+      `applyProposed`. Tested at each: a rename that keeps the owner, an un-own
+      that sends an explicit null, and an accepted status-only changeset that
+      leaves the owner intact — the last of which is where a stray
+      `ownerId: undefined` would have silently un-owned an epic on accept.
+- [x] **Coverage: epics 7 → 23 assertions**, across three shapes. The repository
+      suite gains the defaults, the free status walk, the CHECK's refusal, cross-
+      workspace owner refusal, an owner's deletion leaving a listable epic with a
+      null name, and the derived window (including the dated-milestone-only
+      case). A new Door 2 suite drives the real handlers with an agent token:
+      held → accepted → applied, for a create and an edit. And a first component
+      suite watches the wire rather than the DOM, which is where the two wrong
+      answers live — an owner picker posting `undefined` instead of `null`, and a
+      status select sending a whole epic back. **Known, pre-existing:**
+      `whiteboards/server/whiteboard-room.test.ts` fails when that directory's
+      files run in parallel (leftover `whiteboard_update` rows from a sibling
+      suite) and passes in isolation — reproduced on the clean tree at `6894cdb`,
+      so it is 088's flake, not this slice's.

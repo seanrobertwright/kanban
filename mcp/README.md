@@ -66,6 +66,7 @@ REST API the web UI uses.
 |---|---|
 | `list_milestones` `list_sprints` `list_epics` | The board's planning containers. |
 | `add_task_to_sprint` `assign_to_epic` | Put a task in one, or take it out with `null`. |
+| `set_epic` | Create or edit an epic — name, status, owner. Held for review by default; an epic names a body of work. |
 
 ### Reading around the work
 

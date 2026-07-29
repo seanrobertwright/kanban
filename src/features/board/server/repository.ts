@@ -5,6 +5,7 @@ import type { CustomField } from "@/features/custom-fields/types";
 import type { TaskDependencyEdge } from "@/features/dependencies/types";
 import type { Milestone } from "@/features/milestones/types";
 import { listObjectives } from "@/features/objectives/server/repository";
+import { EPIC_SELECT } from "@/features/epics/server/repository";
 import type { Epic } from "@/features/epics/types";
 import type { Sprint } from "@/features/sprints/types";
 import { taskColumns } from "@/features/tasks/server/task-row";
@@ -86,26 +87,14 @@ export async function getBoard(
   );
 
   // Epics ride along for the task dialog's picker and the EpicsDialog's first
-  // paint, progress included — the milestone read's twin (031). An epic's rollup
-  // spans its direct tasks and the tasks of its member milestones, so the count
-  // predicate is the OR the epics repository documents. Authz already done above.
+  // paint, progress and window included — the milestone read's twin (031).
+  // Through the epics repository's own EPIC_SELECT rather than a copy of it:
+  // this read had been a hand-duplicated version of that SQL, and 089's derived
+  // window is the second time a column had to be added in two places for the
+  // dialog and the board to keep agreeing. Authz is already done above, which is
+  // why the query and not listEpics.
   const epics = await query<Epic>(
-    `SELECT e.id, e.board_id AS "boardId", e.name,
-            e.created_at AS "createdAt",
-            (SELECT COUNT(*)::int FROM task t
-              WHERE t.parent_id IS NULL
-                AND (t.epic_id = e.id
-                     OR t.milestone_id IN (SELECT id FROM milestone WHERE epic_id = e.id))) AS total,
-            (SELECT COUNT(*)::int FROM task t
-              WHERE t.parent_id IS NULL
-                AND b2.done_column_id IS NOT NULL
-                AND t.column_id = b2.done_column_id
-                AND (t.epic_id = e.id
-                     OR t.milestone_id IN (SELECT id FROM milestone WHERE epic_id = e.id))) AS done
-       FROM epic e
-       JOIN board b2 ON b2.id = e.board_id
-      WHERE e.board_id = $1
-      ORDER BY e.name, e.id`,
+    `${EPIC_SELECT} WHERE e.board_id = $1 ORDER BY e.name, e.id`,
     [boardId]
   );
 

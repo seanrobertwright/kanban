@@ -981,6 +981,7 @@ export function Board({
             onOpenChange={close}
             boardId={boardId}
             epics={epics}
+            members={members}
             canEdit={canEdit}
             onChanged={refresh}
           />
@@ -1018,6 +1019,9 @@ export function Board({
       milestones,
       epics,
       objectives,
+      // The epics dialog picks an owner from the roster (089), so the memo has
+      // to see a changed roster — membersById below is a different value.
+      members,
       membersById,
       agentsById,
       visibleTaskList,
