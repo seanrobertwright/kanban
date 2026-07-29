@@ -123,4 +123,64 @@ describe("criticalPath", () => {
     const edges = [edge(2, 1), edge(1, 2)];
     expect(() => criticalPath(durations, edges)).not.toThrow();
   });
+
+  /**
+   * A typed link changes how much of the blocker has to be behind you, so it
+   * changes which chain is longest — the thing the whole view is drawn from.
+   * Each case here is a board where the pre-087 duration-sum answer would have
+   * been wrong.
+   */
+  describe("typed links and lag (087)", () => {
+    const SS = (lagDays = 0): DependencyLink => ({ type: "SS", lagDays });
+    const FF = (lagDays = 0): DependencyLink => ({ type: "FF", lagDays });
+
+    it("lets a start-to-start pair run together instead of end to end", () => {
+      // 1 → 2 as SS means 2 starts with 1, not after it, so the pair spans
+      // max(4, 4) = 4 days rather than 8 — short enough that the parallel 3 → 4
+      // chain (5 + 5, all FS) is now the one driving the schedule.
+      const durations = dur([[1, 4], [2, 4], [3, 5], [4, 5]]);
+      const cp = criticalPath(durations, [edge(2, 1, SS()), edge(4, 3)]);
+      expect([...cp.nodes].sort()).toEqual([3, 4]);
+    });
+
+    it("counts lag as part of the chain, not free time", () => {
+      // The 1 → 2 arm is 2 + 2 days of work, but the link makes 2 wait a further
+      // week: 2 + 7 + 2 = 11 beats the 5 + 5 = 10 arm beside it. Nothing about
+      // the durations says so — only the lag does.
+      const durations = dur([[1, 2], [2, 2], [3, 5], [4, 5]]);
+      const cp = criticalPath(durations, [
+        edge(2, 1, { type: "FS", lagDays: 7 }),
+        edge(4, 3),
+      ]);
+      expect([...cp.nodes].sort()).toEqual([1, 2]);
+      expect(cp.edges.has(edgeKey(1, 2))).toBe(true);
+    });
+
+    it("treats a lead as an overlap that shortens the chain", () => {
+      // −3 days on a 4+4 finish-to-start chain overlaps them into 5 days, which
+      // no longer beats the 6-day task sitting on its own.
+      const durations = dur([[1, 4], [2, 4], [3, 6]]);
+      const cp = criticalPath(durations, [
+        edge(2, 1, { type: "FS", lagDays: -3 }),
+      ]);
+      expect([...cp.nodes]).toEqual([3]);
+    });
+
+    it("lets a finish-to-finish link pull its dependent's start earlier", () => {
+      // 2 must merely FINISH with 1, and 2 is the longer task, so it starts
+      // before 1 does. A duration-sum reading would have stacked them.
+      const durations = dur([[1, 3], [2, 8]]);
+      const cp = criticalPath(durations, [edge(2, 1, FF())]);
+      // The pair spans 8 days, not 11: task 2 alone sets the project's length.
+      expect(cp.nodes.has(2)).toBe(true);
+    });
+
+    it("keeps an edge off the path when the link leaves it slack", () => {
+      // 3 is FF-linked to 1 but is long enough to have started before 1 ended,
+      // so the edge is not tight: a day's slip on 1 does not move 3.
+      const durations = dur([[1, 1], [2, 9], [3, 9]]);
+      const cp = criticalPath(durations, [edge(2, 1), edge(3, 1, FF(0))]);
+      expect(cp.edges.has(edgeKey(1, 3))).toBe(false);
+    });
+  });
 });

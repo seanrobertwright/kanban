@@ -1,5 +1,8 @@
 import type { Task } from "@/features/tasks/types";
-import type { TaskDependencyEdge } from "@/features/dependencies/types";
+import type {
+  DependencyLink,
+  TaskDependencyEdge,
+} from "@/features/dependencies/types";
 
 /**
  * Scheduling maths shared by the Timeline (032) and the Gantt (036).
@@ -76,17 +79,54 @@ export function edgeKey(blockerId: number, dependentId: number): string {
 }
 
 /**
- * The critical path through a set of scheduled tasks (036) — the classic CPM
- * longest-path, weighted by each task's own duration.
+ * How many days after the blocker's start the dependent may start, for one
+ * typed edge (087). This is the whole of what a link type means to the schedule.
  *
- * A dependency edge {taskId, dependsOnId} means dependsOnId (the blocker) must
- * finish before taskId (the dependent) — so the blocker precedes the dependent
- * in the DAG. The longest chain of such precedences, summed by duration, is the
- * work that drives the schedule: shortening anything off it buys nothing.
+ * Durations are inclusive day counts, so a task starting on day `s` with
+ * duration `d` finishes on day `s + d − 1`. Writing each type's constraint that
+ * way and solving for the dependent's start collapses all three to the same
+ * shape — `start_dependent ≥ start_blocker + w` — which is why nothing
+ * downstream needs to branch on the type again:
  *
- *   longestTo[v]   = duration[v] + max(longestTo[pred])   — chain ending at v
- *   longestFrom[v] = duration[v] + max(longestFrom[succ]) — chain starting at v
- *   a node is critical when longestTo[v] + longestFrom[v] − duration[v] == max
+ *   FS  start_d ≥ finish_b + 1 + lag  →  w = dur_b + lag
+ *   SS  start_d ≥ start_b + lag       →  w = lag
+ *   FF  finish_d ≥ finish_b + lag     →  w = dur_b − dur_d + lag
+ *
+ * The weight is signed. A lead makes it smaller, and FF between a short blocker
+ * and a long dependent is negative even at zero lag — correctly, since a task
+ * that must merely *finish* alongside a shorter one may start well before it.
+ */
+function edgeWeight(
+  link: DependencyLink,
+  blockerDuration: number,
+  dependentDuration: number
+): number {
+  if (link.type === "SS") return link.lagDays;
+  if (link.type === "FF") return blockerDuration - dependentDuration + link.lagDays;
+  return blockerDuration + link.lagDays;
+}
+
+/**
+ * The critical path through a set of scheduled tasks (036, typed at 087) — CPM's
+ * forward/backward pass over the dependency DAG.
+ *
+ * A dependency edge {taskId, dependsOnId} means dependsOnId (the blocker)
+ * constrains taskId (the dependent), so the blocker precedes it in the DAG. Each
+ * edge carries a minimum offset in days (edgeWeight above); the schedule-driving
+ * work is the chain where those offsets leave no slack, because shortening
+ * anything off it buys nothing.
+ *
+ *   earlyStart[v] = max(0, max over blockers b of earlyStart[b] + w(b→v))
+ *   projectEnd    = max over v of earlyStart[v] + duration[v]
+ *   lateStart[v]  = min(projectEnd − duration[v],
+ *                       min over dependents s of lateStart[s] − w(v→s))
+ *   v is critical when it has no float at all: lateStart[v] == earlyStart[v]
+ *
+ * Before 087 this was the same computation stated in duration sums, which is
+ * only equivalent while every link is finish-to-start with no lag — there
+ * w collapses to duration[b] and earlyStart[v] becomes "longest chain of
+ * durations before v". Those boards are unaffected; the general form is what
+ * lets an SS or a lead move the path.
  *
  * Only tasks in `durations` count as nodes; an edge touching a task off the
  * board (a subtask never rendered here) is dropped. With no edges there is no
@@ -95,7 +135,7 @@ export function edgeKey(blockerId: number, dependentId: number): string {
  *
  * addDependency forbids cycles, but this must not loop if a stray one reaches it
  * (a subtask edge, hand-edited data): the memoised walks carry a visiting set and
- * treat a back-edge as a zero contribution rather than recursing forever.
+ * treat a back-edge as a neutral contribution rather than recursing forever.
  */
 export function criticalPath(
   durations: Map<number, number>,
@@ -109,74 +149,81 @@ export function criticalPath(
   );
   if (edges.length === 0) return empty;
 
-  const preds = new Map<number, number[]>();
-  const succs = new Map<number, number[]>();
+  const dur = (id: number) => durations.get(id) ?? 0;
+
+  interface Link {
+    other: number;
+    weight: number;
+  }
+  const preds = new Map<number, Link[]>();
+  const succs = new Map<number, Link[]>();
   for (const id of durations.keys()) {
     preds.set(id, []);
     succs.set(id, []);
   }
-  for (const { taskId: dependent, dependsOnId: blocker } of edges) {
-    preds.get(dependent)!.push(blocker);
-    succs.get(blocker)!.push(dependent);
+  for (const edge of edges) {
+    const { taskId: dependent, dependsOnId: blocker } = edge;
+    const weight = edgeWeight(edge, dur(blocker), dur(dependent));
+    preds.get(dependent)!.push({ other: blocker, weight });
+    succs.get(blocker)!.push({ other: dependent, weight });
   }
 
-  const dur = (id: number) => durations.get(id) ?? 0;
-
-  // Longest chain ending at / starting from a node, memoised. `visiting` guards
-  // a stray cycle: a node reached while still on the stack contributes 0.
-  const memoTo = new Map<number, number>();
-  const longestTo = (id: number, visiting: Set<number>): number => {
-    const cached = memoTo.get(id);
+  // Forward pass. Floored at 0: nothing starts before the project does, which is
+  // what a negative weight into an otherwise unconstrained task would ask for.
+  const memoEarly = new Map<number, number>();
+  const earlyStart = (id: number, visiting: Set<number>): number => {
+    const cached = memoEarly.get(id);
     if (cached !== undefined) return cached;
     if (visiting.has(id)) return 0;
     visiting.add(id);
-    let best = 0;
-    for (const p of preds.get(id) ?? []) {
-      best = Math.max(best, longestTo(p, visiting));
+    let start = 0;
+    for (const { other, weight } of preds.get(id) ?? []) {
+      start = Math.max(start, earlyStart(other, visiting) + weight);
     }
     visiting.delete(id);
-    const total = dur(id) + best;
-    memoTo.set(id, total);
+    const total = Math.max(0, start);
+    memoEarly.set(id, total);
     return total;
   };
 
-  const memoFrom = new Map<number, number>();
-  const longestFrom = (id: number, visiting: Set<number>): number => {
-    const cached = memoFrom.get(id);
-    if (cached !== undefined) return cached;
-    if (visiting.has(id)) return 0;
-    visiting.add(id);
-    let best = 0;
-    for (const s of succs.get(id) ?? []) {
-      best = Math.max(best, longestFrom(s, visiting));
-    }
-    visiting.delete(id);
-    const total = dur(id) + best;
-    memoFrom.set(id, total);
-    return total;
-  };
-
-  let max = 0;
+  let projectEnd = 0;
   for (const id of durations.keys()) {
-    max = Math.max(max, longestTo(id, new Set()));
+    projectEnd = Math.max(projectEnd, earlyStart(id, new Set()) + dur(id));
   }
+
+  // Backward pass. A task with no dependents is only bounded by the project's
+  // own end, which is what makes the longest chain the one with zero float.
+  const memoLate = new Map<number, number>();
+  const lateStart = (id: number, visiting: Set<number>): number => {
+    const cached = memoLate.get(id);
+    if (cached !== undefined) return cached;
+    if (visiting.has(id)) return projectEnd - dur(id);
+    visiting.add(id);
+    let latest = projectEnd - dur(id);
+    for (const { other, weight } of succs.get(id) ?? []) {
+      latest = Math.min(latest, lateStart(other, visiting) - weight);
+    }
+    visiting.delete(id);
+    memoLate.set(id, latest);
+    return latest;
+  };
 
   const nodes = new Set<number>();
   for (const id of durations.keys()) {
-    const through =
-      longestTo(id, new Set()) + longestFrom(id, new Set()) - dur(id);
-    if (through === max) nodes.add(id);
+    if (lateStart(id, new Set()) === earlyStart(id, new Set())) nodes.add(id);
   }
 
-  // An edge is critical when it joins two critical tasks adjacently on a longest
-  // chain: the blocker's chain plus the dependent's own duration reaches exactly
-  // the dependent's chain length.
+  // An edge is critical when it joins two float-free tasks and is itself tight:
+  // the dependent starts exactly as early as this edge allows, so a day's slip
+  // on the blocker is a day's slip on the dependent.
   const criticalEdges = new Set<string>();
-  for (const { taskId: dependent, dependsOnId: blocker } of edges) {
+  for (const edge of edges) {
+    const { taskId: dependent, dependsOnId: blocker } = edge;
     if (!nodes.has(dependent) || !nodes.has(blocker)) continue;
+    const weight = edgeWeight(edge, dur(blocker), dur(dependent));
     if (
-      longestTo(blocker, new Set()) + dur(dependent) ===
-      longestTo(dependent, new Set())
+      earlyStart(blocker, new Set()) + weight ===
+      earlyStart(dependent, new Set())
     ) {
       criticalEdges.add(edgeKey(blocker, dependent));
     }

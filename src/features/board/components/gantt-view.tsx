@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { TaskDependencyEdge } from "@/features/dependencies/types";
+import type {
+  DependencyType,
+  TaskDependencyEdge,
+} from "@/features/dependencies/types";
 import { PriorityDot } from "@/features/tasks/components/task-card";
 import type { Task } from "@/features/tasks/types";
 import { useToday } from "@/shared/lib/due-date";
@@ -156,9 +159,20 @@ export function GanttView({
           from: byId.get(e.dependsOnId),
           to: byId.get(e.taskId),
           critical: critical.edges.has(edgeKey(e.dependsOnId, e.taskId)),
+          // The link decides which ends of the two bars the arrow joins (087).
+          type: e.type,
+          lagDays: e.lagDays,
         }))
-        .filter((a): a is { from: Placed; to: Placed; critical: boolean } =>
-          Boolean(a.from && a.to)
+        .filter(
+          (
+            a
+          ): a is {
+            from: Placed;
+            to: Placed;
+            critical: boolean;
+            type: DependencyType;
+            lagDays: number;
+          } => Boolean(a.from && a.to)
         ),
     [dependencies, byId, critical]
   );
@@ -280,7 +294,7 @@ export function GanttView({
                 {arrows.map((a, i) => (
                   <path
                     key={i}
-                    d={arrowPath(a.from, a.to, trackWidth)}
+                    d={arrowPath(a.from, a.to, trackWidth, a.type)}
                     fill="none"
                     className={
                       a.critical
@@ -355,13 +369,31 @@ export function GanttView({
  * board does not forbid), x2 sits left of x1; the elbow still routes cleanly by
  * stepping out a fixed stub before turning back.
  */
-function arrowPath(from: Placed, to: Placed, width: number): string {
-  const x1 = (from.left + from.width) * width;
+function arrowPath(
+  from: Placed,
+  to: Placed,
+  width: number,
+  type: DependencyType
+): string {
+  // Anchored at the ends the link actually names (087), which is what makes the
+  // three types tellable apart at a glance: an SS arrow leaves the blocker's
+  // left edge and lands on the dependent's left, an FF arrow runs right to
+  // right, and FS keeps 018's right-to-left. Anchoring every type at
+  // right-to-left would draw an SS pair as though one followed the other.
+  const fromRight = type !== "SS";
+  const toRight = type === "FF";
+  const x1 = (fromRight ? from.left + from.width : from.left) * width;
   const y1 = from.row * ROW_H + ROW_H / 2;
-  const x2 = to.left * width;
+  const x2 = (toRight ? to.left + to.width : to.left) * width;
   const y2 = to.row * ROW_H + ROW_H / 2;
   const stub = 10;
-  const midX = Math.max(x1 + stub, x2 - stub);
+  // FS runs forward, so the elbow sits between the two bars. The other two can
+  // land on an x at or behind where they started, and clamping the elbow past
+  // both ends keeps the path outside the bars instead of cutting through them.
+  const midX =
+    type === "FS"
+      ? Math.max(x1 + stub, x2 - stub)
+      : Math.max(x1, x2) + stub;
   // Out from the blocker, across at a mid column, then into the dependent — an
   // orthogonal path that reads as "this then that" rather than a straight
   // diagonal through unrelated bars.
