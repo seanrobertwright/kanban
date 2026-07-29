@@ -38,6 +38,19 @@ import { KnowledgeButton } from "@/features/knowledge/components/knowledge-dialo
 
 export const dynamic = "force-dynamic";
 
+/**
+ * A sidebar section heading. Plain small-caps, not a fake code comment.
+ *
+ * Module scope, not defined inside Home: a component created during render is a
+ * new type on every render, so React remounts the subtree under it rather than
+ * updating it — and this one has nothing to close over anyway.
+ */
+const NavLabel = ({ children }: { children: React.ReactNode }) => (
+  <div className="px-4 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+    {children}
+  </div>
+);
+
 export default async function Home({
   searchParams,
 }: {
@@ -201,13 +214,6 @@ export default async function Home({
       {plan}
       {administer}
     </>
-  );
-
-  /** A sidebar section heading. Plain small-caps, not a fake code comment. */
-  const NavLabel = ({ children }: { children: React.ReactNode }) => (
-    <div className="px-4 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
-      {children}
-    </div>
   );
 
   return (
