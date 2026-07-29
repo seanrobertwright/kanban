@@ -1137,3 +1137,83 @@ would be grading its own homework.
       rather than the DOM — it caught a real bug pre-ship, `Number("")` being 0
       rather than NaN, which made clearing the lag box commit "no lag" instead of
       reverting. schedule 12 → 17, schedule-proposal 2 → 9.
+
+## Code review §2.1 `whiteboards` — one canvas, two people (2026-07-29)
+
+- [x] **The CRDT transport reaches whiteboards** (migration 088) — the review's
+      row read "single-writer last-write-wins; CRDT transport exists but
+      unwired", and 060's shape says why: a canvas was one JSONB array and the
+      dialog PATCHed the whole array on a 500ms debounce, so two people drawing
+      was not a merge but a race — whoever's timer fired last wrote their view of
+      the scene over the other's, and the loser's shapes were gone with no error
+      anywhere. 057 had already built the fix for exactly this shape (an
+      append-cheap update log compacted into a snapshot when the last
+      collaborator leaves) for docs, and nothing pointed it at the second
+      subject. 088 is that pair of tables for whiteboards, with the FKs the doc
+      pair has: `ON DELETE CASCADE` is what stops a deleted canvas leaving
+      megabytes of Yjs history, and a polymorphic `subject_id` on one shared
+      table could not carry one. → `e4bf10f`
+- [x] **A Y.Map keyed by element id, not a Y.Array of the scene.** Two people
+      dragging two different shapes touch two different keys and merge with no
+      conflict at all, where an array of the whole scene makes every edit a
+      conflict with every other edit. What a Map gives up is order, and z-order
+      is meaning on a canvas — recovered from Excalidraw's own fractional `index`
+      (a sortable string, which every element carries since 0.18), with the id as
+      the tie-break so two elements inserted concurrently at the same index still
+      paint in the same order on both peers. It is the trade upstream Excalidraw's
+      multiplayer makes.
+- [x] **Version-guarded writes, because plain LWW is wrong here.** Yjs will let a
+      peer that writes second overwrite a *newer* element with the older copy it
+      was still holding. `version` counts mutations, so a higher one strictly
+      contains more edits; `versionNonce` settles genuine simultaneity the same
+      way wherever it is evaluated, which is what stops two clients ping-ponging.
+- [x] **A removal is not an absence.** "In the shared map, missing from my
+      scene" describes two opposite events — I erased it, or you just drew it and
+      I have not painted you yet — and guessing wrong in the second case deletes
+      a stranger's shape as they draw it. The client tracks which ids it has
+      actually rendered and claims a delete only for those, which is also what
+      lets it publish *changes* rather than "my scene": the whole-scene publish is
+      the bug in a new costume.
+- [x] **`whiteboard.scene` stays the truth outside the room.** Every reader that
+      is not in it — the dialog's first paint, exports, agents, a deployment with
+      no realtime process — reads that column, so the service flattens the CRDT
+      back into it when the room empties. A room then **opens on whichever copy is
+      newer**: a deployment can run with no socket at all (the dialog keeps 060's
+      debounced PATCH, and says so under the canvas — the two modes have
+      different rules and a user about to draw with someone deserves to know
+      which one they are in), so "there is Yjs state, therefore Yjs is the truth"
+      would silently discard everything drawn while the service was down. When
+      the JSONB wins, the superseded updates are deleted rather than ignored: a
+      scene reseeded from JSON shares no ancestry with them, and keeping them
+      would resurrect deleted shapes on the next merge. The reverse case — a PATCH
+      landing *while* a room is live — is left as documented last-write-wins,
+      since the only client that PATCHes is the same dialog that would be holding
+      the socket if one were available.
+- [x] **Tickets name their kind.** One shared minter (`shared/realtime/ticket.ts`)
+      for both room families, because the socket service verifies all of them with
+      one function. Without `kind`, a signed `{id:7}` would open `doc-7` *and*
+      `wb-7` — two unrelated subjects that happen to share an integer. Member, not
+      viewer: a socket is a write channel, so the gate is `updateWhiteboard`'s, and
+      a viewer keeps the read-only canvas they already had. The service's recheck
+      is deliberately coarser than the mint (still a non-guest member of the
+      workspace) — its job is revocation inside the ticket's 60 seconds, not
+      re-deriving 063's grant lattice in a process that cannot import it.
+- [x] **The task-card button goes through the room.** It used to remount the
+      canvas with a new seed; a live room ignores its seed (that is what stops an
+      empty client from publishing emptiness over a populated canvas), so the card
+      would have appeared for a second and then been wiped by the room's own
+      state on the next sync.
+- [x] **Coverage: whiteboards 6 → 28 assertions**, across three shapes. The room
+      is driven against the **real spawned service** (`node realtime/server.mjs`,
+      exactly as compose runs it) and a real Postgres — two clients merge, an edit
+      to someone else's shape merges, the room flattens into `scene` and compacts
+      its log, the reseed rule survives an out-of-room PATCH, and the ticket
+      refusals (wrong kind, unsigned, expired) run behind a **positive control**
+      so they cannot pass by the socket failing for an unrelated reason. The doc
+      rooms get their first test at all, since this refactor put both kinds
+      through one persistence provider and a wrong branch would write a page's
+      text nowhere. The reconciliation rules are unit-tested as pure functions,
+      and a first component suite watches the Excalidraw glue: a peer's write
+      repaints (the only channel a remote stroke has — no props change), and a
+      live canvas stops asking the parent to PATCH, which is the two-writer bug
+      reappearing one layer up.
