@@ -1,4 +1,4 @@
-import type { TaskDependencies } from "../types";
+import type { DependencyLink, TaskDependencies } from "../types";
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -19,18 +19,24 @@ export function fetchDependencies(taskId: number): Promise<TaskDependencies> {
 }
 
 /**
- * Add a blocker. Returns nothing (the section refetches the pair) but surfaces
- * the server's sentence on refusal — a cycle or a cross-board pick — which the
- * section shows verbatim.
+ * Add a blocker, or re-state an existing one's link (087). Returns nothing (the
+ * section refetches the pair) but surfaces the server's sentence on refusal — a
+ * cycle or a cross-board pick — which the section shows verbatim.
+ *
+ * `link` is optional and omitted entirely from the body when absent, so a caller
+ * that does not care sends exactly the request 018 sent and gets FS/0. Since the
+ * server upserts the link on an existing pair, this doubles as "change the type"
+ * with no second endpoint.
  */
 export async function addDependency(
   taskId: number,
-  dependsOnId: number
+  dependsOnId: number,
+  link?: DependencyLink
 ): Promise<void> {
   const res = await fetch(`/api/tasks/${taskId}/dependencies`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dependsOnId }),
+    body: JSON.stringify({ dependsOnId, ...link }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);

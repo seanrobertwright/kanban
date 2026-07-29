@@ -3,7 +3,13 @@ import type { PoolClient } from "pg";
 import { query, withTransaction } from "@/shared/db/client";
 import { AuthzError, requireTaskRole } from "@/features/workspaces/server/authz";
 import type { Principal } from "@/features/auth/server/principal";
-import type { TaskDependencies, TaskDependencyRef } from "../types";
+import {
+  DEFAULT_LINK,
+  type DependencyLink,
+  type TaskDependencies,
+  type TaskDependencyEntry,
+  type TaskDependencyRef,
+} from "../types";
 
 /**
  * The advisory-lock classifier for dependency writes. pg_advisory_xact_lock's key
@@ -20,9 +26,11 @@ const DEPENDENCY_LOCK_CLASS = 0x7de9;
  * waits on is reading the task, not editing it. Ordered by title so the list is
  * stable and scannable rather than in insertion order; id breaks ties.
  */
-async function listDependencies(taskId: number): Promise<TaskDependencyRef[]> {
-  return query<TaskDependencyRef>(
-    `SELECT t.id, t.title
+async function listDependencies(
+  taskId: number
+): Promise<TaskDependencyEntry[]> {
+  return query<TaskDependencyEntry>(
+    `SELECT t.id, t.title, d.dep_type AS "type", d.lag_days AS "lagDays"
        FROM task_dependency d
        JOIN task t ON t.id = d.depends_on_task_id
       WHERE d.task_id = $1
@@ -141,11 +149,21 @@ async function wouldCycle(
  * retrying a dropped request must not be told the edge it already created is a
  * conflict. A genuine cycle is the conflict: the caller is allowed to attempt it,
  * the graph's shape refuses it, which is the 409 members.ts and columns.ts draw.
+ *
+ * Since 087 the conflict arm UPSERTS the link rather than doing nothing, and
+ * that is the same rule seen from one step further out. The primary key is the
+ * *pair*, so two tasks have one relationship, not a set of them — which makes
+ * "add the edge I already have, as SS+2" a re-statement of that one
+ * relationship and not a second edge. Doing nothing there would leave changing a
+ * link's type reachable only by deleting the edge and re-creating it, and a
+ * retry that widens FS to SS would silently keep the FS. Same values in still
+ * means same row out, so idempotency is intact.
  */
 export async function addDependency(
   actor: string | Principal,
   taskId: number,
-  dependsOnId: number
+  dependsOnId: number,
+  link: DependencyLink = DEFAULT_LINK
 ): Promise<void> {
   if (taskId === dependsOnId) {
     throw new AuthzError("conflict", "A task cannot depend on itself");
@@ -173,10 +191,12 @@ export async function addDependency(
     }
 
     await client.query(
-      `INSERT INTO task_dependency (task_id, depends_on_task_id)
-       VALUES ($1, $2)
-       ON CONFLICT (task_id, depends_on_task_id) DO NOTHING`,
-      [taskId, dependsOnId]
+      `INSERT INTO task_dependency (task_id, depends_on_task_id, dep_type, lag_days)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (task_id, depends_on_task_id)
+       DO UPDATE SET dep_type = EXCLUDED.dep_type,
+                     lag_days = EXCLUDED.lag_days`,
+      [taskId, dependsOnId, link.type, link.lagDays]
     );
   });
 }

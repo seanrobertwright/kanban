@@ -84,8 +84,10 @@ describe("getBoard", () => {
   });
 
   it("returns the board's blocked-by edges for the Gantt (036)", async () => {
-    // Two tasks and one edge: the read must surface the relationship board-wide,
-    // ids only, the way the Gantt reads it to draw arrows and the critical path.
+    // Two tasks and one edge: the read must surface the relationship board-wide
+    // the way the Gantt reads it to draw arrows and the critical path — which
+    // since 087 means the link too, because the arrow's anchors and the path's
+    // arithmetic both depend on what the edge means.
     const blocker = await createTask(alice, { columnId: todoId, title: "First" });
     const dependent = await createTask(alice, {
       columnId: todoId,
@@ -98,6 +100,8 @@ describe("getBoard", () => {
     expect(board!.dependencies).toContainEqual({
       taskId: dependent.id,
       dependsOnId: blocker.id,
+      type: "FS",
+      lagDays: 0,
     });
   });
 });

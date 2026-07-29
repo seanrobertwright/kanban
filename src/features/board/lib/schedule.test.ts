@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { TaskDependencyEdge } from "@/features/dependencies/types";
+import {
+  DEFAULT_LINK,
+  type DependencyLink,
+  type TaskDependencyEdge,
+} from "@/features/dependencies/types";
 import type { Task } from "@/features/tasks/types";
 import {
   addDays,
@@ -68,10 +72,13 @@ describe("spanOf / durationOf", () => {
 
 describe("criticalPath", () => {
   const dur = (entries: [number, number][]) => new Map<number, number>(entries);
-  const edge = (taskId: number, dependsOnId: number): TaskDependencyEdge => ({
-    taskId,
-    dependsOnId,
-  });
+  // Plain finish-to-start with no offset unless a case says otherwise — the only
+  // link 018 could express, and what every one of these cases meant before 087.
+  const edge = (
+    taskId: number,
+    dependsOnId: number,
+    link: DependencyLink = DEFAULT_LINK
+  ): TaskDependencyEdge => ({ taskId, dependsOnId, ...link });
 
   it("is empty with no edges", () => {
     const cp = criticalPath(dur([[1, 3], [2, 5]]), []);

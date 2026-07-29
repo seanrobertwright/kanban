@@ -143,7 +143,8 @@ export async function getBoard(
   // milestone read's shape. Subtask edges ride along; the Gantt keeps only the
   // ones whose both ends are top-level tasks it actually draws.
   const dependencies = await query<TaskDependencyEdge>(
-    `SELECT d.task_id AS "taskId", d.depends_on_task_id AS "dependsOnId"
+    `SELECT d.task_id AS "taskId", d.depends_on_task_id AS "dependsOnId",
+            d.dep_type AS "type", d.lag_days AS "lagDays"
        FROM task_dependency d
        JOIN task t ON t.id = d.task_id
        JOIN board_column bc ON bc.id = t.column_id

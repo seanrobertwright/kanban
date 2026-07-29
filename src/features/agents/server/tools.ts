@@ -12,6 +12,13 @@ import {
 } from "@/features/tasks/server/repository";
 import { createComment } from "@/features/comments/server/repository";
 import { addDependency } from "@/features/dependencies/server/repository";
+import {
+  DEFAULT_LINK,
+  DEPENDENCY_TYPES,
+  lagLabel,
+  LAG_DAYS_MAX,
+  LAG_DAYS_MIN,
+} from "@/features/dependencies/types";
 import { getBoard } from "@/features/board/server/repository";
 import { getBoardRisks, getTaskRisk } from "@/features/board/server/analytics";
 import { getScheduleProposal } from "@/features/board/server/schedule-proposal";
@@ -349,24 +356,40 @@ export function buildTools(
     betaZodTool({
       name: "flag_blocker",
       description:
-        "Record that a task is blocked by another task on the same board — a blocked-by edge everyone can see (§7.1). Both ids must be tasks on the same board; a self-reference or a cycle is refused, and re-flagging an existing edge is a harmless no-op.",
+        "Record that a task is blocked by another task on the same board — a blocked-by edge everyone can see (§7.1). Both ids must be tasks on the same board; a self-reference or a cycle is refused, and re-flagging an existing edge is a harmless no-op. Optionally say what the link means: FS (default) the blocker must finish before this starts, SS they start together, FF they finish together — with lagDays as a signed offset in days (negative overlaps them). Re-flagging an edge with a different type or lag changes it.",
       inputSchema: z.object({
         id: z.number().int(),
         dependsOnId: z.number().int(),
+        type: z.enum(DEPENDENCY_TYPES).optional(),
+        lagDays: z.number().int().min(LAG_DAYS_MIN).max(LAG_DAYS_MAX).optional(),
       }),
-      run: ({ id, dependsOnId }) =>
-        gate(ctx, {
+      run: ({ id, dependsOnId, type, lagDays }) => {
+        // Absent means DEFAULT_LINK, so an agent written against the pre-087
+        // schema emits byte-identical calls and gets byte-identical edges. The
+        // tool's gate tier is unchanged for the same reason: naming what a link
+        // means is the same blast radius as declaring it, and both stay auto.
+        const link = {
+          type: type ?? DEFAULT_LINK.type,
+          lagDays: lagDays ?? DEFAULT_LINK.lagDays,
+        };
+        const how =
+          link.type === DEFAULT_LINK.type && link.lagDays === DEFAULT_LINK.lagDays
+            ? ""
+            : ` (${link.type}${lagLabel(link.lagDays)})`;
+        return gate(ctx, {
           tool: "flag_blocker",
           // taskId: null — a dependency is a relationship between two tasks, not
           // state either one holds (018), so it never enters a TaskSnapshot; a
           // before/after task snapshot would be misleading. The input carries both
-          // ids, which is the whole record of the edge.
-          input: { id, dependsOnId },
+          // ids and the link, which is the whole record of the edge.
+          input: { id, dependsOnId, ...link },
           taskId: null,
-          execute: () => addDependency(p, id, dependsOnId),
-          describe: () => `Flagged task ${id} as blocked by ${dependsOnId}.`,
-          proposal: `flag task ${id} as blocked by ${dependsOnId}`,
-        }),
+          execute: () => addDependency(p, id, dependsOnId, link),
+          describe: () =>
+            `Flagged task ${id} as blocked by ${dependsOnId}${how}.`,
+          proposal: `flag task ${id} as blocked by ${dependsOnId}${how}`,
+        });
+      },
     }),
 
     betaZodTool({

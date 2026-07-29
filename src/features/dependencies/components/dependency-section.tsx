@@ -5,13 +5,119 @@ import { Plus, X } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import * as api from "../client/api";
-import type { TaskDependencyRef } from "../types";
+import {
+  DEPENDENCY_TYPE_LABELS,
+  DEPENDENCY_TYPES,
+  isDependencyType,
+  isLagDays,
+  LAG_DAYS_MAX,
+  LAG_DAYS_MIN,
+  type DependencyLink,
+  type TaskDependencyEntry,
+  type TaskDependencyRef,
+} from "../types";
 import { Select, SelectItem } from "@/shared/ui/select";
 
 interface DependencySectionProps {
   taskId: number;
   /** After any change — the parent card's blocked-by count is now stale. */
   onChanged?: () => void;
+}
+
+/**
+ * One blocker: what it is, what the link to it means, and how far apart the two
+ * ends sit (087).
+ *
+ * The lag is a draft until blur, which is the whole reason this is a component
+ * rather than three elements inline. Typing "12" passes through "1", and a
+ * request per keystroke would first tell the server the link is one day and then
+ * that it is twelve — visible on a Gantt someone else is looking at. The type
+ * select has no such intermediate state, so it commits on change.
+ *
+ * An empty or unparseable box reverts to what the server holds rather than
+ * writing 0: clearing a field to retype it must not be read as "no lag".
+ */
+function DependencyRow({
+  dep,
+  onRelink,
+  onRemove,
+}: {
+  dep: TaskDependencyEntry;
+  onRelink: (link: DependencyLink) => void;
+  onRemove: () => void;
+}) {
+  const [lagDraft, setLagDraft] = useState(String(dep.lagDays));
+
+  // The row is not the owner of the truth — a refetch after any change can move
+  // it underneath — so the draft re-syncs whenever the server's value moves.
+  //
+  // Adjusted during render against the last-seen prop, not in an effect. An
+  // effect would paint the stale draft first and correct it on a second pass;
+  // this discards the in-progress render and re-runs before anything reaches
+  // the DOM. Keying the row on the lag would also work, but a remount drops
+  // focus from whichever control just committed.
+  const [lastSeenLag, setLastSeenLag] = useState(dep.lagDays);
+  if (lastSeenLag !== dep.lagDays) {
+    setLastSeenLag(dep.lagDays);
+    setLagDraft(String(dep.lagDays));
+  }
+
+  function commitLag() {
+    // Number("") is 0, not NaN — so an empty box would otherwise commit "no
+    // lag" rather than reverting, and clearing the field to retype it would
+    // silently rewrite the link.
+    const parsed = lagDraft.trim() === "" ? NaN : Number(lagDraft);
+    if (!isLagDays(parsed)) {
+      setLagDraft(String(dep.lagDays));
+      return;
+    }
+    if (parsed !== dep.lagDays) onRelink({ type: dep.type, lagDays: parsed });
+  }
+
+  return (
+    <li className="flex items-center gap-1.5">
+      <span className="min-w-0 flex-1 truncate text-sm">{dep.title}</span>
+      <Select
+        value={dep.type}
+        aria-label={`Link type for "${dep.title}"`}
+        onValueChange={(value) => {
+          if (isDependencyType(value) && value !== dep.type)
+            onRelink({ type: value, lagDays: dep.lagDays });
+        }}
+        className="w-32 shrink-0 py-0.5 text-xs dark:bg-input/30"
+      >
+        {DEPENDENCY_TYPES.map((type) => (
+          <SelectItem key={type} value={type}>
+            {DEPENDENCY_TYPE_LABELS[type]}
+          </SelectItem>
+        ))}
+      </Select>
+      {/* Days, signed: negative is a lead — this task starts before the blocker
+          reaches the end the type names. */}
+      <input
+        type="number"
+        inputMode="numeric"
+        value={lagDraft}
+        aria-label={`Lag in days for "${dep.title}"`}
+        onChange={(event) => setLagDraft(event.target.value)}
+        onBlur={commitLag}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+        }}
+        min={LAG_DAYS_MIN}
+        max={LAG_DAYS_MAX}
+        className="h-6 w-14 shrink-0 rounded border bg-transparent px-1 text-right text-xs dark:bg-input/30"
+      />
+      <button
+        type="button"
+        aria-label={`Remove dependency on "${dep.title}"`}
+        onClick={onRemove}
+        className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive"
+      >
+        <X className="size-3.5" />
+      </button>
+    </li>
+  );
 }
 
 /**
@@ -31,7 +137,7 @@ export function DependencySection({
   taskId,
   onChanged,
 }: DependencySectionProps) {
-  const [dependencies, setDependencies] = useState<TaskDependencyRef[]>([]);
+  const [dependencies, setDependencies] = useState<TaskDependencyEntry[]>([]);
   const [candidates, setCandidates] = useState<TaskDependencyRef[]>([]);
   const [choice, setChoice] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +188,29 @@ export function DependencySection({
     }
   }
 
+  /**
+   * Re-state an existing edge's link. The same POST the add uses — the server
+   * upserts on the pair — so changing a type costs no second endpoint and no
+   * delete-then-recreate, which would have flickered the edge out of existence
+   * and briefly changed what the board is blocked on.
+   */
+  async function relink(dep: TaskDependencyEntry, link: DependencyLink) {
+    setError(null);
+    // Optimistic here, unlike the add: the server cannot refuse a link change on
+    // a pair whose edge already exists — the cycle and same-board questions were
+    // settled when it was created, and only the two columns move.
+    setDependencies((prev) =>
+      prev.map((d) => (d.id === dep.id ? { ...d, ...link } : d))
+    );
+    try {
+      await api.addDependency(taskId, dep.id, link);
+      onChanged?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change the link");
+      void reload();
+    }
+  }
+
   async function remove(dep: TaskDependencyRef) {
     setError(null);
     setDependencies((prev) => prev.filter((d) => d.id !== dep.id));
@@ -102,17 +231,12 @@ export function DependencySection({
       {dependencies.length > 0 && (
         <ul className="grid gap-1">
           {dependencies.map((dep) => (
-            <li key={dep.id} className="flex items-center gap-2">
-              <span className="flex-1 truncate text-sm">{dep.title}</span>
-              <button
-                type="button"
-                aria-label={`Remove dependency on "${dep.title}"`}
-                onClick={() => remove(dep)}
-                className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive"
-              >
-                <X className="size-3.5" />
-              </button>
-            </li>
+            <DependencyRow
+              key={dep.id}
+              dep={dep}
+              onRelink={(link) => relink(dep, link)}
+              onRemove={() => remove(dep)}
+            />
           ))}
         </ul>
       )}

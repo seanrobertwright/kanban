@@ -84,7 +84,11 @@ describe("dependencies", () => {
 
       await addDependency(alice, task.id, blocker.id);
       const listed = await getDependencies(alice, task.id);
-      expect(listed.dependencies).toEqual([{ id: blocker.id, title: "The blocker" }]);
+      // An add that names no link is finish-to-start with no offset (087) —
+      // the only edge 018 could write, and what every pre-087 row reads as.
+      expect(listed.dependencies).toEqual([
+        { id: blocker.id, title: "The blocker", type: "FS", lagDays: 0 },
+      ]);
 
       expect(await removeDependency(alice, task.id, blocker.id)).toBe(true);
       expect((await getDependencies(alice, task.id)).dependencies).toEqual([]);
@@ -100,6 +104,68 @@ describe("dependencies", () => {
       await addDependency(alice, a.id, b.id);
       await expect(addDependency(alice, a.id, b.id)).resolves.toBeUndefined();
       expect((await getDependencies(alice, a.id)).dependencies).toHaveLength(1);
+    });
+  });
+
+  describe("typed links and lag (087)", () => {
+    const linkOf = async (taskId: number) =>
+      (await getDependencies(alice, taskId)).dependencies[0];
+
+    it("stores the type and lag an add names", async () => {
+      const [a, b] = [await newTask(), await newTask()];
+      await addDependency(alice, a.id, b.id, { type: "SS", lagDays: 2 });
+      expect(await linkOf(a.id)).toMatchObject({ type: "SS", lagDays: 2 });
+    });
+
+    it("keeps a lead — a negative lag is an overlap, not an error", async () => {
+      const [a, b] = [await newTask(), await newTask()];
+      await addDependency(alice, a.id, b.id, { type: "FF", lagDays: -3 });
+      expect(await linkOf(a.id)).toMatchObject({ type: "FF", lagDays: -3 });
+    });
+
+    it("re-adding the same pair restates the link instead of ignoring it", async () => {
+      // The primary key is the pair, so two tasks have ONE relationship. An add
+      // that names a different link is therefore a correction to that
+      // relationship, not a second edge — otherwise changing a type would mean
+      // deleting the edge and re-creating it, briefly un-blocking the task.
+      const [a, b] = [await newTask(), await newTask()];
+      await addDependency(alice, a.id, b.id);
+      await addDependency(alice, a.id, b.id, { type: "FF", lagDays: 5 });
+
+      const { dependencies } = await getDependencies(alice, a.id);
+      expect(dependencies).toHaveLength(1);
+      expect(dependencies[0]).toMatchObject({ type: "FF", lagDays: 5 });
+    });
+
+    it("refuses a lag beyond the year the schema allows", async () => {
+      const [a, b] = [await newTask(), await newTask()];
+      await expect(
+        addDependency(alice, a.id, b.id, { type: "FS", lagDays: 20260729 })
+      ).rejects.toThrow();
+      expect((await getDependencies(alice, a.id)).dependencies).toEqual([]);
+    });
+
+    it("refuses a type outside the vocabulary", async () => {
+      // SF is the interesting case: a real PM link type this app deliberately
+      // does not implement (087), so the CHECK is what keeps it from being
+      // written by anything that bypasses the handler's validation.
+      const [a, b] = [await newTask(), await newTask()];
+      await expect(
+        addDependency(alice, a.id, b.id, {
+          type: "SF" as never,
+          lagDays: 0,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("carries the link into the board-wide edge list the Gantt reads", async () => {
+      const [a, b] = [await newTask(), await newTask()];
+      await addDependency(alice, a.id, b.id, { type: "SS", lagDays: 1 });
+      const boardId = (await getDefaultBoard(alice))!.id;
+      const edge = (await getBoard(alice, boardId))!.dependencies.find(
+        (e) => e.taskId === a.id && e.dependsOnId === b.id
+      );
+      expect(edge).toMatchObject({ type: "SS", lagDays: 1 });
     });
   });
 

@@ -7,6 +7,15 @@ import {
   getDependencies,
   removeDependency,
 } from "./repository";
+import {
+  DEFAULT_LINK,
+  DEPENDENCY_TYPES,
+  isDependencyType,
+  isLagDays,
+  LAG_DAYS_MAX,
+  LAG_DAYS_MIN,
+  type DependencyType,
+} from "../types";
 
 function badRequest(message: string) {
   return Response.json({ error: message }, { status: 400 });
@@ -36,9 +45,24 @@ export async function handleAddDependency(request: Request, taskId: number) {
 
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object") return badRequest("Invalid JSON body");
-  const { dependsOnId } = body as Record<string, unknown>;
+  const { dependsOnId, type, lagDays } = body as Record<string, unknown>;
   if (!Number.isInteger(dependsOnId))
     return badRequest("dependsOnId is required");
+
+  // Both optional (087): an omitted field means DEFAULT_LINK, which is the edge
+  // every caller wrote before the columns existed. A field that is *present* and
+  // wrong is a 400 rather than a silent fallback — a caller that meant SS and
+  // typo'd it must not be told the FS edge it did not ask for was created.
+  if (type !== undefined && !isDependencyType(type))
+    return badRequest(`type must be one of ${DEPENDENCY_TYPES.join(", ")}`);
+  if (lagDays !== undefined && !isLagDays(lagDays))
+    return badRequest(
+      `lagDays must be a whole number of days between ${LAG_DAYS_MIN} and ${LAG_DAYS_MAX}`
+    );
+  const link = {
+    type: type === undefined ? DEFAULT_LINK.type : (type as DependencyType),
+    lagDays: lagDays === undefined ? DEFAULT_LINK.lagDays : (lagDays as number),
+  };
 
   try {
     // Door-2 gate (§7.4): flag_blocker, auto by blast radius — silent,
@@ -48,9 +72,13 @@ export async function handleAddDependency(request: Request, taskId: number) {
       principal,
       {
         tool: "flag_blocker",
-        input: { taskId, dependsOnId },
+        // The link rides in the recorded input, not just the two ids: what an
+        // agent proposed has to be reviewable, and "blocked by #42" and "starts
+        // with #42, two days in" are different proposals.
+        input: { taskId, dependsOnId, ...link },
         taskId,
-        execute: () => addDependency(principal, taskId, dependsOnId as number),
+        execute: () =>
+          addDependency(principal, taskId, dependsOnId as number, link),
       },
       // 201-less: the edge has no id of its own to return, and the section
       // refetches the whole {dependencies, candidates} pair after a change rather

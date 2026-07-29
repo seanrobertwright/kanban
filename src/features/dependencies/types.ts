@@ -13,6 +13,67 @@ export interface TaskDependencyRef {
 }
 
 /**
+ * What the edge means (087). FS is the default and the only one 018 could say.
+ *
+ *   FS  the blocker must FINISH before this task STARTS  — the ordinary case
+ *   SS  the blocker must START  before this task STARTS  — run them together
+ *   FF  the blocker must FINISH before this task FINISHES — land them together
+ *
+ * SF is absent on purpose; see 087 for why a backwards link earns nothing in a
+ * plan that is only ever scheduled forwards.
+ */
+export const DEPENDENCY_TYPES = ["FS", "SS", "FF"] as const;
+export type DependencyType = (typeof DEPENDENCY_TYPES)[number];
+
+export function isDependencyType(value: unknown): value is DependencyType {
+  return (
+    typeof value === "string" &&
+    (DEPENDENCY_TYPES as readonly string[]).includes(value)
+  );
+}
+
+/** The bounds the CHECK in 087 enforces, restated so the client can refuse a
+ * value before spending a round trip on it. Signed: negative is a lead. */
+export const LAG_DAYS_MIN = -365;
+export const LAG_DAYS_MAX = 365;
+
+export function isLagDays(value: unknown): value is number {
+  return (
+    Number.isInteger(value) &&
+    (value as number) >= LAG_DAYS_MIN &&
+    (value as number) <= LAG_DAYS_MAX
+  );
+}
+
+/** How an edge reads in a sentence: "Finish → start", "Start → start +2d". */
+export const DEPENDENCY_TYPE_LABELS: Record<DependencyType, string> = {
+  FS: "Finish → start",
+  SS: "Start → start",
+  FF: "Finish → finish",
+};
+
+/** The type and offset of one edge, the pair every consumer needs together —
+ * a type with no lag under-describes the link as often as the reverse. */
+export interface DependencyLink {
+  type: DependencyType;
+  lagDays: number;
+}
+
+/** FS with no offset: what every edge written before 087 means, and what an
+ * add that names neither gets. Consumers use it as the fallback for an edge
+ * whose link they could not resolve, so the pre-087 reading is always the
+ * safe one. */
+export const DEFAULT_LINK: DependencyLink = { type: "FS", lagDays: 0 };
+
+/** "+2d" / "−1d" / "" — the offset as it appears next to a type label. */
+export function lagLabel(lagDays: number): string {
+  if (lagDays === 0) return "";
+  // U+2212, not a hyphen: this sits beside a type label as prose, and a lead
+  // read as "FS -2d" invites parsing the dash as part of the type.
+  return lagDays > 0 ? `+${lagDays}d` : `−${Math.abs(lagDays)}d`;
+}
+
+/**
  * What one task's dependency section needs in a single fetch: the blockers it
  * already has, and the tasks it could add as blockers.
  *
@@ -25,24 +86,45 @@ export interface TaskDependencyRef {
  */
 export interface TaskDependencies {
   /** Tasks this task is blocked by — its dependencies. */
-  dependencies: TaskDependencyRef[];
+  dependencies: TaskDependencyEntry[];
   /** Same-board tasks that could be added as a blocker without cycling. */
   candidates: TaskDependencyRef[];
 }
 
+/**
+ * A blocker as the dialog lists it: which task, and what the link to it means.
+ *
+ * Only the `dependencies` side carries a link — a candidate is a task that
+ * *could* be blocked on, and it has no relationship to describe until one is
+ * created. Keeping the link off TaskDependencyRef is what stops the picker from
+ * having to invent an FS/0 it does not mean.
+ */
+export interface TaskDependencyEntry extends TaskDependencyRef, DependencyLink {}
+
 export interface AddDependencyInput {
   /** The task that must finish first — the blocker this task will depend on. */
   dependsOnId: number;
+  /**
+   * Both optional, and both default to DEFAULT_LINK. That is what keeps 018's
+   * callers — and every agent that has ever called flag_blocker — writing the
+   * same edge they always did without knowing this field exists.
+   */
+  type?: DependencyType;
+  lagDays?: number;
 }
 
 /**
  * One blocked-by edge, board-wide (036). Where TaskDependencyRef names a single
  * task for one dialog's list, this is the bare relationship the Gantt reads
- * across the whole board: `taskId` is blocked by `dependsOnId`. Ids only — the
- * Gantt already holds every task's title from the board read, so an edge needs
- * to carry nothing but which two tasks it joins.
+ * across the whole board: `taskId` is blocked by `dependsOnId`. No titles — the
+ * Gantt already holds every task's from the board read, so an edge carries only
+ * which two tasks it joins and, since 087, what joining them means.
+ *
+ * The link is on the edge rather than looked up because every consumer that has
+ * an edge needs it: the Gantt anchors its arrow at different ends per type, and
+ * both the critical path and the proposer compute different dates from it.
  */
-export interface TaskDependencyEdge {
+export interface TaskDependencyEdge extends DependencyLink {
   taskId: number;
   dependsOnId: number;
 }

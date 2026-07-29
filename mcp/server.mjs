@@ -408,7 +408,7 @@ tool(
 
 tool(
   "list_dependencies",
-  "What a task is blocked by — its blocked-by edges, each naming the task it waits on.",
+  "What a task is blocked by — its blocked-by edges, each naming the task it waits on, what the link means (FS/SS/FF) and the signed lag in days between the two ends.",
   { id: z.number().int() },
   ({ id }) => api("GET", `/api/tasks/${id}/dependencies`)
 );
@@ -586,10 +586,17 @@ tool(
 
 tool(
   "flag_blocker",
-  "Record that a task is blocked by another task on the same board — a blocked-by edge everyone can see. Both ids must be tasks on the same board; a self-reference or a cycle is refused, and re-flagging an existing edge is a harmless no-op.",
-  { id: z.number().int(), dependsOnId: z.number().int() },
-  ({ id, dependsOnId }) =>
-    api("POST", `/api/tasks/${id}/dependencies`, { dependsOnId })
+  "Record that a task is blocked by another task on the same board — a blocked-by edge everyone can see. Both ids must be tasks on the same board; a self-reference or a cycle is refused, and re-flagging an existing edge is a harmless no-op. Optionally say what the link means: FS (default) the blocker must finish before this starts, SS they start together, FF they finish together — with lagDays as a signed offset in days (negative overlaps them). Re-flagging an edge with a different type or lag changes it.",
+  {
+    id: z.number().int(),
+    dependsOnId: z.number().int(),
+    // Both optional so a call written before this existed is unchanged and still
+    // means finish-to-start with no offset — the server applies that default.
+    type: z.enum(["FS", "SS", "FF"]).optional(),
+    lagDays: z.number().int().min(-365).max(365).optional(),
+  },
+  ({ id, dependsOnId, type, lagDays }) =>
+    api("POST", `/api/tasks/${id}/dependencies`, { dependsOnId, type, lagDays })
 );
 
 tool(
