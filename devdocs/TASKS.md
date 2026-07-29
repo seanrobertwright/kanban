@@ -1090,3 +1090,50 @@ would be grading its own homework.
         only where a board exists to promote them to; and a **guest sees only
         explicitly shared docs** — unshared reads, revision reads and edits all
         answer not_found rather than 403.
+
+## Code-review roadmap item 8 — dependencies stop meaning one thing (2026-07-29)
+
+- [x] **Typed links with lag** (migration 087) — `task_dependency` gains
+      `dep_type` (FS/SS/FF) and a signed `lag_days`, so an edge can say "these
+      start together" and "these finish together" as well as 018's single
+      finish-to-start, and can say how far apart the two ends sit. Positive is a
+      wait, negative a lead (an overlap). Bounded at ±365 — not a domain rule
+      but a typo guard, since an unbounded integer lets a pasted date push a
+      schedule 55,000 years out and the arithmetic will comply.
+      **SF is deliberately excluded**, recorded in 087 so it does not read as an
+      oversight: it is the one link type that runs backwards, and it only earns
+      its keep when a plan is scheduled from its end date toward the present,
+      which no consumer here does. → `fd8d29e`
+- [x] **Every pre-087 edge still means what it meant.** Both columns are NOT
+      NULL with defaults, so the whole existing corpus reads FS/0 — exactly what
+      all three consumers already assumed. Nothing shifts under an existing
+      board, which is what let the schema land ahead of the maths.
+- [x] **The add upserts the link.** The primary key is the *pair*, so two tasks
+      have one relationship; re-adding it with a different type restates that
+      relationship rather than creating a second edge. `DO NOTHING` would have
+      left changing a type reachable only by delete-then-recreate, which briefly
+      unblocks the task. Idempotency is intact (same values in, same row out),
+      and the dialog and both doors get "change the link" with no new endpoint.
+- [x] **Both doors, unchanged tier.** `flag_blocker` takes optional
+      `type`/`lagDays` on Door 1 and Door 2, defaulting to FS/0, so an agent
+      written before today emits byte-identical calls. The gate tier is
+      untouched — naming what a link means is the same blast radius as declaring
+      the link — and the recorded input carries the link, because "blocked by
+      #42" and "starts with #42, two days in" are different proposals to review.
+- [x] **The maths reads the type** (rock 8's real cost) — shipping the columns
+      without this would have left a field the UI writes and nothing reads, the
+      inert-✅ shape §2.2 keeps naming. All three types collapse to one rule,
+      `start_d >= start_b + w`, with `w` = `dur_b + lag` (FS), `lag` (SS),
+      `dur_b − dur_d + lag` (FF). `criticalPath` becomes CPM proper — forward
+      pass for earliest start, backward for latest, critical means zero float —
+      which reduces to the old duration-sum longest path exactly when every link
+      is FS/0, so all twelve existing cases passed untouched. `proposeSchedule`
+      states the same three rules in calendar dates and can now produce a date it
+      previously could not: an FF dependent starting *before* its blocker ends.
+      The Gantt anchors each arrow at the ends its link names. → `250430b`
+- [x] **Coverage.** dependencies 12 → 24 assertions (type/lag stored, lead kept,
+      re-add restates, both CHECKs refuse, the link reaches the board-wide edge
+      list) plus a first component suite for the section that watches the wire
+      rather than the DOM — it caught a real bug pre-ship, `Number("")` being 0
+      rather than NaN, which made clearing the lag box commit "no lag" instead of
+      reverting. schedule 12 → 17, schedule-proposal 2 → 9.
