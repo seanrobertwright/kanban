@@ -1622,6 +1622,7 @@ export function Board({
         workspaceId={workspaceId}
         open={capacityOpen}
         canManage={canDeleteColumns}
+        currentUserId={currentUserId}
         onOpenChange={setCapacityOpen}
       />
       <BudgetDialog

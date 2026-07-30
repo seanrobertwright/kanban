@@ -1,7 +1,9 @@
 import type {
   CapacityPlan,
+  CreateTimeOffInput,
   MemberCapacity,
   SetMemberCapacityInput,
+  TimeOff,
 } from "../types";
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -32,4 +34,24 @@ export function setMemberCapacity(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   }).then((res) => jsonOrThrow<MemberCapacity>(res));
+}
+
+export function createTimeOff(
+  workspaceId: string,
+  input: CreateTimeOffInput
+): Promise<TimeOff> {
+  return fetch(`/api/workspaces/${workspaceId}/time-off`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then((res) => jsonOrThrow<TimeOff>(res));
+}
+
+export function deleteTimeOff(
+  workspaceId: string,
+  entryId: number
+): Promise<{ ok: true }> {
+  return fetch(`/api/workspaces/${workspaceId}/time-off/${entryId}`, {
+    method: "DELETE",
+  }).then((res) => jsonOrThrow<{ ok: true }>(res));
 }
