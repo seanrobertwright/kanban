@@ -68,7 +68,7 @@ These features measure whether teams can see work through different operating le
 | ✅ Dependencies | Explicit relationships such as blocked by, depends on, or predecessor/successor. |
 | ✅ Critical path | Schedule analysis identifying tasks that drive completion date. |
 | ✅ Resource planning | Planning work against people, teams, or roles. |
-| ✅ Capacity planning | Comparing planned demand to available capacity. |
+| ✅ Capacity planning | Comparing planned demand to available capacity. Demand is the board's open assigned story points; capacity is each member's weekly point budget (041) **prorated by time off** (090) — dated absences, inclusive ranges, counted as whole Mon–Fri workdays inside the Monday–Sunday week the plan reports. Over-allocation asks `committed > available`, so a member away all week while holding work is flagged even though a percentage of zero capacity has no value. Leave is self-or-admin to book, own-or-admin to revoke. |
 | ✅ Workload view | Visibility into how work is distributed across people or teams. |
 | ✅ Portfolio view | Cross-project or cross-program view for multiple work streams. |
 | ✅ Program/initiative hierarchy | Higher-order grouping above projects, epics, or teams. |
@@ -124,7 +124,7 @@ These features show whether work is supported by shared context, decisions, docu
 
 | Feature | Summary |
 |---|---|
-| ✅ Docs/wiki | Structured documentation space connected to work. |
+| ✅ Docs/wiki | Structured documentation space connected to work. The hierarchy 056 stored is now visible and editable: an indented tree in the sidebar built purely from the flat workspace read, a parent picker that refuses a doc's own descendants (as does the server, via a recursive ancestor walk), and `[[wiki links]]` resolved by title — clicking one opens the page, and an unresolved name stays literal `[[Name]]` and is offered as a "wanted page" that creates a child in one click. |
 | ✅ Rich text pages | Flexible pages with formatted text, embeds, and structured content. |
 | ✅ Real-time co-editing | Multiple users editing shared content simultaneously. |
 | ✅ Mentions | `@mention` notifications for people, teams, or groups. |
@@ -156,7 +156,7 @@ These features determine whether leaders and teams can understand progress, bott
 | ✅ Cumulative flow | Flow metric showing work distribution across states over time. |
 | ✅ Workload reports | Reporting on team or individual load. |
 | ✅ Portfolio rollups | Aggregated reporting across projects, programs, or portfolios. |
-| ✅ Financial reports | Budget, spend, billing, profitability, or cost reporting. Rock 5.2 as a `source: financial` in 5.1's builder: logged minutes × the board's `hourly_rate` (042) via budget's pure `costOf`, grouped by board/member/day across one board or the portfolio (single-currency scope surfaces the board currency). |
+| ✅ Financial reports | Budget, spend, billing, profitability, or cost reporting. Rock 5.2 as a `source: financial` in 5.1's builder: logged minutes × the board's `hourly_rate` (042) via budget's pure `costOf`, grouped by board/member/day across one board or the portfolio (single-currency scope surfaces the board currency). Forecasting too, as `forecast:spend` (091): spend ÷ delivered story points, applied to the points still open, added to the spend to date — the only rate the app can observe without a second number to maintain. It reads two populations at once (the time ledger and the tasks in scope), emitted as separate facts so neither measure double-counts, which is why it narrows its groupings to none/board — a task's remaining points belong to no member's time entry. Nothing open ⇒ the forecast is the spend; nothing delivered ⇒ no rate, so it reports spend to date rather than inventing a projection. |
 | ✅ Export | CSV, spreadsheet, BI, or data export capability. |
 | ✅ Saved filters | Reusable filtered views and query definitions. |
 

@@ -1311,3 +1311,132 @@ would be grading its own homework.
       files run in parallel (leftover `whiteboard_update` rows from a sibling
       suite) and passes in isolation — reproduced on the clean tree at `6894cdb`,
       so it is 088's flake, not this slice's.
+
+## Code review §2.1 — the three left in the small-ones pile (2026-07-30)
+
+The review's per-feature table listed six small gaps; `epics`, `dependencies` and
+`extensions` were closed in earlier commits. These are the remaining three.
+
+### `capacity` — "weekly points only; no time-off model" (migration 090)
+
+- [x] **The budget 041 stored is nominal**, and the plan read it as if it always
+      held. A member on leave all week showed ten points of room, which is the
+      one thing a capacity planner most needs told otherwise. Absence is not
+      derivable from anything the app has — no calendar, no attendance, no leave
+      request — so `member_time_off` stores it: inclusive dated ranges,
+      workspace-scoped and keyed to the member like `member_capacity`.
+- [x] **Ranges, not a per-week deduction.** A range is what a person knows ("out
+      the 14th to the 21st"), reads correctly from any window, and makes the
+      future visible; a per-week number would be re-entered for every week the
+      leave spans and could say nothing about next month.
+- [x] **No hours, no half days, no leave types.** The read prorates whole
+      workdays against a weekly *point* budget, so a half day cannot change its
+      answer; a leave type is an HR policy this app does not have, and the note
+      field carries whatever a human needs to see.
+- [x] **Overlaps are allowed on purpose.** A sick day inside a holiday, or the
+      same leave synced twice, are honest entries. The read counts *distinct*
+      workdays so a duplicate cannot deduct twice — a non-overlap constraint
+      would instead fail the second true row.
+- [x] **Time off prorates the budget, never the demand** — leave changes how much
+      of the week a person has, not which tasks are theirs. Weekends deduct
+      nothing (booking Saturday off must not shrink a budget), and UTC date
+      arithmetic throughout keeps the week from sliding a day for a viewer west
+      of the line.
+- [x] **Over-allocation had to stop reading `utilization`.** Utilization now
+      divides by *available* capacity, so someone away all week reads null — a
+      percentage of zero capacity is undefined. But "away throughout and still
+      holding work" is unambiguously over, so `isOverAllocated` asks the question
+      directly (`committed > available`, with a budget set). That split is the
+      whole reason the new state is reportable at all.
+- [x] **Self-or-admin, unlike the budget.** A point budget is workspace structure
+      an admin decides; your own leave is yours to record (time entries' rule).
+      Booking someone else's stays admin. The revoke is scoped by workspace and,
+      for a non-admin, by `user_id`, so a miss reads not_found instead of
+      confirming a colleague's entry id exists. Dates are validated by ISO
+      round-trip, not regex alone — `2026-02-31` matches the shape and would
+      otherwise reach Postgres as a 500 from a cast.
+- [x] **14 pure cases + 4 real-DB.** Week windows across a month and a year
+      boundary, weekend and overhang clamping, the double-count case, rounding,
+      the away-all-week flag; then proration reaching the plan, the member-only
+      booking gate, the non-member refusal, own-or-admin revocation.
+
+### `reports` — "forecast metric (spend-rate × remaining) missing" (migration 091)
+
+- [x] **All five of 058's metrics fold rows that already happened.** So the
+      financial report could say what a board has spent and never where it is
+      heading. `forecast:spend` = spend ÷ delivered points, applied to the points
+      still open, plus the spend to date. That rate is the only one the app can
+      observe without a second number for someone to maintain: a per-task budget
+      would rot, and a calendar burn rate forecasts elapsed time, not work.
+- [x] **"Delivered" is the board's own done column** (020), so a board that never
+      chose one has delivered nothing, every point reads open, and the forecast
+      declines to project rather than dividing by a completion notion the board
+      did not pick.
+- [x] **Both degenerate cases answered, neither invented.** Nothing open ⇒ the
+      forecast is the spend. Nothing delivered ⇒ no rate, so it also reports
+      spend to date — an understatement a reader can see through (a forecast
+      equal to spend with points still open reads "too early to say").
+- [x] **A ratio of two aggregates, not a fold over rows** — and it reads two
+      populations, the time ledger for spend and the tasks in scope for
+      delivered-vs-open points. They are emitted as separate facts (a time entry
+      carries only spend, a task only points) so neither double-counts however
+      many entries a task has, and each bucket divides once, so a slow board and
+      a fast one forecast differently under group-by-board.
+- [x] **The metric narrows its source's groupings**, which no metric had needed
+      before. `financial` alone permits user and day; a bucket label has to fit
+      *both* populations, and a task's remaining points belong to no member's
+      time entry — grouping by one would divide by an empty denominator and
+      report a confident zero. `GROUP_BYS_BY_METRIC` states it, `groupBysFor`
+      intersects, and `isGroupByCompatible` takes the metric as an optional third
+      argument so every source-only caller is untouched. The panel re-legalises
+      the grouping when the metric changes, exactly as it already did for the
+      source; `updateReport` and the handler both consult the narrowed list.
+- [x] **7 pure cases + 2 real-DB** — the projection, both degenerate cases,
+      ratio-of-sums folding, per-bucket rates, formatting, the narrowed matrix;
+      then a 50/point rate over 2 delivered and 8 open points forecasting 500
+      against a ledger of 100, and the update guard refusing forecast+user while
+      allowing both fields to move together.
+
+### `docs` — "doc tree server-only (flat UI, no parent picker); `[[wiki links]]` absent"
+
+- [x] **The hierarchy existed everywhere except where anyone could see it.** 056
+      stored `parent_id` and `position` on day one; the dialog rendered a flat
+      list with no way to see or set a parent. Building the tree is a pure shape
+      over the flat workspace read the client already holds — nesting is not N
+      more requests.
+- [x] **Every doc appears exactly once.** A doc whose parent is missing from the
+      set (filtered out by the search term, deleted mid-session) renders as a
+      root instead of vanishing: a page you cannot see is worse than a page at
+      the wrong depth.
+- [x] **A cycle cannot hang the render.** Docs are claimed one at a time during
+      the walk rather than filtered up front — a sibling can be placed by the
+      recursion into an earlier one, which is what a cycle looks like from
+      inside — so walking into a loop meets a placed doc and stops, and anything
+      still unreachable is promoted to a root, where a user can break it.
+- [x] **`assertNotDescendant` closes a real hole.** The existing self-parent
+      check caught one step; A-under-B-then-B-under-A passed it, and a cycle
+      detaches the whole loop from every root, so those pages vanish from any
+      tree walk. One recursive CTE up the ancestor chain, with a depth cap that
+      is not a business rule — it stops the walk if a cycle ever did reach the
+      table, so a corrupt row costs a refused move, not a hung connection.
+- [x] **`[[links]]` resolve by title** — that is the point of the syntax: you
+      write a link before knowing which row it lands on. The cost is that titles
+      are not stable, survivable only because an unresolved name stays literal
+      `[[Name]]`: visibly a link to a page that is not there, rather than a dead
+      anchor that looks live. The pattern refuses nested brackets so one
+      unclosed `[[` cannot swallow the rest of a page.
+- [x] **Clicking a resolved link now opens the page** (it only jumped an anchor
+      before), and each unresolved name is offered as a wanted page that creates
+      it as a child of the doc that asked for it — a broken link becomes a real
+      page in one click. The regex that used to live inline in the component is
+      now a tested module; the parent picker refuses the descendants the server
+      refuses, so the illegal option is never shown.
+- [x] **20 pure cases + 1 real-DB** — nesting and depth-first order, sibling
+      ordering, orphan promotion, the cycle keeping every doc exactly once,
+      descendant search, name collection including empty and unclosed forms,
+      case/space-insensitive resolution, duplicate titles, literal fallback,
+      ordinary Markdown left alone, anchor parsing; then the three refused moves
+      and the two legal ones.
+
+**Suite: 1080 → 1189 passing** (1 expected fail), 140 files. tsc, build and
+eslint clean bar the pre-existing `exhaustive-deps` warning in `docs-dialog`.
