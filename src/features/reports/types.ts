@@ -31,6 +31,9 @@ export const REPORT_METRICS = [
   "sum:minutes",
   "avg:cycle",
   "sum:spend",
+  /** Projected spend at completion: what has been spent, plus the observed rate
+   *  per delivered point applied to the points still open (5.2's forecast). */
+  "forecast:spend",
 ] as const;
 export type ReportMetric = (typeof REPORT_METRICS)[number];
 
@@ -102,6 +105,13 @@ export interface ReportFact {
   minutes: number;
   spend: number;
   cycleDays: number | null;
+  /** Story points already delivered — the denominator of the forecast's rate.
+   *  Only `forecast:spend` fills and reads these two; every other metric leaves
+   *  them 0, and a fact carries each task's points exactly once so summing them
+   *  across a bucket cannot double-count. */
+  donePoints: number;
+  /** Story points still open — the work the rate is projected across. */
+  openPoints: number;
 }
 
 /** One aggregated bucket. */

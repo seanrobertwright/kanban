@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { ReportFact, ReportSpec } from "../types";
 import {
+  forecastSpend,
+  formatMetricValue,
   GROUP_BYS_BY_SOURCE,
+  groupBysFor,
   isGroupByCompatible,
   isMetricCompatible,
   METRICS_BY_SOURCE,
@@ -10,7 +13,16 @@ import {
 } from "./report";
 
 function fact(group: string, m: Partial<ReportFact> = {}): ReportFact {
-  return { group, estimate: 0, minutes: 0, spend: 0, cycleDays: null, ...m };
+  return {
+    group,
+    estimate: 0,
+    minutes: 0,
+    spend: 0,
+    cycleDays: null,
+    donePoints: 0,
+    openPoints: 0,
+    ...m,
+  };
 }
 
 const spec = (o: Partial<ReportSpec>): ReportSpec => ({
@@ -123,6 +135,57 @@ describe("runReport — ordering", () => {
   });
 });
 
+describe("forecast:spend", () => {
+  it("projects the observed rate per delivered point across the open work", () => {
+    // 300 spent to deliver 10 points (30/pt), 5 points left ⇒ 300 + 150.
+    expect(forecastSpend(300, 10, 5)).toBe(450);
+  });
+
+  it("is the spend to date when there is nothing left to project", () => {
+    expect(forecastSpend(300, 10, 0)).toBe(300);
+  });
+
+  it("declines to project before anything is delivered", () => {
+    // No rate can be observed yet — reporting the spend beats inventing a number.
+    expect(forecastSpend(300, 0, 20)).toBe(300);
+    expect(forecastSpend(0, 0, 20)).toBe(0);
+  });
+
+  it("folds a bucket as a ratio of sums, not a sum of ratios", () => {
+    // Two time entries and two tasks in one bucket: 100 + 200 spent, 6 points
+    // delivered, 3 open ⇒ 300 + (50 × 3).
+    const r = runReport(spec({ source: "financial", metric: "forecast:spend" }), [
+      fact("", { spend: 100 }),
+      fact("", { spend: 200 }),
+      fact("", { donePoints: 6 }),
+      fact("", { openPoints: 3 }),
+    ]);
+    expect(r.total).toBe(450);
+  });
+
+  it("forecasts each board on its own rate when grouped", () => {
+    const r = runReport(
+      spec({ source: "financial", metric: "forecast:spend", groupBy: "board" }),
+      [
+        fact("Fast", { spend: 100 }),
+        fact("Fast", { donePoints: 10 }),
+        fact("Fast", { openPoints: 10 }),
+        fact("Slow", { spend: 100 }),
+        fact("Slow", { donePoints: 2 }),
+        fact("Slow", { openPoints: 10 }),
+      ]
+    );
+    expect(r.points).toEqual([
+      { label: "Slow", value: 600 },
+      { label: "Fast", value: 200 },
+    ]);
+  });
+
+  it("formats as money like the spend it projects", () => {
+    expect(formatMetricValue("forecast:spend", 450, "USD")).toBe("450.00 USD");
+  });
+});
+
 describe("compatibility guards", () => {
   it("pairs each source with only its metrics", () => {
     expect(isMetricCompatible("tasks", "count")).toBe(true);
@@ -130,6 +193,8 @@ describe("compatibility guards", () => {
     expect(isMetricCompatible("time", "sum:minutes")).toBe(true);
     expect(isMetricCompatible("flow", "avg:cycle")).toBe(true);
     expect(isMetricCompatible("financial", "sum:spend")).toBe(true);
+    expect(isMetricCompatible("financial", "forecast:spend")).toBe(true);
+    expect(isMetricCompatible("time", "forecast:spend")).toBe(false);
   });
 
   it("pairs each source with only its groupings", () => {
@@ -137,6 +202,18 @@ describe("compatibility guards", () => {
     expect(isGroupByCompatible("time", "status")).toBe(false);
     expect(isGroupByCompatible("flow", "user")).toBe(false);
     expect(isGroupByCompatible("flow", "board")).toBe(true);
+  });
+
+  it("lets the forecast narrow its source's groupings", () => {
+    // financial alone allows user/day; the forecast cannot label a task with one.
+    expect(isGroupByCompatible("financial", "user")).toBe(true);
+    expect(isGroupByCompatible("financial", "user", "forecast:spend")).toBe(false);
+    expect(isGroupByCompatible("financial", "board", "forecast:spend")).toBe(true);
+    expect(groupBysFor("financial", "forecast:spend")).toEqual(["none", "board"]);
+    // A metric with no restriction of its own leaves the source's list alone.
+    expect(groupBysFor("financial", "sum:spend")).toEqual(
+      GROUP_BYS_BY_SOURCE.financial
+    );
   });
 
   it("keeps the two maps covering every source", () => {

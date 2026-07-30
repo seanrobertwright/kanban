@@ -200,5 +200,7 @@ function metricHeading(metric: ReportMetric): string {
       return "Avg cycle";
     case "sum:spend":
       return "Spend";
+    case "forecast:spend":
+      return "Forecast";
   }
 }

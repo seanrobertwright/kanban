@@ -14,7 +14,7 @@ import {
   updateReport,
   type ReportRun,
 } from "../client/api";
-import { GROUP_BYS_BY_SOURCE, METRICS_BY_SOURCE } from "../lib/report";
+import { groupBysFor, METRICS_BY_SOURCE } from "../lib/report";
 import { ReportChart } from "./report-chart";
 import {
   type CreateReportInput,
@@ -41,6 +41,7 @@ const METRIC_LABELS: Record<ReportMetric, string> = {
   "sum:minutes": "Total time",
   "avg:cycle": "Avg cycle time",
   "sum:spend": "Total spend",
+  "forecast:spend": "Forecast spend at completion",
 };
 
 const GROUP_LABELS: Record<ReportGroupBy, string> = {
@@ -137,13 +138,29 @@ export function ReportsPanel({
   // Keep metric/group_by legal whenever the source changes.
   function setSource(source: ReportSource) {
     const metrics = METRICS_BY_SOURCE[source];
-    const groups = GROUP_BYS_BY_SOURCE[source];
-    setDraft((d) => ({
-      ...d,
-      source,
-      metric: metrics.includes(d.metric) ? d.metric : metrics[0],
-      groupBy: groups.includes(d.groupBy) ? d.groupBy : groups[0],
-    }));
+    setDraft((d) => {
+      const metric = metrics.includes(d.metric) ? d.metric : metrics[0];
+      const groups = groupBysFor(source, metric);
+      return {
+        ...d,
+        source,
+        metric,
+        groupBy: groups.includes(d.groupBy) ? d.groupBy : groups[0],
+      };
+    });
+  }
+
+  /** The metric can narrow the groupings too (the forecast does), so changing it
+   *  has to re-legalise the grouping the same way changing the source does. */
+  function setMetric(metric: ReportMetric) {
+    setDraft((d) => {
+      const groups = groupBysFor(d.source, metric);
+      return {
+        ...d,
+        metric,
+        groupBy: groups.includes(d.groupBy) ? d.groupBy : groups[0],
+      };
+    });
   }
 
   async function save() {
@@ -191,7 +208,7 @@ export function ReportsPanel({
   }
 
   const metrics = METRICS_BY_SOURCE[draft.source];
-  const groups = GROUP_BYS_BY_SOURCE[draft.source];
+  const groups = groupBysFor(draft.source, draft.metric);
   const canSave = draft.name.trim() !== "" && (!selected || selected.canManage);
 
   return (
@@ -274,7 +291,7 @@ export function ReportsPanel({
             <Field label="Metric">
               <FieldSelect
                 value={draft.metric}
-                onChange={(v) => setDraft((d) => ({ ...d, metric: v as ReportMetric }))}
+                onChange={(v) => setMetric(v as ReportMetric)}
               >
                 {metrics.map((m) => (
                   <SelectItem key={m} value={m}>

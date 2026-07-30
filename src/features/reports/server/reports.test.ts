@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { getBoard } from "@/features/board/server/repository";
+import { getBoard, setBoardDoneColumn } from "@/features/board/server/repository";
+import { setBoardBudget } from "@/features/budget/server/repository";
 import { createTask } from "@/features/tasks/server/repository";
+import { addTimeEntry } from "@/features/time/server/repository";
 import {
   ensurePersonalWorkspace,
   getDefaultBoard,
@@ -144,6 +146,58 @@ describe("reports (db)", () => {
         visibility: "shared",
       })
     ).rejects.toThrow();
+  });
+
+  it("forecasts spend from the delivered rate and the open points (5.2)", async () => {
+    // A rate to cost the ledger at, and a done column so "delivered" is the
+    // board's own notion of completion.
+    await setBoardBudget(alice, boardId, { hourlyRate: 50, currency: "USD" });
+    await setBoardDoneColumn(alice, boardId, doneCol);
+    // 2 points delivered ("Write docs") for two hours at 50 ⇒ 50/point.
+    // 8 points still open ("Ship login" 3 + "Fix crash" 5) ⇒ 100 + 400.
+    const delivered = (await getBoard(alice, boardId))!.tasks.find(
+      (t) => t.title === "Write docs"
+    )!;
+    await addTimeEntry(alice, delivered.id, { minutes: 120 });
+
+    const report = await createReport(alice, workspaceId, {
+      name: `forecast-${randomUUID()}`,
+      source: "financial",
+      boardId,
+      metric: "forecast:spend",
+      groupBy: "none",
+    });
+    const { result, currency } = await runReportById(alice, report.id);
+    expect(currency).toBe("USD");
+    expect(result.total).toBe(500);
+
+    // The same scope on sum:spend reports only what is actually spent — the
+    // forecast is the projection, not a restatement of the ledger.
+    const spent = await updateReport(alice, report.id, { metric: "sum:spend" });
+    expect(spent.metric).toBe("sum:spend");
+    expect((await runReportById(alice, report.id)).result.total).toBe(100);
+  });
+
+  it("refuses a forecast grouped by a label only one population carries", async () => {
+    // financial/sum:spend may group by member; the forecast cannot, because a
+    // task's remaining points belong to no member's time entry. The coherence
+    // guard on update is where the repository enforces it.
+    const report = await createReport(alice, workspaceId, {
+      name: `forecast-group-${randomUUID()}`,
+      source: "financial",
+      boardId,
+      metric: "sum:spend",
+      groupBy: "user",
+    });
+    await expect(
+      updateReport(alice, report.id, { metric: "forecast:spend" })
+    ).rejects.toThrow(/not valid/);
+    // Moving both at once is coherent and allowed.
+    const fixed = await updateReport(alice, report.id, {
+      metric: "forecast:spend",
+      groupBy: "board",
+    });
+    expect(fixed.groupBy).toBe("board");
   });
 
   it("rejects an incompatible metric on update", async () => {

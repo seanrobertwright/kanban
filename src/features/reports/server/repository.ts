@@ -171,7 +171,7 @@ export async function updateReport(
   if (!isMetricCompatible(source, metric)) {
     throw new AuthzError("conflict", `metric "${metric}" is not valid for source "${source}"`);
   }
-  if (!isGroupByCompatible(source, groupBy)) {
+  if (!isGroupByCompatible(source, groupBy, metric)) {
     throw new AuthzError("conflict", `group_by "${groupBy}" is not valid for source "${source}"`);
   }
 
@@ -245,6 +245,9 @@ type TaskFactRow = Task & {
   boardId: number;
   boardName: string;
   assigneeName: string | null;
+  /** The task's board's done column, so "delivered" is the board's own notion of
+   *  completion (020) rather than a column title matched by name. */
+  doneColumnId: number | null;
 };
 
 /** Top-level tasks in the report's scope, already filter-matched. */
@@ -260,6 +263,7 @@ async function scopedTasks(report: ReportRow): Promise<TaskFactRow[]> {
             bc.title AS "status",
             b.id AS "boardId",
             b.name AS "boardName",
+            b.done_column_id AS "doneColumnId",
             COALESCE(u.name, ag.name) AS "assigneeName"
        FROM task t
        JOIN board_column bc ON bc.id = t.column_id
@@ -274,7 +278,16 @@ async function scopedTasks(report: ReportRow): Promise<TaskFactRow[]> {
 }
 
 function fact(group: string, measures: Partial<ReportFact> = {}): ReportFact {
-  return { group, estimate: 0, minutes: 0, spend: 0, cycleDays: null, ...measures };
+  return {
+    group,
+    estimate: 0,
+    minutes: 0,
+    spend: 0,
+    cycleDays: null,
+    donePoints: 0,
+    openPoints: 0,
+    ...measures,
+  };
 }
 
 async function gatherFacts(
@@ -287,7 +300,9 @@ async function gatherFacts(
     case "time":
       return { facts: await timeFacts(report), currency: null };
     case "financial":
-      return timeFactsFinancial(report);
+      return report.metric === "forecast:spend"
+        ? forecastFacts(report)
+        : timeFactsFinancial(report);
     case "flow":
       return { facts: await flowFacts(actor, report), currency: null };
   }
@@ -333,9 +348,14 @@ interface TimeRow {
   currency: string;
 }
 
-async function scopedTimeRows(report: ReportRow): Promise<TimeRow[]> {
-  const tasks = await scopedTasks(report);
-  const taskIds = tasks.map((t) => t.id);
+/** `tasks` is passed in by callers that already read the scope (the forecast
+ *  needs the same rows for its point counts), so the scope is read once. */
+async function scopedTimeRows(
+  report: ReportRow,
+  tasks?: TaskFactRow[]
+): Promise<TimeRow[]> {
+  const scoped = tasks ?? (await scopedTasks(report));
+  const taskIds = scoped.map((t) => t.id);
   if (taskIds.length === 0) return [];
   return query<TimeRow>(
     `SELECT te.minutes,
@@ -382,10 +402,51 @@ async function timeFactsFinancial(
       spend: costOf(row.minutes, row.hourlyRate),
     })
   );
-  // A single currency across scope is meaningful to display; a mix is not.
+  return { facts, currency: soleCurrency(rows) };
+}
+
+/** A single currency across scope is meaningful to display; a mix is not. */
+function soleCurrency(rows: TimeRow[]): string | null {
   const currencies = new Set(rows.map((r) => r.currency));
-  const currency = currencies.size === 1 ? [...currencies][0] : null;
-  return { facts, currency };
+  return currencies.size === 1 ? [...currencies][0] : null;
+}
+
+/**
+ * The forecast's facts (5.2). Unlike every other metric, this one reads two
+ * populations: the time ledger for what has been spent, and the tasks in scope
+ * for how much work is delivered versus still open. They are emitted as separate
+ * facts — a time entry carries only spend, a task carries only points — so each
+ * measure is counted exactly once no matter how many entries a task has.
+ *
+ * "Delivered" is the task's board's done column (020). A board with no done
+ * column set has delivered nothing, so every point reads as open and the
+ * forecast honestly declines to project (no rate) rather than dividing by a
+ * completion notion the board never chose.
+ *
+ * Only `none` and `board` groupings reach here (GROUP_BYS_BY_METRIC), which is
+ * why one label works for both populations.
+ */
+async function forecastFacts(
+  report: ReportRow
+): Promise<{ facts: ReportFact[]; currency: string | null }> {
+  const tasks = await scopedTasks(report);
+  const rows = await scopedTimeRows(report, tasks);
+
+  const facts: ReportFact[] = rows.map((row) =>
+    fact(timeGroup(report, row), { spend: costOf(row.minutes, row.hourlyRate) })
+  );
+  for (const t of tasks) {
+    const points = t.estimate ?? 0;
+    if (points === 0) continue; // An unestimated task can neither earn nor owe.
+    const delivered = t.doneColumnId != null && t.columnId === t.doneColumnId;
+    facts.push(
+      fact(report.groupBy === "board" ? t.boardName : "", {
+        donePoints: delivered ? points : 0,
+        openPoints: delivered ? 0 : points,
+      })
+    );
+  }
+  return { facts, currency: soleCurrency(rows) };
 }
 
 /**

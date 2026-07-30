@@ -65,8 +65,10 @@ function compatError(
   if (!isMetricCompatible(source, metric)) {
     return `metric "${metric}" is not valid for source "${source}"`;
   }
-  if (!isGroupByCompatible(source, groupBy)) {
-    return `group_by "${groupBy}" is not valid for source "${source}"`;
+  // Metric-aware: the forecast narrows its source's groupings further, because
+  // its facts come from two populations and only some labels fit both.
+  if (!isGroupByCompatible(source, groupBy, metric)) {
+    return `group_by "${groupBy}" is not valid for source "${source}" with metric "${metric}"`;
   }
   return null;
 }
