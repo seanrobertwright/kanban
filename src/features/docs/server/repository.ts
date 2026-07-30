@@ -79,6 +79,37 @@ async function assertParent(client: PoolClient, workspaceId: string, parentId: n
   if (rows.length === 0) throw new AuthzError("not_found", "Parent document not found");
 }
 
+/**
+ * Refuses a move that would put a doc under one of its own descendants. The
+ * self-parent check next to this one catches the one-step case; a two-step cycle
+ * (A under B, then B under A) passed it, and a cycle detaches the whole loop from
+ * every root — the pages become unreachable from a tree walk. Recursive CTE, so
+ * the check costs one query at whatever depth the wiki has.
+ */
+async function assertNotDescendant(
+  client: PoolClient,
+  id: number,
+  parentId: number | null
+) {
+  if (parentId === null) return;
+  const { rows } = await client.query(
+    // The depth cap is not a business rule — it stops the walk if a cycle ever
+    // did reach the table, so a corrupt row costs a refused move, not a hung
+    // connection.
+    `WITH RECURSIVE ancestors AS (
+       SELECT id, parent_id, 0 AS depth FROM doc WHERE id = $1
+       UNION ALL
+       SELECT d.id, d.parent_id, a.depth + 1
+         FROM doc d JOIN ancestors a ON d.id = a.parent_id
+        WHERE a.depth < 100
+     )
+     SELECT 1 FROM ancestors WHERE id = $2`,
+    [parentId, id]
+  );
+  if (rows.length > 0)
+    throw new AuthzError("conflict", "A document cannot be moved under its own child");
+}
+
 async function assertBoard(client: PoolClient, workspaceId: string, boardId: number | null) {
   if (boardId === null) return;
   const { rows } = await client.query(`SELECT 1 FROM board WHERE id = $1 AND workspace_id = $2`, [boardId, workspaceId]);
@@ -125,6 +156,7 @@ export async function updateDoc(userId: string, id: number, input: UpdateDocInpu
     if (setsParent) {
       if (input.parentId === id) throw new AuthzError("conflict", "A document cannot be its own parent");
       await assertParent(client, workspaceId, input.parentId ?? null);
+      await assertNotDescendant(client, id, input.parentId ?? null);
     }
     if (setsBoard) await assertBoard(client, workspaceId, input.boardId ?? null);
     if (input.body !== undefined && input.body !== before.body) {

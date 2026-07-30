@@ -187,4 +187,36 @@ describe("docs (db)", () => {
       updateDoc(guest, shared.id, { body: "guest edit" })
     ).rejects.toThrow(/not found/i);
   });
+
+  it("refuses a move that would put a doc under its own descendant", async () => {
+    const top = await createDoc(alice, workspaceId, { title: `Top ${randomUUID()}` });
+    const mid = await createDoc(alice, workspaceId, {
+      title: `Mid ${randomUUID()}`,
+      parentId: top.id,
+    });
+    const leaf = await createDoc(alice, workspaceId, {
+      title: `Leaf ${randomUUID()}`,
+      parentId: mid.id,
+    });
+
+    // One step was already refused; these are the cases that made a cycle and
+    // detached the whole loop from every root.
+    await expect(updateDoc(alice, top.id, { parentId: top.id })).rejects.toThrow(
+      /its own parent/
+    );
+    await expect(updateDoc(alice, top.id, { parentId: mid.id })).rejects.toThrow(
+      /its own child/
+    );
+    await expect(updateDoc(alice, top.id, { parentId: leaf.id })).rejects.toThrow(
+      /its own child/
+    );
+
+    // Moving downward is legal, and so is detaching to the top level.
+    expect(await updateDoc(alice, leaf.id, { parentId: top.id })).toMatchObject({
+      parentId: top.id,
+    });
+    expect(await updateDoc(alice, mid.id, { parentId: null })).toMatchObject({
+      parentId: null,
+    });
+  });
 });
