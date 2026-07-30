@@ -51,6 +51,7 @@ export function taskColumns(alias = ""): string {
           ${p}parent_id AS "parentId",
           ${claimedByObject(p)} AS "claimedBy",
           ${p}claimed_at AS "claimedAt",
+          ${p}claim_expires_at AS "claimExpiresAt",
           ${p}created_at AS "createdAt",
           ${labelsSubquery(self)} AS labels,
           ${customFieldsSubquery(self)} AS "customFields",

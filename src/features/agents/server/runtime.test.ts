@@ -9,6 +9,7 @@ import {
 } from "@/features/workspaces/server/repository";
 import { createTask, getTask } from "@/features/tasks/server/repository";
 import { createMilestone } from "@/features/milestones/server/repository";
+import { getDependencies } from "@/features/dependencies/server/repository";
 import { pool, query, queryOne } from "@/shared/db/client";
 
 /**
@@ -421,6 +422,73 @@ describe("Door 1 runtime", () => {
     await expect(reviewChangeset(owner, changesetId, [])).rejects.toThrow(
       /already been reviewed/i
     );
+  });
+
+  it("applies a held claim as the lease the agent asked for", async () => {
+    // claim_task is auto by default, so this is the tier-is-policy case (012):
+    // an operator who wants an agent's holds reviewed must get a proposal a
+    // human can actually accept, and accepting it must mean what the agent
+    // proposed — a hold for a working day is not a hold for the default hour.
+    await query(`UPDATE agent SET approval_policy = $2 WHERE id = $1`, [
+      agentId,
+      JSON.stringify({ claim_task: "changeset" }),
+    ]);
+    h.turns = 1;
+    const taskId = await seedTask();
+    h.script = async (tools) => {
+      await run(tools, "claim_task").run({ id: taskId, ttlMinutes: 480 });
+    };
+    const runId = (await enqueue(taskId))!;
+    await executeRun(runId);
+
+    expect((await getTask(owner, taskId))!.claimedBy).toBeNull();
+    const detail = (await getRunDetail(owner, runId))!;
+    const action = detail.actions.find((a) => a.tool === "claim_task")!;
+    await reviewChangeset(owner, detail.changeset!.id, [action.id]);
+
+    const held = (await getTask(owner, taskId))!;
+    expect(held.claimedBy).toMatchObject({ type: "agent", id: agentId });
+    const hours =
+      (new Date(held.claimExpiresAt!).getTime() - Date.now()) / 3_600_000;
+    expect(hours).toBeGreaterThan(7);
+
+    await query(`UPDATE agent SET approval_policy = '{}' WHERE id = $1`, [agentId]);
+  });
+
+  it("applies a held blocked-by edge with the link the agent named", async () => {
+    // Two bugs in one apply case, both invisible until a proposal was accepted
+    // rather than merely asserted held: review.ts read `input.taskId`, which is
+    // Door 2's key — Door 1 records `id`, so the apply ran with an undefined
+    // task id — and it dropped 087's type and lag, applying a plain
+    // finish-to-start edge for a proposal that said otherwise.
+    await query(`UPDATE agent SET approval_policy = $2 WHERE id = $1`, [
+      agentId,
+      JSON.stringify({ flag_blocker: "changeset" }),
+    ]);
+    h.turns = 1;
+    const taskId = await seedTask();
+    const blockerId = await seedTask();
+    h.script = async (tools) => {
+      await run(tools, "flag_blocker").run({
+        id: taskId,
+        dependsOnId: blockerId,
+        type: "SS",
+        lagDays: 2,
+      });
+    };
+    const runId = (await enqueue(taskId))!;
+    await executeRun(runId);
+
+    const detail = (await getRunDetail(owner, runId))!;
+    const action = detail.actions.find((a) => a.tool === "flag_blocker")!;
+    await reviewChangeset(owner, detail.changeset!.id, [action.id]);
+
+    const { dependencies } = await getDependencies(owner, taskId);
+    const edge = dependencies.find((d) => d.id === blockerId);
+    expect(edge).toBeDefined();
+    expect(edge).toMatchObject({ type: "SS", lagDays: 2 });
+
+    await query(`UPDATE agent SET approval_policy = '{}' WHERE id = $1`, [agentId]);
   });
 
   it("undoes an auto-tier field edit by restoring the before snapshot", async () => {

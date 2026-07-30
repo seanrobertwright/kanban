@@ -8,6 +8,7 @@ import {
   ListChecks,
   ListTree,
   Lock,
+  LockOpen,
   MoreHorizontal,
   Paperclip,
   Pencil,
@@ -41,6 +42,7 @@ import { LabelChip } from "@/features/labels/components/label-chip";
 import type { Label as LabelData } from "@/features/labels/types";
 import { formatDueDate, useToday } from "@/shared/lib/due-date";
 import { TaskExtensionPanels } from "@/features/extensions/components/task-extension-panels";
+import { claimLapsed, holdLabel } from "../lib/claim";
 import { PRIORITY_LABELS, RECURRENCE_LABELS, TASK_TYPE_LABELS } from "../types";
 import type { Task, TaskPriority, TaskType } from "../types";
 
@@ -307,24 +309,30 @@ export function TaskCard({
                 the word carries it for anyone who cannot see the icon. The
                 holder's name is not resolved here: only humans are in a
                 client-side roster today, so an agent's hold reads generically
-                until an agent list lands with the rest of M2. */}
+                until an agent list lands with the rest of M2.
+                Since 076 a hold also ends on its own, and the mark says which
+                kind it is — a lease that ran out is a task anyone may take, and
+                a card that cannot tell the two apart is where the wedge the
+                lease was built to end actually survived. */}
             {task.claimedBy && (
-              <span
-                title={
-                  task.claimedBy.type === "agent"
-                    ? "An agent is working on this"
-                    : "Being worked on"
-                }
-              >
-                <Lock
-                  className="size-3.5 text-muted-foreground"
-                  aria-hidden="true"
-                />
-                <span className="sr-only">
-                  {task.claimedBy.type === "agent"
-                    ? "An agent is working on this"
-                    : "Being worked on"}
-                </span>
+              <span title={holdLabel(task)}>
+                {/* An unlocked padlock for a lapsed lease (076): the hold is
+                    still recorded, and it no longer keeps anyone off the task.
+                    Two icons rather than a hidden one, because a card that drops
+                    the mark entirely says "free" and loses who was working it —
+                    which is the fact a reader wants when picking work back up. */}
+                {claimLapsed(task) ? (
+                  <LockOpen
+                    className="size-3.5 text-muted-foreground/50"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Lock
+                    className="size-3.5 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="sr-only">{holdLabel(task)}</span>
               </span>
             )}
             {/* Recurs (020). The loop icon says the task will spawn a successor

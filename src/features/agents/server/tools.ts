@@ -180,16 +180,27 @@ export function buildTools(
     betaZodTool({
       name: "claim_task",
       description:
-        "Claim a task before working it — an exclusive hold that stops another agent grabbing the same one. A task already claimed by someone else is refused.",
-      inputSchema: z.object({ id: z.number().int() }),
-      run: ({ id }) =>
+        "Claim a task before working it — an exclusive hold that stops another agent grabbing the same one. A task already claimed by someone else is refused. Claiming your own hold again renews the lease. The lease expires, so a crashed agent cannot wedge a task forever; ttlMinutes sets how long you expect to need it (default 60).",
+      // The lease length is Door 2's already (mcp/server.mjs claim_task), and a
+      // tool one door publishes and the other does not is the parity PRD §7.1
+      // forbids: an agent that can hold a task for a working day on the MCP door
+      // and only an hour here is the same agent under two policies. Bounds match
+      // the HTTP handler's (1 minute to a day) so all three doors refuse the same
+      // inputs rather than each inventing a ceiling.
+      inputSchema: z.object({
+        id: z.number().int(),
+        ttlMinutes: z.number().int().min(1).max(1440).optional(),
+      }),
+      run: ({ id, ttlMinutes }) =>
         gate(ctx, {
           tool: "claim_task",
-          input: { id },
+          input: { id, ttlMinutes },
           taskId: id,
-          execute: () => claimTask(p, id),
+          execute: () => claimTask(p, id, ttlMinutes),
           describe: (t) =>
-            t ? `Claimed task ${id}.` : `No task ${id} in your workspace.`,
+            t
+              ? `Claimed task ${id}${t.claimExpiresAt ? ` until ${t.claimExpiresAt}` : ""}.`
+              : `No task ${id} in your workspace.`,
           proposal: `claim task ${id}`,
         }),
     }),

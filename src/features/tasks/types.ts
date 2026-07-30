@@ -313,6 +313,23 @@ export interface Task {
    * instant, so a snapshot does not carry it. See TaskSnapshot.claimedBy.
    */
   claimedAt: string | null;
+  /**
+   * When the current claim lapses (076), ISO-8601 — or null when the hold has no
+   * expiry, which means either the task is free or the claim predates the lease.
+   *
+   * On the task, not only on what claimTask hands its claimant back, and that is
+   * the correction 076 needed: a lease nobody but the holder can read is a lease
+   * that expires in private. Every other reader — a card, a list row, an agent
+   * scanning `list_board` for something to work — sees `claimedBy` set and skips
+   * the task forever, which is exactly the wedge the lease was built to end. The
+   * expiry is what lets a reader tell a live hold from a dead one; without it the
+   * column is written and read by nothing, the inert-field shape this codebase
+   * keeps naming.
+   *
+   * Absent from TaskSnapshot for claimedAt's reason: undo restores who held a
+   * task, not when their lease would have run out.
+   */
+  claimExpiresAt: string | null;
   createdAt: string;
 }
 

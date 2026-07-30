@@ -1172,20 +1172,6 @@ async function lockTask(
 /** The lease length a claim gets when the caller names none (076). */
 export const DEFAULT_CLAIM_TTL_MINUTES = 60;
 
-/** A claimed task with its lease's expiry — what claimTask hands back, so the
- *  claimant knows when its hold lapses without a second read. The expiry is not
- *  on Task itself: nothing else renders it, and widening taskColumns for one
- *  caller would touch every read. */
-export type ClaimedTask = Task & { claimExpiresAt: string | null };
-
-async function withLease(client: PoolClient, task: Task): Promise<ClaimedTask> {
-  const { rows } = await client.query<{ claimExpiresAt: string | null }>(
-    `SELECT claim_expires_at AS "claimExpiresAt" FROM task WHERE id = $1`,
-    [task.id]
-  );
-  return { ...task, claimExpiresAt: rows[0]?.claimExpiresAt ?? null };
-}
-
 /**
  * Whether a task's claim has lapsed (076). Read inside the claiming
  * transaction, on the connection holding the row lock, so the answer cannot
@@ -1206,7 +1192,7 @@ export async function claimTask(
   actor: string | Principal,
   id: number,
   ttlMinutes: number = DEFAULT_CLAIM_TTL_MINUTES
-): Promise<ClaimedTask | undefined> {
+): Promise<Task | undefined> {
   const by = principalActor(asPrincipal(actor));
   const { boardId, workspaceId } = await requireTaskRole(actor, id, "member");
 
@@ -1225,7 +1211,7 @@ export async function claimTask(
             WHERE id = $1`,
           [id, ttlMinutes]
         );
-        return withLease(client, (await selectTask(client, id))!);
+        return (await selectTask(client, id))!;
       }
       if (!(await claimExpired(client, id))) {
         throw new AuthzError("conflict", "This task is already claimed");
@@ -1253,7 +1239,7 @@ export async function claimTask(
       before: snapshot(before),
       after: snapshot(after),
     });
-    return withLease(client, after);
+    return after;
   });
 }
 

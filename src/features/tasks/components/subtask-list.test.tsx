@@ -46,6 +46,7 @@ function subtask(over: Partial<Task> = {}): Task {
     customFields: [],
     claimedBy: null,
     claimedAt: null,
+    claimExpiresAt: null,
     createdAt: "2026-07-15T00:00:00.000Z",
     ...over,
   };

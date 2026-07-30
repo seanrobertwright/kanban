@@ -12,7 +12,13 @@ import {
   getDefaultBoard,
 } from "@/features/workspaces/server/repository";
 import { pool, query } from "@/shared/db/client";
-import { claimTask, createTask, getTask, releaseTask } from "./repository";
+import {
+  claimTask,
+  createTask,
+  DEFAULT_CLAIM_TTL_MINUTES,
+  getTask,
+  releaseTask,
+} from "./repository";
 
 /**
  * Claiming, against a real Postgres — because the one property that matters is
@@ -61,6 +67,7 @@ describe("task claiming", () => {
   let alice: string; // workspace owner
   let bob: string; // a human member
   let workspaceId: string;
+  let boardId: number;
   let todoId: number;
   let agentA: TestAgent;
   let agentB: TestAgent;
@@ -71,6 +78,7 @@ describe("task claiming", () => {
     await ensurePersonalWorkspace(alice, "ClmAlice");
     const board = (await getDefaultBoard(alice))!;
     workspaceId = board.workspaceId;
+    boardId = board.id;
     todoId = (await getBoard(alice, board.id))!.columns[0].id;
 
     bob = await createUser("clm-bob");
@@ -148,6 +156,135 @@ describe("task claiming", () => {
       const holder = (await getTask(alice, task.id))!.claimedBy;
       expect(holder).not.toBeNull();
       expect(await claimedActions(task.id)).toEqual(["task.claimed"]);
+    });
+  });
+
+  /**
+   * The lease (076). Every case here drives the expiry through the database
+   * rather than a fake clock: the rule is `claim_expires_at < now()` evaluated
+   * inside claimTask's transaction, so a test that moved a JS clock would be
+   * agreeing with itself. Expiry is forced by writing the column into the past,
+   * which is what a lapsed lease looks like from the repository's side and needs
+   * no waiting.
+   */
+  const expireNow = (taskId: number) =>
+    query(`UPDATE task SET claim_expires_at = now() - interval '1 minute'
+            WHERE id = $1`, [taskId]);
+
+  describe("the lease", () => {
+    it("stamps a default expiry, an hour out, and hands it back", async () => {
+      const task = await freshTask();
+      const claimed = await claimTask(agentA.principal, task.id);
+
+      // The claimant learns when its hold lapses from the claim itself — a
+      // second read to find out how long you have is a race with your own lease.
+      const expiry = new Date(claimed!.claimExpiresAt!).getTime();
+      const expected = Date.now() + DEFAULT_CLAIM_TTL_MINUTES * 60_000;
+      expect(Math.abs(expiry - expected)).toBeLessThan(60_000);
+    });
+
+    it("honours a caller's ttlMinutes", async () => {
+      const task = await freshTask();
+      const claimed = await claimTask(agentA.principal, task.id, 5);
+
+      const minutes =
+        (new Date(claimed!.claimExpiresAt!).getTime() - Date.now()) / 60_000;
+      expect(minutes).toBeGreaterThan(3);
+      expect(minutes).toBeLessThan(7);
+    });
+
+    it("renews on the holder's re-claim without writing a second row", async () => {
+      const task = await freshTask();
+      await claimTask(agentA.principal, task.id, 5);
+      // Push the lease to the brink, then heartbeat: the renewal is the whole
+      // reason a long-running agent can hold a task longer than its first guess.
+      await expireNow(task.id);
+      const renewed = await claimTask(agentA.principal, task.id, 30);
+
+      expect(new Date(renewed!.claimExpiresAt!).getTime()).toBeGreaterThan(
+        Date.now()
+      );
+      expect(renewed!.claimedBy).toMatchObject({ type: "agent", id: agentA.id });
+      // A renewal changes no state a snapshot carries, so it is still a no-op.
+      expect(await claimedActions(task.id)).toEqual(["task.claimed"]);
+    });
+
+    it("lets another agent take over a lapsed hold, recording the old holder", async () => {
+      const task = await freshTask();
+      await claimTask(agentA.principal, task.id);
+      await expireNow(task.id);
+
+      // The point of the whole feature: agent A crashed, its lease ran out, and
+      // agent B takes the task with no admin in the loop. Not a conflict — the
+      // hold is over, and taking it is the lease working rather than a break-in.
+      const taken = await claimTask(agentB.principal, task.id);
+      expect(taken!.claimedBy).toMatchObject({ type: "agent", id: agentB.id });
+
+      // The takeover is legible afterwards: one more claim row, whose before
+      // names the agent whose lease expired.
+      const [entry] = await listRawActivityForTask(task.id);
+      expect(entry.action).toBe("task.claimed");
+      expect(entry.actorId).toBe(agentB.id);
+      expect(entry.before).toMatchObject({
+        claimedBy: { type: "agent", id: agentA.id },
+      });
+      expect(entry.after).toMatchObject({
+        claimedBy: { type: "agent", id: agentB.id },
+      });
+    });
+
+    it("still refuses a takeover while the lease is live", async () => {
+      const task = await freshTask();
+      await claimTask(agentA.principal, task.id, 60);
+      // The expiry is not a weakening of the hold — inside it, 010's exclusion
+      // is exactly as strict as it was.
+      await expect(
+        claimTask(agentB.principal, task.id)
+      ).rejects.toMatchObject({ kind: "conflict" });
+    });
+
+    it("never lapses a pre-076 hold, which has no expiry", async () => {
+      const task = await freshTask();
+      await claimTask(agentA.principal, task.id);
+      // A claim taken before the lease existed means "held until released", and
+      // the nullable column is what preserves that. If NULL read as expired, the
+      // migration would have silently freed every hold in the wild.
+      await query(`UPDATE task SET claim_expires_at = NULL WHERE id = $1`, [
+        task.id,
+      ]);
+
+      await expect(
+        claimTask(agentB.principal, task.id)
+      ).rejects.toMatchObject({ kind: "conflict" });
+    });
+
+    it("clears the expiry on release, and the CHECK forbids one without a hold", async () => {
+      const task = await freshTask();
+      await claimTask(agentA.principal, task.id);
+      const released = await releaseTask(agentA.principal, task.id);
+      expect(released!.claimExpiresAt).toBeNull();
+
+      // An expiry with nothing to expire is not a fact about anything; 076's
+      // coherence CHECK is what keeps that state unreachable.
+      await expect(
+        query(`UPDATE task SET claim_expires_at = now() WHERE id = $1`, [task.id])
+      ).rejects.toMatchObject({ constraint: "task_claim_expiry_coherent" });
+    });
+
+    it("shows the lease to every reader, not just the claimant", async () => {
+      const task = await freshTask();
+      await claimTask(agentA.principal, task.id, 15);
+
+      // The correction this slice exists for: a hold nobody but its holder can
+      // see the end of is a hold that expires in private, and every other reader
+      // — a card, a list row, an agent scanning list_board — skips the task
+      // forever. Both shared read paths carry it.
+      const read = await getTask(bob, task.id);
+      expect(read!.claimExpiresAt).not.toBeNull();
+
+      const board = await getBoard(bob, boardId);
+      const onBoard = board!.tasks.find((t) => t.id === task.id);
+      expect(onBoard!.claimExpiresAt).toBe(read!.claimExpiresAt);
     });
   });
 

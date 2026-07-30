@@ -1440,3 +1440,57 @@ The review's per-feature table listed six small gaps; `epics`, `dependencies` an
 
 **Suite: 1080 → 1189 passing** (1 expected fail), 140 files. tsc, build and
 eslint clean bar the pre-existing `exhaustive-deps` warning in `docs-dialog`.
+
+## Code review §4.4 item 5 — the lease nobody could see (2026-07-30)
+
+The review asked for a claim lease TTL. Migration **076** had already built it —
+default 60 minutes, renewed by the holder's re-claim, a lapsed hold takeable by
+anyone with the rank — so this slice is the three things around it that were
+missing, each of which made the built half less true than it read.
+
+- [x] **`claimExpiresAt` is on the task, not only on the claimant's receipt.**
+      The expiry was returned by `claimTask` and projected by nothing, on the
+      stated grounds that "nothing else renders it". That is the assumption the
+      lease invalidates: a hold whose end only its holder can see expires in
+      private, and every other reader — a card, a list row, an agent scanning
+      `list_board` for work — sees `claimedBy` set and skips the task forever.
+      The wedge 076 set out to end survived at the read layer, which is the layer
+      that decides whether anyone picks the task up. One line in `taskColumns`
+      puts it on every read, which retires the `ClaimedTask` wrapper and the
+      extra per-claim query `withLease` was doing.
+- [x] **A lapsed hold reads as lapsed.** Pure `lib/claim.ts` (`claimLapsed`,
+      `holdLabel`) and an open padlock on the card. The mark is not dropped when
+      the lease ends — a card that says "free" loses *who was working it*, which
+      is the fact a reader picking the work back up wants. The boundary matches
+      the server's `claim_expires_at < now()` exactly (at the instant, still
+      held), and the client comparison is documented as a display hint: the
+      authority is the repository, under a row lock, on the database clock, so a
+      skewed client costs a refused claim and never grants one.
+- [x] **Door 1 gets `ttlMinutes`.** Door 2 has published it since 076; the native
+      runtime had not, so the same agent held a task for a working day on one
+      door and an hour on the other — PRD §7.1's "same approval policy, both
+      doors" failing on the parameter rather than the policy. Bounds (1–1440)
+      match the HTTP handler's, so all three doors refuse the same inputs.
+- [x] **`claim_task` / `release_task` reach `applyProposed`.** Both are auto by
+      tier, and a tier is policy (012): an operator raising `claim_task` for one
+      agent was getting a proposal held forever, which turns "review this" into
+      "this silently does nothing". The lease rides the recorded input, so
+      accepting a proposal to hold a task for eight hours means eight hours.
+- [x] **Two live bugs in the `flag_blocker` apply case, found by writing the test
+      that *accepts* rather than asserts held** (the epics slice's lesson,
+      earning its keep a second time). It read `input.taskId`, which is Door 2's
+      key — Door 1 records `id`, so an accepted Door-1 proposal called
+      `addDependency` with an undefined task id and threw, and a throw mid-review
+      abandons every other action in that changeset. And it dropped 087's `type`
+      and `lagDays`, so accepting "starts with #42, two days in" applied a plain
+      finish-to-start edge. Both keys are now read; the link is applied as
+      proposed. Pinned by a positive control — the new test fails against the old
+      apply case with `AuthzError: Task not found`.
+- [x] **9 pure + 8 real-DB + 2 changeset + 2 component cases.** The lease had *no* test at all
+      before this: default and caller-set expiry, renewal extending a
+      near-dead lease without a second log row, a takeover of a lapsed hold
+      recording the old holder in `before`, a live lease still refusing, a null
+      expiry (pre-076) never lapsing, the coherence CHECK refusing an expiry with
+      no hold, and the expiry visible through both shared read paths. The expiry
+      is forced by writing the column into the past rather than by waiting or by
+      faking a clock the server does not consult.

@@ -54,6 +54,7 @@ function task(over: Partial<Task> = {}): Task {
     customFields: [],
     claimedBy: null,
     claimedAt: null,
+    claimExpiresAt: null,
     createdAt: "2026-07-15T00:00:00.000Z",
     ...over,
   };
@@ -120,6 +121,32 @@ describe("TaskCard claim", () => {
   it("says nothing about a claim on a free task", () => {
     render(card({ claimedBy: null }));
     expect(screen.queryByText(/working on this/)).toBeNull();
+  });
+
+  it("tells a lapsed lease from a live one, and still names the holder", () => {
+    // The reader's half of 076. A card that renders a two-day-dead hold as "an
+    // agent is working on this" is where the wedge the lease was built to end
+    // actually survives — a person scanning the column leaves the task alone
+    // forever. Naming the old holder is what makes it useful rather than merely
+    // free: it says who to ask before picking the work up.
+    render(
+      card({
+        claimedBy: { type: "agent", id: "a1" },
+        claimExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+      })
+    );
+    expect(screen.queryByText("An agent is working on this")).toBeNull();
+    expect(screen.getByText(/An agent held this .* lapsed/)).toBeDefined();
+  });
+
+  it("leaves a live lease reading as live", () => {
+    render(
+      card({
+        claimedBy: { type: "agent", id: "a1" },
+        claimExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      })
+    );
+    expect(screen.getByText("An agent is working on this")).toBeDefined();
   });
 });
 

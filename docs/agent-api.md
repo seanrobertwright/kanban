@@ -70,6 +70,12 @@ unassign.
 | `GET /api/workspaces/:id/labels` | The workspace's label vocabulary (id, name, color). |
 | `GET /api/workspaces/:id/assignees` | Who a task can be assigned to — people and agents, **no email addresses**. |
 
+Every task a read returns carries `claimedBy` **and `claimExpiresAt`**, so a live
+hold and a lapsed one are told apart without a second question. When
+`claimExpiresAt` is in the past, the hold is over and the task is yours to take —
+do not skip it as claimed. A null expiry on a held task is a hold taken before
+leases existed: held until released.
+
 #### Search
 
 `GET /api/board/:id/tasks/search` is the read that lets you ask a question

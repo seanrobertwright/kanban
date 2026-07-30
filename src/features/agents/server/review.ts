@@ -12,8 +12,10 @@ import {
 } from "@/features/workspaces/server/authz";
 import { captureActivity } from "@/features/activity/server/activity-capture";
 import {
+  claimTask,
   createTask,
   moveTask,
+  releaseTask,
   updateTask,
 } from "@/features/tasks/server/repository";
 import { promoteIdea } from "@/features/discovery/server/repository";
@@ -22,6 +24,7 @@ import {
   addDependency,
   removeDependency,
 } from "@/features/dependencies/server/repository";
+import { DEFAULT_LINK, type DependencyLink } from "@/features/dependencies/types";
 import {
   createChecklistItem,
   updateChecklistItem,
@@ -183,11 +186,40 @@ async function applyProposed(
         parentId: input.parentId as number | undefined,
       });
       return true;
+    // The two doors name the blocked task differently in the input they record —
+    // Door 1 as `id` (tools.ts), Door 2 as `taskId` (dependencies handlers) — so
+    // reading only one of them applied a Door-1 proposal with an undefined task
+    // id, and a throw mid-review abandons every other action in the changeset.
+    // The link (087) is read for the same reason it is recorded: accepting
+    // "starts with #42, two days in" must not apply a plain finish-to-start edge.
     case "flag_blocker":
-      await addDependency(agent, input.taskId as number, input.dependsOnId as number);
+      await addDependency(
+        agent,
+        (input.taskId ?? input.id) as number,
+        input.dependsOnId as number,
+        {
+          type: (input.type as DependencyLink["type"]) ?? DEFAULT_LINK.type,
+          lagDays: (input.lagDays as number) ?? DEFAULT_LINK.lagDays,
+        }
+      );
       return true;
     case "unflag_blocker":
-      await removeDependency(agent, input.taskId as number, input.dependsOnId as number);
+      await removeDependency(
+        agent,
+        (input.taskId ?? input.id) as number,
+        input.dependsOnId as number
+      );
+      return true;
+    // Claiming is auto by tier and here for the reason the block above states —
+    // a tier is policy. An operator who raises claim_task for a particular agent
+    // wants the hold held for review, not turned off. The lease rides the input
+    // (076): a proposal to hold a task for a working day is a different proposal
+    // from one to hold it an hour, and accepting it must mean what it said.
+    case "claim_task":
+      await claimTask(agent, input.id as number, input.ttlMinutes as number | undefined);
+      return true;
+    case "release_task":
+      await releaseTask(agent, input.id as number);
       return true;
     case "add_checklist_item":
       await createChecklistItem(agent, input.taskId as number, {
