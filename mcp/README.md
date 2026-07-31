@@ -77,7 +77,17 @@ REST API the web UI uses.
 | `list_attachments` | File metadata on a task (no bytes). |
 | `get_git_context` | Branches, commits, PRs linked to a task, with CI status. |
 | `get_notifications` / `mark_notifications_seen` | The agent's inbox. |
+| `wait_for_changes` | Block until something changes on a board, instead of re-reading it on a timer. |
 | `knowledge_query` | Ask the workspace's published docs a question. |
+
+**`wait_for_changes` is how a long-running agent should idle.** Call it once with
+no `since` to get a cursor and no history — a first call deliberately does not
+replay the board's past. Pass that cursor back and the server holds the request
+open (up to 25s) until activity lands, answering with what happened and a new
+cursor; an empty answer means the wait elapsed, so poll again with the *same*
+cursor. It is a nudge to go and read, not the record: ids are assigned before
+commit, so a concurrent write can land out of cursor order and be missed. What
+happened to a *task* is `task_history`, which cannot skip.
 
 ## Resources and prompts
 

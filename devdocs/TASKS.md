@@ -1494,3 +1494,83 @@ missing, each of which made the built half less true than it read.
       no hold, and the expiry visible through both shared read paths. The expiry
       is forced by writing the column into the past rather than by waiting or by
       faking a clock the server does not consult.
+
+## Code review §4.4 item 8 — a board an agent can wait on (2026-07-31)
+
+A stdio agent had exactly two ways to notice that anything on its board had
+moved: re-read the whole board on a timer, or receive a webhook at an address a
+process behind stdio does not have. The first is the most expensive thing a
+long-running agent can do repeatedly — a board-sized read per tick, straight
+into the context window. `GET /api/board/:id/events` is the third way, over the
+log every mutation already writes.
+
+- [x] **`since` absent means "from now", not "from the beginning".** The first
+      call answers with the head cursor and zero events. Backfilling instead
+      would pour a board's entire audit trail into the context of every agent
+      that connects — the blowup `list_board`'s size warning and the search
+      cursors exist to avoid — and an agent that genuinely wants history already
+      has `task_history`, which is scoped to a subject rather than to a clock.
+      A `wait` with no cursor returns immediately for the same reason: the first
+      call's whole job is to hand one out, and holding it open would stall every
+      new caller for a full timeout before it could start.
+- [x] **The cursor is a string, and a malformed one is a 400.** `activity_log.id`
+      is BIGSERIAL and JSON numbers are IEEE doubles, so a numeric cursor would
+      eventually round and skip rows; it is only ever compared and echoed, so the
+      string costs nothing. `1e3`, `12.0`, `-1` and ` 12` are refused rather than
+      coerced — every one of them is a caller bug that silently loses events if
+      the server guesses. An empty page echoes the caller's own cursor, because
+      "nothing happened" resetting to "start from now" is the same data loss
+      wearing a success status.
+- [x] **`wait` clamps where `since` and `limit` refuse.** A too-long wait is a
+      caller *preference* the server may shorten; a malformed cursor or an
+      out-of-range limit is a defect. 25s is under the 30s a stock proxy cuts a
+      response at, so the timeout the caller sees is ours — a 200 with an
+      unchanged cursor — rather than a 504 that looks like an outage and loses
+      the cursor with it.
+- [x] **Long poll, not SSE.** The caller this exists for makes one `fetch` at a
+      time from a stdio process: a long poll is a `fetch` — no new transport, no
+      reconnect protocol — and it degrades to an ordinary request the moment
+      `wait` is omitted, which is what a browser caller would use. Authz is
+      re-checked on every one-second iteration rather than hoisted: a poll held
+      open for 25 seconds spans a membership revocation, and the alternative is a
+      caller that keeps receiving a board's activity for as long as it never
+      reconnects.
+- [x] **Said plainly, in three places, what this feed is not.** BIGSERIAL assigns
+      an id at INSERT, not at COMMIT, so a row with a lower id can become visible
+      after one with a higher id and a poller past that point never sees it. The
+      window is a mutation's transaction — milliseconds — and the cost is a
+      missed *nudge*, not a lost record, because the record is `activity_log`
+      read by task. Rather than pretend otherwise, the repository comment, the
+      tool description and `agent-api.md` all say "a nudge to go and read, not
+      the ledger", so no agent builds on the wrong assumption.
+- [x] **Board-scoped, not workspace-scoped.** Rows with a null `board_id`
+      (workspace-level label and member changes) are absent, and migration 092
+      adds the only index that serves this shape — `(board_id, id)` *ascending*,
+      where 003's two are both DESC for newest-first readers. The range predicate
+      `id > cursor` is a prefix of an ascending index and a suffix of a
+      descending one, and this runs once a second per waiting agent.
+- [x] **Rate limited per principal, at 60 burst / 1 per second** — the intended
+      pattern exactly, so an agent that polls correctly never sees a 429 and one
+      that busy-loops with `wait=0` does within a minute. An agent key and the
+      human who minted it are separate budgets, as on the GraphQL door.
+- [x] **Door 2 gets `wait_for_changes`**, and `api()` grew a per-call
+      `timeoutMs`: the shared 15s deadline would have aborted a healthy 20s wait
+      as if the app were down, and retries are off for this one call because a
+      long poll that times out in transit would otherwise hold the connection for
+      another full window.
+- [x] **17 pure + 12 real-DB cases.** The bounds (every refused cursor form, a
+      cursor past 2^53 kept exactly, leading zeros normalised so the echo
+      compares equal, both clamps); then, through the handler with a real agent
+      key: the first call handing out a cursor without history, forward order and
+      an advancing cursor, an empty poll echoing the cursor, paging a burst and
+      resuming from a partial page, a second board in the same workspace staying
+      out of the feed, a stranger's board answering not_found rather than empty
+      (an empty feed is an oracle), and the three timing cases — waking within a
+      second of a change, elapsing as a 200 after the full wait, and *not*
+      holding the first call open. The timing ones are asserted on the clock,
+      because a poll that never wakes and a poll that never sleeps look identical
+      from a single call.
+
+**Suite: 1189 → 1242 passing** (1 expected fail), 143 files. tsc, build and
+eslint clean. Verified against the running app as well as in tests: a comment
+posted three seconds into a 20-second wait came back in four.

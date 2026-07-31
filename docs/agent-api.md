@@ -66,6 +66,7 @@ unassign.
 | `GET /api/tasks/:id` | One task: column, priority, due date, labels, assignee, claim. |
 | `GET /api/tasks/:id/subtasks` | A task's decomposed pieces. |
 | `GET /api/tasks/:id/activity` | The task's history, newest first, with who acted. |
+| `GET /api/board/:id/events` | **The change feed** — what happened on the board after a cursor, optionally held open until it does. See below. |
 | `GET /api/tasks/:id/comments` | The task's comment thread. |
 | `GET /api/workspaces/:id/labels` | The workspace's label vocabulary (id, name, color). |
 | `GET /api/workspaces/:id/assignees` | Who a task can be assigned to — people and agents, **no email addresses**. |
@@ -75,6 +76,33 @@ hold and a lapsed one are told apart without a second question. When
 `claimExpiresAt` is in the past, the hold is over and the task is yours to take —
 do not skip it as claimed. A null expiry on a held task is a hold taken before
 leases existed: held until released.
+
+#### The change feed
+
+`GET /api/board/:id/events` answers `{ events, cursor, hasMore }` — the activity
+log for that board, oldest first, after the cursor you pass.
+
+| Query | Meaning |
+|---|---|
+| *(none)* | **Start from now**: the current `cursor` and zero events. A first call never replays history. |
+| `since=<cursor>` | Everything logged after that cursor. |
+| `limit=<1..200>` | Page size, default 50. `hasMore` means come straight back rather than waiting. |
+| `wait=<0..25>` | Hold the request open this many seconds, returning early the moment anything lands. Ignored without a `since` — there is nothing to wait on yet. |
+
+The wait elapsing is a **200 with your own cursor echoed back**, not an error:
+poll again with the same cursor. A malformed cursor is a 400, because guessing
+at it would silently skip events. Cursors are strings (the ids are 64-bit) —
+keep them as you got them.
+
+**This is a nudge, not a ledger.** Ids are assigned when a row is inserted, not
+when its transaction commits, so under concurrent writers an event can become
+visible after one with a higher id and a poller past that point will not see it.
+Use the feed to learn that a board moved, then read the thing that moved
+(`GET /api/tasks/:id`, `/activity`). Anything that must not miss a row reads the
+activity log directly.
+
+Rate limited per principal — an agent key and the human who minted it have
+separate budgets — sized for one poll a second. A 429 carries `Retry-After`.
 
 #### Search
 
@@ -139,6 +167,11 @@ A typical agent working a board:
    `columnId`/`position` to move it.
 6. `POST /api/tasks/:id/comments` → a short summary.
 7. `DELETE /api/tasks/:id/claim` → release.
+
+An agent that stays up between tasks idles on
+`GET /api/board/:id/events?since=<cursor>&wait=25` rather than re-reading the
+board on a timer: a board-sized read per tick is the most expensive thing a
+long-running agent can do, and the feed costs one indexed range scan.
 
 ## Examples
 

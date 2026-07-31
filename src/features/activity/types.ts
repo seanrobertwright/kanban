@@ -830,6 +830,23 @@ export type NotificationEntry = ActivityEntry & {
   mentionedMe: boolean;
 };
 
+/**
+ * One page of a board's change feed (§4.4 item 8).
+ *
+ * `cursor` is the *only* value a caller has to keep: pass it back as `since` and
+ * the next call answers with what has happened since, or with nothing. It is a
+ * string because activity ids are BIGSERIAL — see `lib/events.ts`.
+ *
+ * `hasMore` says the page filled, so the caller should come straight back
+ * instead of waiting: a poller that sleeps its interval after a full page falls
+ * further behind on every cycle of a busy board.
+ */
+export interface BoardEventPage {
+  events: ActivityEntry[];
+  cursor: string;
+  hasMore: boolean;
+}
+
 export interface WorkspaceNotifications {
   items: NotificationEntry[];
   /** Entries newer than the reader's last-seen marker, by someone other than them. */

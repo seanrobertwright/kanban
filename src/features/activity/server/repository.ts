@@ -6,6 +6,7 @@ import { queueDelivery } from "@/features/webhooks/server/dispatch";
 import { queueAutomations } from "@/features/automations/server/runner";
 import { noteActivity } from "./activity-capture";
 import {
+  requireBoardRole,
   requireTaskRole,
   requireWorkspaceRole,
 } from "@/features/workspaces/server/authz";
@@ -14,6 +15,7 @@ import type {
   ActivityAction,
   ActivityEntry,
   Actor,
+  BoardEventPage,
   ChatAction,
   ChatMessageSnapshot,
   ColumnAction,
@@ -232,6 +234,82 @@ export async function listActivityForTask(
       ORDER BY al.id DESC`,
     [taskId]
   );
+}
+
+/**
+ * A board's change feed: everything logged after `since`, oldest first (§4.4
+ * item 8).
+ *
+ * Oldest-first is the one place in this file that reads forward, and it is not a
+ * style choice — a caller that keeps the last id it saw needs the *next* rows in
+ * the order they happened, so the last row of the page is the next cursor and a
+ * partial page is still resumable.
+ *
+ * `since: null` returns the head and no rows. That is the "start from now"
+ * contract in `lib/events.ts`; the MAX here is over the board's own rows, so two
+ * boards in one workspace hand out independent cursors and a quiet board is not
+ * dragged forward by a busy one.
+ *
+ * **What this feed is, precisely.** BIGSERIAL assigns an id at INSERT, not at
+ * COMMIT, so under concurrent writers a row with a lower id can become visible
+ * after one with a higher id — a poller past the higher id will never see it.
+ * The window is a mutation's transaction, which here is milliseconds, and the
+ * consequence is a missed *nudge*, not a lost record: the record is
+ * activity_log, read by task through task_history, which this does not replace.
+ * Anything that must not miss a row (audit export, retention) reads the table
+ * directly rather than through a cursor. Said plainly in the tool description
+ * too, because an agent that believes this is a ledger will build on sand.
+ *
+ * Rows with a null board_id — workspace-level entries such as a label or a
+ * member change — are deliberately absent: the caller asked about a board, and
+ * widening to the workspace would make one agent's poll carry another board's
+ * traffic. A workspace feed, if it is ever wanted, is a different endpoint with
+ * a different authz check.
+ *
+ * `limit + 1` is fetched and the extra row dropped: it distinguishes "the page
+ * is exactly full" from "there is more", without a second COUNT over a range
+ * that is moving under us anyway.
+ */
+export async function listBoardEvents(
+  principal: string | Principal,
+  boardId: number,
+  { since, limit }: { since: string | null; limit: number }
+): Promise<BoardEventPage> {
+  await requireBoardRole(principal, boardId, "viewer");
+
+  if (since === null) {
+    const head = await query<{ cursor: string }>(
+      `SELECT COALESCE(MAX(id), 0)::text AS cursor
+         FROM activity_log WHERE board_id = $1`,
+      [boardId]
+    );
+    return { events: [], cursor: head[0]?.cursor ?? "0", hasMore: false };
+  }
+
+  const rows = await query<ActivityEntry>(
+    `SELECT ${ACTIVITY_COLUMNS},
+            COALESCE(u.name, ag.name) AS "actorName",
+            COALESCE(u.image, ag.image) AS "actorImage"
+       FROM activity_log al
+       LEFT JOIN "user" u
+         ON u.id = al.actor_id AND al.actor_type = 'human'
+       LEFT JOIN agent ag
+         ON ag.id = al.actor_id AND al.actor_type = 'agent'
+      WHERE al.board_id = $1 AND al.id > $2
+      ORDER BY al.id ASC
+      LIMIT $3`,
+    [boardId, since, limit + 1]
+  );
+
+  const hasMore = rows.length > limit;
+  const events = hasMore ? rows.slice(0, limit) : rows;
+  return {
+    events,
+    // An empty page echoes the caller's own cursor rather than resetting it:
+    // "nothing happened" must not read as "start from now" on the next call.
+    cursor: events.length ? String(events[events.length - 1].id) : since,
+    hasMore,
+  };
 }
 
 const NOTIFICATION_LIMIT = 30;

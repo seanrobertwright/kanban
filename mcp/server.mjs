@@ -118,7 +118,15 @@ function classify(status, body) {
  * been applied — the socket died, not the transaction — so retrying it risks a
  * second task, a second comment, a second claim. Reads have no such hazard.
  */
-async function api(method, path, body, { retries = method === "GET" ? 2 : 0 } = {}) {
+async function api(
+  method,
+  path,
+  body,
+  // timeoutMs is overridable for the one caller that is *meant* to hang: the
+  // change feed's long poll finishes when the server says so, and the default
+  // deadline would abort a healthy wait as if the app were down.
+  { retries = method === "GET" ? 2 : 0, timeoutMs = TIMEOUT_MS } = {}
+) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     if (attempt > 0) {
@@ -136,7 +144,7 @@ async function api(method, path, body, { retries = method === "GET" ? 2 : 0 } = 
           ...(body ? { "content-type": "application/json" } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (cause) {
       // A transport failure never reached the server, so even a mutation is
@@ -807,6 +815,52 @@ tool(
   "Mark your notifications as seen, so the next get_notifications shows only what arrived since.",
   {},
   async () => api("POST", `/api/workspaces/${await workspaceId()}/notifications/seen`, {})
+);
+
+// A change feed, held open server-side, instead of the only two things a stdio
+// agent had before: re-read the whole board on a timer, or receive a webhook at
+// an address a stdio process does not have. The first costs a board-sized read
+// per tick — the single most expensive thing an agent can do repeatedly.
+//
+// The timeout is bounded below the request deadline, and the retry is off: a
+// long poll that times out in transit would otherwise be retried and hold the
+// connection for another full window, turning one slow answer into three.
+tool(
+  "wait_for_changes",
+  "Wait for something to change on a board instead of re-reading it on a timer. " +
+    "Call it once with no cursor to get one back with no events; then pass that cursor as `since` and it holds " +
+    "open until something happens, answering with the activity since your cursor and a new cursor. An empty " +
+    "answer means the wait elapsed with nothing new — poll again with the SAME cursor. " +
+    "Treat this as a nudge to go and read (get_task, task_history, list_board), not as the record: under " +
+    "concurrent writes an event can arrive out of cursor order and be missed. The record of what happened to a " +
+    "task is task_history, which cannot skip.",
+  {
+    boardId: z.number().int().optional(),
+    since: z
+      .string()
+      .regex(/^\d+$/, "must be a cursor from a previous wait_for_changes")
+      .optional()
+      .describe("The cursor from your last call. Omit on the first call to start from now."),
+    timeoutSeconds: z
+      .number()
+      .int()
+      .min(0)
+      .max(25)
+      .optional()
+      .describe("How long to hold the request open. Default 20."),
+    limit: z.number().int().min(1).max(200).optional(),
+  },
+  async ({ boardId, since, timeoutSeconds, limit }) => {
+    const wait = timeoutSeconds ?? 20;
+    const params = new URLSearchParams();
+    if (since !== undefined) params.set("since", since);
+    if (limit !== undefined) params.set("limit", String(limit));
+    params.set("wait", String(wait));
+    return api("GET", `/api/board/${await board(boardId)}/events?${params}`, undefined, {
+      retries: 0,
+      timeoutMs: (wait + 10) * 1000,
+    });
+  }
 );
 
 tool(
