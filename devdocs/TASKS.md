@@ -1574,3 +1574,75 @@ log every mutation already writes.
 **Suite: 1189 → 1242 passing** (1 expected fail), 143 files. tsc, build and
 eslint clean. Verified against the running app as well as in tests: a comment
 posted three seconds into a 20-second wait came back in four.
+
+## Code review §4.4 item 3 — a create you can retry (2026-07-31)
+
+Door 2 has never retried a mutation, and its own comment says why: a POST that
+timed out may well have been applied — the socket died, not the transaction — so
+retrying risks a second task, a second comment, a second claim. The cost of that
+correct caution is an agent that, one dropped packet in, cannot tell whether its
+work landed and has no safe move available. Migration **093** makes the question
+answerable.
+
+- [x] **The row goes in before the work.** A response cache written on the way
+      out cannot stop two simultaneous retries — both find nothing, both write.
+      Inserting first with a NULL status makes the primary key itself the mutual
+      exclusion, and the loser gets `IDEMPOTENCY_IN_PROGRESS`, which is a true
+      statement and a safe one to retry. Tested as the actual race — two
+      overlapping calls with the first held mid-flight — rather than by seeding
+      the in-flight row, because a hand-written row proves the branch and not the
+      exclusion.
+- [x] **The principal is part of the primary key**, not a column beside it. Two
+      callers that both generate "1" must not be able to read, replay or block
+      each other, and a shared key space would let a guessed key hand one agent
+      another's response.
+- [x] **A reused key with different content is a 409, chosen over replaying.**
+      Answering with the first response would silently drop the second change —
+      a client with a key-generation bug would lose writes and never learn. The
+      fingerprint (sha256 of method + path + *raw* body, so key ordering the
+      caller controls cannot make two identical requests look different) is
+      checked before the in-flight state: a different body under a live key is a
+      caller bug whether or not the first attempt has finished.
+- [x] **Failures are not remembered; deterministic answers are.** A 5xx or a
+      thrown error releases the key, because remembering a failure turns one bad
+      moment into a permanent one. A 4xx is cached — it is a fact about the
+      request. So is a **202 HELD_FOR_REVIEW**, which is this app's own duplicate
+      shape: a retried held create would otherwise leave a human two identical
+      proposals to review. That case has its own test, on an agent left at the
+      default tier.
+- [x] **Wrapped at the route boundary, not inside four handlers.** Each create
+      keeps its own body parsing and its own 401 — answering 401 in two places
+      would let them disagree — and the diff that makes an endpoint idempotent is
+      one line. Both costs of that placement (reading the body via `clone()`, a
+      second principal resolution) are paid only when the header is present.
+- [x] **Door 2 retries the five creates, and nothing else.** `create()` mints a
+      key once per tool call, outside the retry loop — a key per attempt would
+      label each retry a new request and defeat the mechanism — and `api()` grew
+      a `headers` option to carry it. `IDEMPOTENCY_IN_PROGRESS` is the one 409
+      classified retryable: it means the caller's *own* attempt is still running,
+      so backing off and asking again is exactly right, where giving up would
+      strand the agent one backoff away from its own result.
+- [x] **A key is honoured for 24 hours**, and expiry is enforced in the INSERT's
+      own ON CONFLICT clause, so a long-lived agent recycling keys takes its old
+      row over instead of being wedged by its own history. Sweeping is
+      opportunistic (2% of successful writes, 500 rows a time) because this app
+      is self-hosted with no scheduler; an only-growing table is the worse
+      outcome, and the sweep is bounded so it never turns a create into a long
+      transaction.
+- [x] **10 real-DB cases**, each asserting a COUNT of the rows that actually
+      exist — a duplicate is invisible in a response body. Unkeyed creates still
+      create twice (the behaviour every existing caller has), a repeated key
+      creates once and replays with `Idempotent-Replay: true`, a reused key with
+      new content is refused *and* writes nothing, two agents may share a key,
+      the race answers in-progress and settles as one task, a thrown error
+      releases the key so the retry succeeds, a 4xx replays, a held create
+      replays its changeset id, an expired key is taken over, and a key under 8
+      characters is a 400.
+
+**Suite: 1242 → 1251 passing** (1 expected fail), 144 files. tsc, build and
+eslint clean. One unrelated flake under full-suite load —
+`whiteboards/server/whiteboard-room.test.ts`, the realtime merge case — which
+passes isolated; it is the flake the 2026-07-28 handoff records, now surfacing in
+the websocket test rather than a component one. Verified live as well: the same
+key twice left one comment and answered the second call `201` with
+`Idempotent-Replay: true`, and the same key with a different body answered 409.

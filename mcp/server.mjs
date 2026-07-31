@@ -18,6 +18,7 @@
 //
 // stdout is the MCP transport — never write to it. Diagnostics go to stderr.
 
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -85,9 +86,15 @@ class ApiError extends Error {
  * is deliberately narrow: only a rate limit, a timeout, and a 5xx can come out
  * differently on a second attempt. A 409 claim conflict will not, and an agent
  * that retries one is an agent spinning on another agent's work.
+ *
+ * IDEMPOTENCY_IN_PROGRESS is the one 409 that inverts that rule (093): it means
+ * *this* caller's own earlier attempt is still running, so waiting and asking
+ * again is exactly the right move — the second ask replays the first answer.
+ * Giving up there would strand the agent one backoff away from its own result.
  */
 function classify(status, body) {
   const serverCode = typeof body?.code === "string" ? body.code : null;
+  if (serverCode === "IDEMPOTENCY_IN_PROGRESS") return [serverCode, true];
   const table = {
     400: ["INVALID_REQUEST", false],
     401: ["AUTH_INVALID", false],
@@ -114,9 +121,12 @@ function classify(status, body) {
  * and shows its first 200 characters, which is the difference between "the
  * gateway is down" and a puzzle.
  *
- * Retries are for idempotent reads only. A POST that timed out may well have
- * been applied — the socket died, not the transaction — so retrying it risks a
- * second task, a second comment, a second claim. Reads have no such hazard.
+ * Retries are for reads, and for the creates that label themselves. A bare POST
+ * that timed out may well have been applied — the socket died, not the
+ * transaction — so retrying it risks a second task, a second comment, a second
+ * claim. Reads have no such hazard, and a create carrying an Idempotency-Key
+ * (093) no longer has it either: the server recognises the second attempt and
+ * replays the first answer. Everything else still gets one shot.
  */
 async function api(
   method,
@@ -125,7 +135,7 @@ async function api(
   // timeoutMs is overridable for the one caller that is *meant* to hang: the
   // change feed's long poll finishes when the server says so, and the default
   // deadline would abort a healthy wait as if the app were down.
-  { retries = method === "GET" ? 2 : 0, timeoutMs = TIMEOUT_MS } = {}
+  { retries = method === "GET" ? 2 : 0, timeoutMs = TIMEOUT_MS, headers = {} } = {}
 ) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -142,6 +152,7 @@ async function api(
         headers: {
           "x-agent-key": KEY,
           ...(body ? { "content-type": "application/json" } : {}),
+          ...headers,
         },
         body: body ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(timeoutMs),
@@ -190,6 +201,25 @@ async function api(
   }
   throw lastError;
 }
+
+/**
+ * A create that is safe to retry, because it says which attempt it is (093).
+ *
+ * This is the one exception to the rule above, and it is an exception the server
+ * earned: with an Idempotency-Key the app can tell a retry from a second request
+ * and replays the first answer instead of creating a second task. Without one, a
+ * POST that timed out stays un-retryable — the agent cannot know whether the
+ * work landed, and guessing wrong costs a duplicate a human has to clean up.
+ *
+ * The key is minted once per tool call, outside the retry loop on purpose: a key
+ * generated per attempt would label each retry as a new request and defeat the
+ * entire mechanism.
+ */
+const create = (path, body) =>
+  api("POST", path, body, {
+    retries: 2,
+    headers: { "idempotency-key": randomUUID() },
+  });
 
 /**
  * /api/agent/me — the agent's own identity and the boards its token reaches.
@@ -573,7 +603,7 @@ tool(
   "comment_on_task",
   "Add a comment to a task — the agent's channel for reporting what it did or asking a question. Posts under the agent's name.",
   { id: z.number().int(), body: z.string().min(1) },
-  ({ id, body }) => api("POST", `/api/tasks/${id}/comments`, { body })
+  ({ id, body }) => create(`/api/tasks/${id}/comments`, { body })
 );
 
 tool(
@@ -589,7 +619,7 @@ tool(
     assignee,
     labelIds: z.array(z.number().int()).optional(),
   },
-  ({ parentId, ...rest }) => api("POST", "/api/tasks", { parentId, ...rest })
+  ({ parentId, ...rest }) => create("/api/tasks", { parentId, ...rest })
 );
 
 tool(
@@ -604,7 +634,7 @@ tool(
     lagDays: z.number().int().min(-365).max(365).optional(),
   },
   ({ id, dependsOnId, type, lagDays }) =>
-    api("POST", `/api/tasks/${id}/dependencies`, { dependsOnId, type, lagDays })
+    create(`/api/tasks/${id}/dependencies`, { dependsOnId, type, lagDays })
 );
 
 tool(
@@ -629,7 +659,7 @@ tool(
   "add_checklist_item",
   "Append an item to a task's checklist. Use this to record the steps you intend to take, so a human can watch them close.",
   { id: z.number().int(), content: z.string().min(1) },
-  ({ id, content }) => api("POST", `/api/tasks/${id}/checklist`, { content })
+  ({ id, content }) => create(`/api/tasks/${id}/checklist`, { content })
 );
 
 tool(

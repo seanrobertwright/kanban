@@ -1,3 +1,4 @@
+import { withIdempotency } from "@/shared/db/idempotency";
 import {
   handleCreateChecklistItem,
   handleListChecklist,
@@ -16,5 +17,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleCreateChecklistItem(request, Number(id));
+  return withIdempotency(request, () =>
+    handleCreateChecklistItem(request, Number(id))
+  );
 }

@@ -77,6 +77,30 @@ hold and a lapsed one are told apart without a second question. When
 do not skip it as claimed. A null expiry on a held task is a hold taken before
 leases existed: held until released.
 
+#### Retrying a create safely
+
+Every create — `POST /api/tasks`, `/api/tasks/:id/comments`,
+`/api/tasks/:id/checklist`, `/api/tasks/:id/dependencies` — accepts an optional
+`Idempotency-Key` header (8–255 characters; a UUID is ideal). Send one and the
+server does the work at most once per key: a repeat returns the first response
+verbatim, with `Idempotent-Replay: true`. Without the header nothing changes.
+
+That is what makes a create retryable at all. A POST whose answer you never saw
+may well have been applied — the socket died, not the transaction — so without a
+key the only safe move is to stop and look. Generate the key **once per logical
+attempt**, not per retry; a fresh key per retry is a fresh request.
+
+| Answer | Meaning |
+|---|---|
+| `409 CONFLICT_IDEMPOTENCY_KEY` | That key was already used for a *different* request. Reusing a key for new content is refused rather than silently dropped. |
+| `409 IDEMPOTENCY_IN_PROGRESS` | Your own earlier attempt is still running. Back off and ask again — the next ask replays its answer. |
+| `400 INVALID_IDEMPOTENCY_KEY` | The key is outside 8–255 characters. |
+
+Keys are scoped to the caller, so two agents may pick the same one, and are
+honoured for 24 hours. A 5xx or a crash is never remembered — the retry is the
+whole point. A held-for-review 202 *is* remembered, so a retry cannot leave a
+human two identical proposals to review.
+
 #### The change feed
 
 `GET /api/board/:id/events` answers `{ events, cursor, hasMore }` — the activity

@@ -89,6 +89,19 @@ cursor. It is a nudge to go and read, not the record: ids are assigned before
 commit, so a concurrent write can land out of cursor order and be missed. What
 happened to a *task* is `task_history`, which cannot skip.
 
+## Retries
+
+Reads are retried twice with jittered backoff. Mutations are not — a POST that
+timed out may already have been applied, and retrying it blind risks a second
+task or a second comment.
+
+The exception is the five creates (`create_task`, `create_subtask`,
+`comment_on_task`, `add_checklist_item`, `flag_blocker`), which mint an
+`Idempotency-Key` per tool call and *are* retried: the server recognises the
+repeat and replays the first answer instead of creating anything twice. The key
+is generated once per call, outside the retry loop — a key per attempt would
+label each retry as a new request and defeat the mechanism.
+
 ## Resources and prompts
 
 Two resource templates, for clients that attach context without spending a tool

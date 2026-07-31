@@ -1,3 +1,4 @@
+import { withIdempotency } from "@/shared/db/idempotency";
 import {
   handleCreateComment,
   handleListComments,
@@ -16,5 +17,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleCreateComment(request, id);
+  // A duplicated comment is the most visible double-write there is — it lands in
+  // the thread a human reads. Idempotency-Key (093) makes the retry safe.
+  return withIdempotency(request, () => handleCreateComment(request, id));
 }

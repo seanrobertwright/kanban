@@ -1,3 +1,4 @@
+import { withIdempotency } from "@/shared/db/idempotency";
 import {
   handleAddDependency,
   handleGetDependencies,
@@ -16,5 +17,5 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleAddDependency(request, Number(id));
+  return withIdempotency(request, () => handleAddDependency(request, Number(id)));
 }
