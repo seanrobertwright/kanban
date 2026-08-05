@@ -1,3 +1,4 @@
+import { withDryRun } from "@/shared/db/with-dry-run";
 import { withIdempotency } from "@/shared/db/idempotency";
 import {
   handleAddDependency,
@@ -17,5 +18,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return withIdempotency(request, () => handleAddDependency(request, Number(id)));
+  return withDryRun(request, () =>
+    withIdempotency(request, () => handleAddDependency(request, Number(id)))
+  );
 }

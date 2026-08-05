@@ -18,6 +18,7 @@
 //
 // stdout is the MCP transport — never write to it. Diagnostics go to stderr.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -152,6 +153,11 @@ async function api(
         headers: {
           "x-agent-key": KEY,
           ...(body ? { "content-type": "application/json" } : {}),
+          // Set for the whole of one tool call by `mutating` below, rather than
+          // threaded through every tool's body: the tools are one-liners that
+          // return `api(...)` directly, and adding a parameter to each would put
+          // the flag in eighteen places for one behaviour.
+          ...(dryRunStore.getStore() ? { "dry-run": "true" } : {}),
           ...headers,
         },
         body: body ? JSON.stringify(body) : undefined,
@@ -296,6 +302,50 @@ function tool(name, description, inputSchema, run) {
       };
     }
   });
+}
+
+/**
+ * Register a MUTATING tool: `tool` plus a `dryRun` flag (§4.4 item 9).
+ *
+ * `dryRun: true` asks the server what the call would do and stops there. The
+ * answer names the tier the call would run under — applied now, held for a
+ * human, or blocked — with the task's real current state and that state with
+ * the call's fields applied. Nothing is written, which is enforced by the app
+ * rather than promised by it.
+ *
+ * The flag travels in an AsyncLocalStorage rather than as a parameter to `api`
+ * because every tool below returns its REST call directly; passing it through
+ * would mean touching each of the eighteen and getting one of them wrong.
+ * Per-call storage, not a module flag: two tool calls can be in flight at once,
+ * and a shared boolean would make one caller's dry run the other's.
+ *
+ * The tools that cannot answer it — claim, release, bulk — do not carry the
+ * flag at all, rather than carrying one the server refuses. A schema that
+ * advertises what does not work is worse than a smaller schema.
+ */
+const dryRunStore = new AsyncLocalStorage();
+
+const DRY_RUN_NOTE =
+  " Pass dryRun=true to be told what this would do instead of doing it: the " +
+  "approval tier it would run under (applied now, held for a human's review, " +
+  "or blocked), the target's current state, and that state with your fields " +
+  "applied. Nothing is written. Use it before a call you are unsure of rather " +
+  "than spending a proposal to find out.";
+
+function mutating(name, description, inputSchema, run) {
+  tool(
+    name,
+    description + DRY_RUN_NOTE,
+    {
+      ...inputSchema,
+      dryRun: z
+        .boolean()
+        .optional()
+        .describe("Report what this would do; write nothing."),
+    },
+    ({ dryRun, ...args }) =>
+      dryRun ? dryRunStore.run(true, () => run(args)) : run(args)
+  );
 }
 
 const priority = z.enum(["none", "low", "medium", "high", "urgent"]);
@@ -455,7 +505,7 @@ tool(
 // Changing work
 // ─────────────────────────────────────────────────────────────────────────────
 
-tool(
+mutating(
   "create_task",
   "Create a task in a column (get columnId from list_columns). Only title and columnId are required.",
   {
@@ -473,7 +523,7 @@ tool(
   (input) => api("POST", "/api/tasks", input)
 );
 
-tool(
+mutating(
   "update_task",
   "Edit a task's fields. Only the fields you pass change; omit the rest. Pass null to clear dueDate, startDate, assignee, estimate, milestoneId, value, or risk. type is task|bug|story; estimate is effort in points (0 is valid); milestoneId aims the task at a milestone on its own board (get ids from list_milestones); startDate/dueDate together draw the task's Timeline bar; value/risk are 0–10 and, with estimate, yield the prioritisation score = value / (estimate × (1 + risk/10)).",
   {
@@ -501,7 +551,7 @@ tool(
 // narrow intent. "assign_task" in a run's history says what the agent meant;
 // the same change through update_task is a patch a reader has to diff.
 const field = (name, description, schema, toPatch) =>
-  tool(name, description, { id: z.number().int(), ...schema }, ({ id, ...rest }) =>
+  mutating(name, description, { id: z.number().int(), ...schema }, ({ id, ...rest }) =>
     api("PATCH", `/api/tasks/${id}`, toPatch(rest))
   );
 
@@ -560,7 +610,7 @@ field(
   ({ milestoneId }) => ({ milestoneId })
 );
 
-tool(
+mutating(
   "move_task",
   "Move a task to a column and position — this is how a task's status changes. Get columnId from list_columns; position is 0-based within the destination column.",
   {
@@ -599,14 +649,14 @@ tool(
   ({ id }) => api("DELETE", `/api/tasks/${id}/claim`)
 );
 
-tool(
+mutating(
   "comment_on_task",
   "Add a comment to a task — the agent's channel for reporting what it did or asking a question. Posts under the agent's name.",
   { id: z.number().int(), body: z.string().min(1) },
   ({ id, body }) => create(`/api/tasks/${id}/comments`, { body })
 );
 
-tool(
+mutating(
   "create_subtask",
   "Create a subtask (a piece) under a parent task, for decomposing work. Get columnId from list_columns; a subtask is a whole task with its own status.",
   {
@@ -622,7 +672,7 @@ tool(
   ({ parentId, ...rest }) => create("/api/tasks", { parentId, ...rest })
 );
 
-tool(
+mutating(
   "flag_blocker",
   "Record that a task is blocked by another task on the same board — a blocked-by edge everyone can see. Both ids must be tasks on the same board; a self-reference or a cycle is refused, and re-flagging an existing edge is a harmless no-op. Optionally say what the link means: FS (default) the blocker must finish before this starts, SS they start together, FF they finish together — with lagDays as a signed offset in days (negative overlaps them). Re-flagging an edge with a different type or lag changes it.",
   {
@@ -637,7 +687,7 @@ tool(
     create(`/api/tasks/${id}/dependencies`, { dependsOnId, type, lagDays })
 );
 
-tool(
+mutating(
   "unflag_blocker",
   "Remove a blocked-by edge — the blocker no longer blocks this task. Use it when the dependency turned out not to be real, or after the blocker's work was folded in.",
   { id: z.number().int(), dependsOnId: z.number().int() },
@@ -655,14 +705,14 @@ tool(
   ({ id }) => api("GET", `/api/tasks/${id}/checklist`)
 );
 
-tool(
+mutating(
   "add_checklist_item",
   "Append an item to a task's checklist. Use this to record the steps you intend to take, so a human can watch them close.",
   { id: z.number().int(), content: z.string().min(1) },
   ({ id, content }) => create(`/api/tasks/${id}/checklist`, { content })
 );
 
-tool(
+mutating(
   "check_item",
   "Tick or untick a checklist item, and optionally reword it. The item id comes from get_checklist, not the task id.",
   {
@@ -680,7 +730,7 @@ tool(
   async ({ boardId }) => api("GET", `/api/board/${await board(boardId)}/custom-fields`)
 );
 
-tool(
+mutating(
   "set_custom_fields",
   "Set a task's custom field values. This REPLACES the whole set: read get_task's customFields first and send back everything you want kept, or previously answered fields are cleared.",
   {
@@ -717,7 +767,7 @@ tool(
   async ({ boardId }) => api("GET", `/api/board/${await board(boardId)}/sprints`)
 );
 
-tool(
+mutating(
   "add_task_to_sprint",
   "Put a task into a sprint on its own board, or pass null to take it out. Sprint ids come from list_sprints.",
   { id: z.number().int(), sprintId: z.number().int().nullable() },
@@ -731,14 +781,14 @@ tool(
   async ({ boardId }) => api("GET", `/api/board/${await board(boardId)}/epics`)
 );
 
-tool(
+mutating(
   "assign_to_epic",
   "Put a task under an epic on its own board, or pass null to take it out. Epic ids come from list_epics.",
   { id: z.number().int(), epicId: z.number().int().nullable() },
   ({ id, epicId }) => api("PATCH", `/api/tasks/${id}`, { epicId })
 );
 
-tool(
+mutating(
   "set_epic",
   "Create an epic on a board, or edit one by id: its name, its status (proposed/active/paused/done), and the person who owns it (ownerId, a workspace member — pass null to leave it unowned). Consequential — an epic names a body of work the team is doing — so by default this is held as a proposal for a human to accept (HELD_FOR_REVIEW), not applied. To file a task under an epic that already exists, use assign_to_epic instead. An epic takes no dates: its window is read from the work inside it.",
   {
@@ -772,14 +822,14 @@ tool(
   async ({ boardId }) => api("GET", `/api/board/${await board(boardId)}/objectives`)
 );
 
-tool(
+mutating(
   "score_key_result",
   "Record a key result's current value — the measurement, not the target. Ids come from list_objectives. This is how you report progress on an objective; you cannot change what a key result measures or what it aims at, and an attempt to send any other field is refused.",
   { id: z.number().int(), currentValue: z.number() },
   ({ id, currentValue }) => api("PATCH", `/api/key-results/${id}`, { currentValue })
 );
 
-tool(
+mutating(
   "set_objective",
   "Create an objective on a board, or edit one by id: name, description, due date. Consequential — an objective states what the team is for — so by default this is held as a proposal for a human to accept (HELD_FOR_REVIEW), not applied. To report progress on an objective that already exists, use score_key_result instead.",
   {

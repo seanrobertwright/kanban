@@ -1,3 +1,4 @@
+import { withDryRun } from "@/shared/db/with-dry-run";
 import { withIdempotency } from "@/shared/db/idempotency";
 import {
   handleCreateChecklistItem,
@@ -17,7 +18,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return withIdempotency(request, () =>
-    handleCreateChecklistItem(request, Number(id))
+  return withDryRun(request, () =>
+    withIdempotency(request, () =>
+      handleCreateChecklistItem(request, Number(id))
+    )
   );
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query, queryOne } from "@/shared/db/client";
+import { dryRunActive, planDryRun, projectAfter } from "@/shared/db/dry-run";
 import type { Principal } from "@/features/auth/server/principal";
 import { getTask } from "@/features/tasks/server/repository";
 import { captureActivity } from "@/features/activity/server/activity-capture";
@@ -73,6 +74,13 @@ export const DEFAULT_TIER: Record<string, Tier> = {
   // Recording a measurement against a key result a human already defined: the
   // same shape as score_task, and the reason an agent is pointed at OKRs at all.
   score_key_result: "auto",
+  // Door 2's coarse field edit, where Door 1 has the nine narrow tools above.
+  // Auto because that is what it already does: the PATCH handler applies field
+  // edits immediately and gates only the move and the reassignment, which are
+  // named separately below. Stating it here rather than letting tierFor fall
+  // through to 'changeset' is what lets a dry run report the tier the call
+  // would actually run under instead of one nothing enforces.
+  update_task: "auto",
   assign_task: "changeset",
   move_task: "changeset",
   create_task: "changeset",
@@ -273,6 +281,60 @@ export async function holdForExternalReview(
 }
 
 /**
+ * Record what one action WOULD do, without doing it (§4.4 item 9).
+ *
+ * Everything here is a read, and every read is the one the real call would have
+ * made: `externalAgentTier` resolves the agent's own policy, `authorize` is the
+ * check the mutation would have failed, and `before` is `getTask` as this agent
+ * — so a task the agent cannot see reports null here exactly as it would 404
+ * there. That is the point of planning at this seam rather than in a simulator:
+ * a simulator would have its own idea of the answer, and the two would drift.
+ *
+ * `authorize` runs on every tier, not just the changeset one. The real call only
+ * needs it before minting a proposal (the auto path's authz lives inside the
+ * repository, which a dry run does not reach), but a dry run that answers
+ * "would_apply" for a column the agent cannot write to is exactly the confident
+ * wrong answer this feature exists to avoid. Its refusal propagates as the
+ * handler's own 403/404.
+ */
+export async function planExternalAction(
+  principal: Extract<Principal, { kind: "agent" }>,
+  spec: {
+    tool: string;
+    input: unknown;
+    taskId: number | null;
+    authorize?: () => Promise<void>;
+  }
+): Promise<void> {
+  const tier = await externalAgentTier(principal, spec.tool);
+  if (spec.authorize) await spec.authorize();
+  const before =
+    spec.taskId === null
+      ? null
+      : (await getTask(principal, spec.taskId)) ?? null;
+  const { after, changed, unprojected } = projectAfter(before, spec.input);
+  planDryRun({
+    tool: spec.tool,
+    tier,
+    outcome:
+      tier === "auto"
+        ? "would_apply"
+        : tier === "changeset"
+          ? "would_hold"
+          : "would_block",
+    taskId: spec.taskId,
+    before,
+    // A create projects onto nothing, so its `after` is the request itself and
+    // is worth showing; an edit that names no field of the target has nothing
+    // to show beyond `unprojected`, and echoing an unchanged `before` as the
+    // `after` would read as a diff that was computed and came out empty.
+    after: before === null || changed.length > 0 ? after : null,
+    changed,
+    unprojected,
+  });
+}
+
+/**
  * What a Door-2 mutation resolved to. Deliberately not a Response: the gate is a
  * repository-layer seam and knows nothing about HTTP — door2.ts turns the two
  * refusals into their 202/403 answers, and the handler shapes its own success.
@@ -280,7 +342,10 @@ export async function holdForExternalReview(
 export type ExternalOutcome<T> =
   | { kind: "done"; result: T }
   | { kind: "blocked"; tool: string }
-  | { kind: "held"; runId: string; changesetId: string };
+  | { kind: "held"; runId: string; changesetId: string }
+  /** Planned, not performed: the caller sent `Dry-Run: true`. The plan is in the
+   *  request's dry-run context, which the route wrapper turns into the body. */
+  | { kind: "planned" };
 
 /**
  * One Door-2 mutation, through the same three tiers a native run uses. This is
@@ -312,6 +377,14 @@ export async function externalAgentAction<T>(
     execute: () => Promise<T>;
   }
 ): Promise<ExternalOutcome<T>> {
+  // Before the tier is acted on, not after: a dry run answers for every tier,
+  // including the blocked one. An agent that can see what a blocked call would
+  // have done learns its own limits by asking rather than by being refused.
+  if (dryRunActive()) {
+    await planExternalAction(principal, spec);
+    return { kind: "planned" };
+  }
+
   const tier = await externalAgentTier(principal, spec.tool);
   if (tier === "block") return { kind: "blocked", tool: spec.tool };
 

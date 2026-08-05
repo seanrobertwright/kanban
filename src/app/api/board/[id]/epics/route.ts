@@ -1,3 +1,4 @@
+import { withDryRun } from "@/shared/db/with-dry-run";
 import {
   handleCreateEpic,
   handleListEpics,
@@ -16,5 +17,5 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleCreateEpic(request, id);
+  return withDryRun(request, () => handleCreateEpic(request, id));
 }

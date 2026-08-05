@@ -1,3 +1,4 @@
+import { dryRunPending } from "@/shared/db/dry-run";
 import type { Principal } from "@/features/auth/server/principal";
 import { externalAgentAction, type ExternalOutcome } from "./gate";
 
@@ -54,6 +55,11 @@ export function blockedByPolicy(tool: string) {
 export function door2Response(outcome: ExternalOutcome<unknown>): Response | null {
   if (outcome.kind === "blocked") return blockedByPolicy(outcome.tool);
   if (outcome.kind === "held") return heldForReview(outcome);
+  // Planned: the gate recorded what this would have done and executed nothing.
+  // The placeholder is discarded by withDryRun, which builds the real body from
+  // every plan the request recorded — one shape whether a handler plans one
+  // action or two.
+  if (outcome.kind === "planned") return dryRunPending();
   return null;
 }
 

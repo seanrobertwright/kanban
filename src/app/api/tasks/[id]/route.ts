@@ -1,3 +1,4 @@
+import { withDryRun } from "@/shared/db/with-dry-run";
 import {
   handleDeleteTask,
   handleGetTask,
@@ -17,7 +18,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleUpdateTask(request, Number(id));
+  return withDryRun(request, () => handleUpdateTask(request, Number(id)));
 }
 
 export async function DELETE(
@@ -25,5 +26,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleDeleteTask(request, Number(id));
+  // Wrapped although no agent tool deletes: an unwrapped mutating route would
+  // ignore the header and delete for real, which is the one answer a caller
+  // asking "what would this do?" must never get.
+  return withDryRun(request, () => handleDeleteTask(request, Number(id)));
 }

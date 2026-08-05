@@ -1,3 +1,4 @@
+import { withDryRun } from "@/shared/db/with-dry-run";
 import {
   handleDeleteEpic,
   handleUpdateEpic,
@@ -8,7 +9,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleUpdateEpic(request, id);
+  return withDryRun(request, () => handleUpdateEpic(request, id));
 }
 
 export async function DELETE(
@@ -16,5 +17,5 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleDeleteEpic(request, id);
+  return withDryRun(request, () => handleDeleteEpic(request, id));
 }

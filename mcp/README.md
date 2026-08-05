@@ -89,6 +89,54 @@ cursor. It is a nudge to go and read, not the record: ids are assigned before
 commit, so a concurrent write can land out of cursor order and be missed. What
 happened to a *task* is `task_history`, which cannot skip.
 
+## Dry run
+
+Every mutating tool takes `dryRun: true`, which asks what the call would do and
+stops there. The answer names the approval tier the call would run under —
+`would_apply` (auto tier, applied on the spot), `would_hold` (changeset tier,
+parked for a human to accept), or `would_block` — with the target's real current
+state and that state with your fields applied:
+
+```json
+{
+  "dryRun": true,
+  "actions": [
+    {
+      "tool": "move_task", "tier": "changeset", "outcome": "would_hold",
+      "taskId": 42,
+      "before": { "columnId": 3, "position": 1, "…": "…" },
+      "after":  { "columnId": 5, "position": 0, "…": "…" },
+      "changed": ["columnId", "position"], "unprojected": []
+    }
+  ]
+}
+```
+
+One call can plan more than one action: an `update_task` that moves the card and
+reassigns it reports `move_task`, `update_task` and `assign_task` separately,
+because that is how the server would split them.
+
+Three things it is not:
+
+- **It is not a simulation.** `after` is `before` with your fields applied — what
+  you asked for, checked against real current state. What the server would
+  compute (the position a move settles at, a cascade) is not in it, because
+  working that out means running the mutation.
+- **`unprojected` is not noise.** It lists input fields that name no field of the
+  target. For `comment_on_task` that is `body`, and it is how you tell "this
+  changes nothing" from "this tool's effect is a new row, which a field diff
+  cannot show".
+- **It is not universal.** `claim_task`, `release_task` and `bulk_update_tasks`
+  carry no `dryRun` flag and answer `DRY_RUN_UNSUPPORTED` (501) if asked over
+  HTTP. A claim's outcome depends on a lease read under a row lock at the instant
+  of the write; a bulk edit is a loop with partial success. Neither has a single
+  before/after that would still be true when you acted on it.
+
+An authz refusal is still a refusal: a dry run of a create into a column you
+cannot write to answers 403/404, not `would_apply`. Nothing is written on any
+path — that is enforced by the app's connection pool refusing writes for the
+duration of the request, not by each endpoint remembering to behave.
+
 ## Retries
 
 Reads are retried twice with jittered backoff. Mutations are not — a POST that

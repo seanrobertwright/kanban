@@ -1,3 +1,4 @@
+import { withDryRun } from "@/shared/db/with-dry-run";
 import { handleRemoveDependency } from "@/features/dependencies/server/handlers";
 
 export async function DELETE(
@@ -5,5 +6,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; depId: string }> }
 ) {
   const { id, depId } = await params;
-  return handleRemoveDependency(request, Number(id), Number(depId));
+  return withDryRun(request, () =>
+    handleRemoveDependency(request, Number(id), Number(depId))
+  );
 }

@@ -1646,3 +1646,103 @@ passes isolated; it is the flake the 2026-07-28 handoff records, now surfacing i
 the websocket test rather than a component one. Verified live as well: the same
 key twice left one comment and answered the second call `201` with
 `Idempotent-Replay: true`, and the same key with a different body answered 409.
+
+## Code review §4.4 item 9 — a mutation you can ask about first (2026-08-05)
+
+The gate sorts an agent's every mutation into three outcomes — applied now, held
+for a human, refused — and until now the only way to learn which was to send it.
+Two of the three leave something behind: a changed board, or a proposal in
+someone's review queue. An agent weighing three phrasings of a move spent three
+real proposals finding out. `Dry-Run: true` answers the same question having
+done none of it.
+
+- [x] **The guarantee is enforced at the pool, not by discipline.** Recording a
+      plan instead of mutating is something each seam must remember, and a seam
+      that forgets writes for real while answering "nothing was written" — the
+      worst failure this feature could have. So `query` refuses a non-read and
+      `withTransaction` refuses outright while a dry run is open. An endpoint
+      that reaches a write without planning it throws, and the caller gets a 501
+      saying this endpoint has no dry run — true, cheap, and not a mutation.
+      `isReadOnlySql` strips literals and quoted identifiers before it reads
+      keywords, because this schema logs actions as the strings `'task.update'`
+      and `'comment.delete'`: a keyword scan over raw SQL would call half the
+      SELECTs in the app writes. `FOR UPDATE` is stripped for the mirror reason.
+      Unrecognised statements are treated as writes, so a gap costs a refused
+      dry run and never an applied one.
+- [x] **`dry-run.ts` imports nothing, and that is load-bearing.** `client.ts`
+      calls the guard on every statement, so anything the module imports is
+      imported by the pool — and the route wrapper needs the auth layer, which
+      needs the pool. That cycle typechecks, builds, and then fails at runtime as
+      a TDZ error on `pool` inside an unrelated page render. Found exactly that
+      way; the wrapper now lives in `with-dry-run.ts` and the guard stays a leaf.
+- [x] **A projection, not a simulation.** `after` is `before` with the request's
+      fields applied — what the caller asked for, checked against real current
+      state read as that agent. What the server would compute (the position a
+      move settles at, a cascade) is absent, because working it out means running
+      the mutation. Execute-and-roll-back was considered and refused: every
+      repository takes the pool directly, so a true `after` would mean threading
+      a `PoolClient` through the whole data layer — weeks of risk to every
+      mutation path, for a read-only feature.
+- [x] **`unprojected` is what keeps the answer honest.** A comment changes no
+      field of its task, and `changed: []` alone would read as "this does
+      nothing". Listing the input keys the projection could not place is how a
+      reader tells that from "this tool's effect is a new row". An explicit
+      `undefined` is not one of them — the handlers build patches carrying
+      `priority: undefined` for two-valued fields a PATCH never mentioned, and
+      merging those reported a title-only edit as changing four fields to
+      nothing. Found by the real-DB suite, not by reasoning about it.
+- [x] **A dry run answers for the blocked tier too.** The real call refuses and
+      teaches nothing; this reports `would_block` with the diff, so an agent
+      learns its own limits by asking. Authz is *not* relaxed to match: the
+      create's column check runs on every tier here, where the real call needs it
+      only before minting a proposal, because "would_apply" for a column the
+      agent cannot write to is precisely the confident wrong answer this exists
+      to prevent.
+- [x] **A refusal outranks a plan, and one request may plan several actions.**
+      A PATCH can move a card legally and then reject an empty title; answering
+      with the plan would describe a call that would never have run. The body is
+      built by the wrapper from a sink, not by each seam, so a PATCH that moves,
+      edits and reassigns reports three actions in the shape a one-action call
+      reports one.
+- [x] **Three mutations say plainly that they cannot be planned.** A claim's
+      answer turns on a lease read under a row lock at the instant of the write;
+      a release is the same question from the other side; a bulk edit is a loop
+      with partial success and no single before/after. Each answers 501 with its
+      reason rather than guessing, and their routes are wrapped *so that* the
+      refusal is what a dry run gets — an unwrapped mutating route would ignore
+      the header and apply, which is the one answer this must never give.
+- [x] **`update_task` joins `DEFAULT_TIER` as auto.** It was absent, so `tierFor`
+      fell through to `changeset` — while the PATCH handler applies field edits
+      immediately and gates only the move and the reassignment. Nothing read that
+      tier, so the disagreement was invisible; a feature whose job is to report
+      the tier is what surfaces one nobody consults.
+- [x] **Door 2 grows the flag on 24 tools and withholds it from three.** The flag
+      rides an AsyncLocalStorage into `api`'s headers rather than a parameter on
+      each tool, because the tools are one-liners returning their REST call —
+      per-call storage, not a module flag, since two calls can be in flight and a
+      shared boolean would make one caller's dry run the other's. `withDryRun`
+      wraps *outside* `withIdempotency`, and a dry run spends no key: claiming it
+      would make the real create that follows replay a plan instead of creating.
+- [x] **14 pure + 11 real-DB cases.** The guard (every read and write shape, a
+      data-modifying CTE, write verbs inside literals and quoted identifiers, an
+      escaped quote, locking reads, comments, the unrecognised-is-a-write rule)
+      and the projection (three-valued clears, structural array/object compare,
+      unprojected keys, creates, identity keys, explicit undefined); then, with a
+      real agent key through the real handlers: would_apply changing nothing,
+      would_hold creating nothing, would_block answered rather than refused, a
+      three-action PATCH, no `agent_run`/`agent_action` rows written, a refusal
+      outranking a plan, a create refused for a column the agent cannot write to,
+      the unspent idempotency key, both 501s, `Dry-Run: false` applying for real,
+      a malformed header as a 400, and a human principal refused.
+
+**Suite: 1251 → 1277 passing** (1 expected fail), 146 files — all green on the
+run at handoff. tsc, build and eslint clean bar the pre-existing component
+errors. The first full-suite run showed the load flake the last two sessions
+record, this time as `integrations/server/email.test.ts`'s `beforeAll` timing
+out; it passed isolated and did not recur on the clean run. Verified live against the running app on both doors: a
+PATCH that moved and renamed reported `move_task`/would_hold and
+`update_task`/would_apply and left the task untouched; a dry-run comment reported
+`unprojected: ["body"]` with `after: null`; a dry-run create left no task behind
+the search could find; a claim answered 501; `Dry-Run: maybe` answered 400; and
+`set_priority` with `dryRun: true` through the MCP server itself reported
+`urgent` in `after` while `get_task` still read `low`.

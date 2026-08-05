@@ -1,3 +1,4 @@
+import { withDryRun } from "@/shared/db/with-dry-run";
 import {
   handleDeleteChecklistItem,
   handleUpdateChecklistItem,
@@ -8,7 +9,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleUpdateChecklistItem(request, Number(id));
+  return withDryRun(request, () => handleUpdateChecklistItem(request, Number(id)));
 }
 
 export async function DELETE(
@@ -16,5 +17,5 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleDeleteChecklistItem(request, Number(id));
+  return withDryRun(request, () => handleDeleteChecklistItem(request, Number(id)));
 }

@@ -1,6 +1,8 @@
 import pg from "pg";
 import type { PoolClient, QueryResultRow } from "pg";
 
+import { assertReadOnly, DryRunViolation, dryRunActive } from "./dry-run";
+
 // TIMESTAMPTZ arrives as a JS Date by default. Our types say `createdAt: string`,
 // and a Date would serialize differently through a route handler's Response.json
 // than through the RSC boundary. Parsing to ISO here keeps both paths identical.
@@ -46,6 +48,7 @@ export async function query<T extends QueryResultRow>(
   text: string,
   params: unknown[] = []
 ): Promise<T[]> {
+  assertReadOnly(text);
   const result = await pool.query<T>(text, params);
   return result.rows;
 }
@@ -68,6 +71,13 @@ export async function queryOne<T extends QueryResultRow>(
 export async function withTransaction<T>(
   fn: (client: PoolClient) => Promise<T>
 ): Promise<T> {
+  // Refused whole rather than guarded per statement: `fn` gets a raw PoolClient
+  // and runs its own `client.query` calls, which never reach the guard in
+  // `query` above. Every caller of this opens a transaction in order to write,
+  // so "a transaction inside a dry run" has no legitimate reading — and a
+  // dry-run promise that a checked-out client could quietly break is not a
+  // promise. See dry-run.ts.
+  if (dryRunActive()) throw new DryRunViolation("BEGIN");
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

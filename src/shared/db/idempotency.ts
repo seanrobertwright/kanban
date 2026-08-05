@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
 import { asPrincipal, type Principal } from "@/features/auth/server/principal";
 import { query } from "./client";
+import { dryRunActive } from "./dry-run";
 
 /**
  * Exactly-once creates (code review §4.4 item 3).
@@ -98,6 +99,13 @@ export async function withIdempotency(
 ): Promise<Response> {
   const key = request.headers.get(IDEMPOTENCY_HEADER);
   if (!key) return work();
+
+  // A dry run creates nothing, so there is nothing to make exactly-once — and
+  // claiming the key would spend it on a call that never happened, so the real
+  // create that follows would replay a plan instead of creating. The wrapper
+  // order (withDryRun outside withIdempotency) makes this reachable; this line
+  // is what makes it correct.
+  if (dryRunActive()) return work();
 
   const principal = await getPrincipalFromRequest(request);
   if (!principal) return work();

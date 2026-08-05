@@ -1,3 +1,4 @@
+import { withDryRun } from "@/shared/db/with-dry-run";
 import {
   handleGetTaskFields,
   handleSetTaskFields,
@@ -16,5 +17,5 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleSetTaskFields(request, id);
+  return withDryRun(request, () => handleSetTaskFields(request, id));
 }

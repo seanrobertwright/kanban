@@ -101,6 +101,61 @@ honoured for 24 hours. A 5xx or a crash is never remembered — the retry is the
 whole point. A held-for-review 202 *is* remembered, so a retry cannot leave a
 human two identical proposals to review.
 
+#### Asking what a mutation would do
+
+Send `Dry-Run: true` on a mutating request and the server answers what the call
+would have done, having done none of it. This is the cheap way to find out which
+side of the approval gate a call falls on, before spending a proposal a human has
+to read:
+
+```
+curl -X PATCH http://localhost:3000/api/tasks/42 \
+  -H "x-agent-key: $KANBAN_AGENT_KEY" -H "content-type: application/json" \
+  -H "Dry-Run: true" -d '{"columnId":5,"position":0,"title":"Renamed"}'
+```
+
+```json
+{
+  "dryRun": true,
+  "actions": [
+    { "tool": "move_task", "tier": "changeset", "outcome": "would_hold",
+      "taskId": 42, "before": {…}, "after": {…},
+      "changed": ["columnId", "position"], "unprojected": [] },
+    { "tool": "update_task", "tier": "auto", "outcome": "would_apply",
+      "taskId": 42, "before": {…}, "after": {…},
+      "changed": ["title"], "unprojected": [] }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `outcome` | `would_apply` (auto tier), `would_hold` (recorded as a proposal), `would_block` (policy refuses it). A dry run answers for all three — including the blocked one, which the real call refuses without explaining. |
+| `before` | The target's real current state, read with your own permissions. `null` for a create. |
+| `after` | `before` with your fields applied. **Not a simulation** — what the server would compute (a settled position, a cascade) is not in it. `null` when the tool edits no field of the target. |
+| `changed` | Keys of `after` that differ from `before`. |
+| `unprojected` | Input fields that name no field of the target — a comment's `body`, for instance. How you tell "changes nothing" from "does something a field diff cannot show". |
+
+One request may report several actions, in the order it would apply them.
+
+`Dry-Run: false` is an ordinary request; any other value is `400
+INVALID_DRY_RUN` rather than a guess. Validation and permissions are checked as
+usual, so a malformed body is still a 400 and a column you cannot write to is
+still a 403 — a dry run never answers `would_apply` for a call that would have
+been refused.
+
+**Not everything can be planned.** `POST`/`DELETE /api/tasks/:id/claim` and
+`POST /api/tasks/bulk` answer `501 DRY_RUN_UNSUPPORTED`: a claim turns on a lease
+read under a row lock at the moment of the write, and a bulk edit is a loop of
+independent mutations with partial success. Neither has one before/after that
+would still be true by the time you acted on it, and a confident wrong answer is
+worse than a plain refusal. The same 501 is how an endpoint says it has no dry
+run at all — and it says so *instead of* writing, never after.
+
+Dry runs are for agent principals; a session cookie asking for one gets `403
+DRY_RUN_AGENT_ONLY`. A dry run also spends no `Idempotency-Key`, so the real
+create that follows still creates.
+
 #### The change feed
 
 `GET /api/board/:id/events` answers `{ events, cursor, hasMore }` — the activity
@@ -252,3 +307,6 @@ machine-readable `code`:
 Which actions land in which tier is the gate's call, not the caller's — see
 `src/features/agents/server/gate.ts`. A `202` is a success in HTTP terms and a
 "held" in yours; treating it as "applied" is the mistake to avoid.
+
+You do not have to send the request to find out which of the two you would get:
+`Dry-Run: true` (above) reports the tier without spending a proposal.

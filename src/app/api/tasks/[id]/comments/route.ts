@@ -1,3 +1,4 @@
+import { withDryRun } from "@/shared/db/with-dry-run";
 import { withIdempotency } from "@/shared/db/idempotency";
 import {
   handleCreateComment,
@@ -19,5 +20,7 @@ export async function POST(
   const { id } = await params;
   // A duplicated comment is the most visible double-write there is — it lands in
   // the thread a human reads. Idempotency-Key (093) makes the retry safe.
-  return withIdempotency(request, () => handleCreateComment(request, id));
+  return withDryRun(request, () =>
+    withIdempotency(request, () => handleCreateComment(request, id))
+  );
 }

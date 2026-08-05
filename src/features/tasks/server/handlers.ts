@@ -21,8 +21,14 @@ import type {
 import {
   externalAgentTier,
   holdForExternalReview,
+  planExternalAction,
   type HeldAction,
 } from "@/features/agents/server/gate";
+import {
+  dryRunActive,
+  dryRunPending,
+  dryRunUnsupported,
+} from "@/shared/db/dry-run";
 import {
   blockedByPolicy,
   heldForReview,
@@ -250,29 +256,49 @@ export async function handleCreateTask(request: Request) {
   // CreateTaskInput the review's applyProposed will hand to createTask.
   if (principal.kind === "agent") {
     const tool = parentId != null ? "create_subtask" : "create_task";
+    const input = {
+      columnId,
+      title: title.trim(),
+      ...(description !== undefined ? { description } : {}),
+      ...(assignee !== undefined ? { assignee } : {}),
+      ...(priority !== undefined ? { priority } : {}),
+      ...(type !== undefined ? { type } : {}),
+      ...(estimate !== undefined ? { estimate } : {}),
+      ...(milestoneId !== undefined ? { milestoneId } : {}),
+      ...(sprintId !== undefined ? { sprintId } : {}),
+      ...(epicId !== undefined ? { epicId } : {}),
+      ...(objectiveId !== undefined ? { objectiveId } : {}),
+      ...(value !== undefined ? { value } : {}),
+      ...(risk !== undefined ? { risk } : {}),
+      ...(startDate !== undefined ? { startDate } : {}),
+      ...(dueDate !== undefined ? { dueDate } : {}),
+      ...(labelIds !== undefined ? { labelIds } : {}),
+      ...(parentId !== undefined ? { parentId } : {}),
+      ...(recurrence !== undefined ? { recurrence } : {}),
+    };
+
+    // A dry run reports every tier, so it comes before the block-tier refusal
+    // below. The column check rides along as `authorize`: a create into a column
+    // this agent cannot write to must not answer "would_apply".
+    if (dryRunActive()) {
+      try {
+        await planExternalAction(principal, {
+          tool,
+          input,
+          taskId: null,
+          authorize: async () => {
+            await requireColumnRole(principal, columnId, "member");
+          },
+        });
+        return dryRunPending();
+      } catch (error) {
+        return authzErrorResponse(error);
+      }
+    }
+
     const tier = await externalAgentTier(principal, tool);
     if (tier === "block") return blockedByPolicy(tool);
     if (tier === "changeset") {
-      const input = {
-        columnId,
-        title: title.trim(),
-        ...(description !== undefined ? { description } : {}),
-        ...(assignee !== undefined ? { assignee } : {}),
-        ...(priority !== undefined ? { priority } : {}),
-        ...(type !== undefined ? { type } : {}),
-        ...(estimate !== undefined ? { estimate } : {}),
-        ...(milestoneId !== undefined ? { milestoneId } : {}),
-        ...(sprintId !== undefined ? { sprintId } : {}),
-        ...(epicId !== undefined ? { epicId } : {}),
-        ...(objectiveId !== undefined ? { objectiveId } : {}),
-        ...(value !== undefined ? { value } : {}),
-        ...(risk !== undefined ? { risk } : {}),
-        ...(startDate !== undefined ? { startDate } : {}),
-        ...(dueDate !== undefined ? { dueDate } : {}),
-        ...(labelIds !== undefined ? { labelIds } : {}),
-        ...(parentId !== undefined ? { parentId } : {}),
-        ...(recurrence !== undefined ? { recurrence } : {}),
-      };
       try {
         // The same authz the apply will demand, checked before a changeset is
         // minted — a column the agent cannot write to answers 404/403 now, not
@@ -521,28 +547,52 @@ export async function handleUpdateTask(request: Request, id: number) {
   // PATCH — the move and the reassignment, §7.4's own examples — are held for
   // review while the auto-tier field edits riding in the same request apply
   // now, exactly as one native run's mixed tool calls would split.
+  //
+  // A dry run resolves no tier here at all: it reports one for every part of the
+  // PATCH — including the block-tier parts this branch refuses outright — so the
+  // early returns below would hide two thirds of the answer.
+  const planning = principal.kind === "agent" && dryRunActive();
   let holdMove = false;
   let holdAssign = false;
   if (principal.kind === "agent") {
-    if (wantsMove) {
-      const tier = await externalAgentTier(principal, "move_task");
-      if (tier === "block") return blockedByPolicy("move_task");
-      holdMove = tier === "changeset";
-    }
-    if (setsAssignee) {
-      if (!isAssignee(assignee))
-        return badRequest("assignee must be {type, id} or null");
-      const tier = await externalAgentTier(principal, "assign_task");
-      if (tier === "block") return blockedByPolicy("assign_task");
-      holdAssign = tier === "changeset";
+    if (setsAssignee && !isAssignee(assignee))
+      return badRequest("assignee must be {type, id} or null");
+    if (!planning) {
+      if (wantsMove) {
+        const tier = await externalAgentTier(principal, "move_task");
+        if (tier === "block") return blockedByPolicy("move_task");
+        holdMove = tier === "changeset";
+      }
+      if (setsAssignee) {
+        const tier = await externalAgentTier(principal, "assign_task");
+        if (tier === "block") return blockedByPolicy("assign_task");
+        holdAssign = tier === "changeset";
+      }
     }
   }
-  const appliesAssignee = setsAssignee && !holdAssign;
+  // A planned assignment is reported as its own `assign_task` action, the same
+  // split the held path makes, so it must not also ride in the update patch —
+  // one request would otherwise report the same change twice.
+  const appliesAssignee = setsAssignee && !holdAssign && !planning;
 
   try {
+    // The plans are reported in the order the request would have applied them:
+    // the move, then the field edits, then the assignment. The task is read once
+    // up front so an id this agent cannot see answers 404 here rather than
+    // reporting a plan against a null `before`.
+    if (planning) {
+      if (!(await getTask(principal, id))) return notFound();
+      if (wantsMove)
+        await planExternalAction(principal as AgentPrincipal, {
+          tool: "move_task",
+          input: { columnId, position },
+          taskId: id,
+        });
+    }
+
     // A move request carries columnId + position; a content edit carries
     // title/description. Both may arrive in one PATCH.
-    if (wantsMove && !holdMove) {
+    if (wantsMove && !holdMove && !planning) {
       const moved = await moveTask(principal, id, {
         columnId: columnId as number,
         position: position as number,
@@ -603,7 +653,7 @@ export async function handleUpdateTask(request: Request, id: number) {
           `recurrence must be one of: ${RECURRENCE_FREQUENCIES.join(", ")}, or null`
         );
 
-      const updated = await updateTask(principal, id, {
+      const patch = {
         title: title as string | undefined,
         description: description as string | undefined,
         // Spread, so the key exists only when the caller sent it. Writing
@@ -651,10 +701,30 @@ export async function handleUpdateTask(request: Request, id: number) {
         ...(setsRecurrence
           ? { recurrence: recurrence as RecurrenceFrequency | null }
           : {}),
-      });
-      if (!updated) return notFound();
-      if (!holdMove && !holdAssign) return Response.json(updated);
+      };
+
+      if (planning) {
+        // The projection is over the same patch updateTask would have received,
+        // so what the dry run shows and what the real call would write are the
+        // same object — not two descriptions of it that can drift apart.
+        await planExternalAction(principal as AgentPrincipal, {
+          tool: "update_task",
+          input: patch,
+          taskId: id,
+        });
+      } else {
+        const updated = await updateTask(principal, id, patch);
+        if (!updated) return notFound();
+        if (!holdMove && !holdAssign) return Response.json(updated);
+      }
     }
+
+    if (planning && setsAssignee)
+      await planExternalAction(principal as AgentPrincipal, {
+        tool: "assign_task",
+        input: { assignee: assignee ?? null },
+        taskId: id,
+      });
 
     if (holdMove || holdAssign) {
       // Read back first: it proves the task exists and is visible to this
@@ -747,6 +817,16 @@ export async function handleBulkTasks(request: Request) {
   if (wantsDelete && (columnId !== undefined || setsAssignee || priority !== undefined || setsDueDate))
     return badRequest("delete cannot be combined with edits");
 
+  // A bulk edit is a loop over independent per-task mutations with partial
+  // success, not one action with one before/after — there is no single plan to
+  // report. The per-task endpoints each dry-run, which is where a caller that
+  // wants to know should ask.
+  if (dryRunActive())
+    return dryRunUnsupported(
+      "bulk_update_tasks",
+      "a bulk edit is a loop of independent per-task mutations with partial success; dry-run the per-task endpoints instead"
+    );
+
   const failed: { id: number; error: string }[] = [];
   let updated = 0;
   for (const id of ids as number[]) {
@@ -807,6 +887,17 @@ export async function handleClaimTask(request: Request, id: number) {
     }
   }
 
+  // Not simulated, and said plainly rather than guessed at: whether this claim
+  // succeeds depends on whether the current lease is live at the instant of the
+  // write, which the repository decides under a row lock on the database clock.
+  // Reading it without taking it would answer from a snapshot that is already
+  // stale by the time the agent acts on it.
+  if (dryRunActive())
+    return dryRunUnsupported(
+      "claim_task",
+      "a claim's outcome depends on a lease read under a row lock at the moment of the write"
+    );
+
   try {
     const task = await claimTask(principal, id, ttlMinutes as number | undefined);
     return task ? Response.json(task) : notFound();
@@ -826,6 +917,14 @@ export async function handleReleaseTask(request: Request, id: number) {
   const principal = await getPrincipalFromRequest(request);
   if (!principal) return unauthorized();
   if (!Number.isInteger(id)) return badRequest("Invalid task id");
+
+  // claim_task's reason exactly, from the other side: who holds the lease now
+  // decides whether this is a release or a 403, and that is a row-lock question.
+  if (dryRunActive())
+    return dryRunUnsupported(
+      "release_task",
+      "whether a release is yours to make depends on the lease as it stands at the moment of the write"
+    );
 
   try {
     const task = await releaseTask(principal, id);

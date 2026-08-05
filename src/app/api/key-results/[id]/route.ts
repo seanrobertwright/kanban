@@ -1,3 +1,4 @@
+import { withDryRun } from "@/shared/db/with-dry-run";
 import {
   handleDeleteKeyResult,
   handleUpdateKeyResult,
@@ -8,7 +9,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleUpdateKeyResult(request, id);
+  return withDryRun(request, () => handleUpdateKeyResult(request, id));
 }
 
 export async function DELETE(
@@ -16,5 +17,5 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  return handleDeleteKeyResult(request, id);
+  return withDryRun(request, () => handleDeleteKeyResult(request, id));
 }
