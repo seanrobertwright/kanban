@@ -49,10 +49,43 @@ function DropdownMenuContent({
   )
 }
 
+/**
+ * Whether a `DropdownMenuGroup` is above us. Read by `DropdownMenuLabel`, which
+ * supplies its own group when there is none — see below for why that is worth a
+ * context rather than a comment telling authors to remember.
+ */
+const InDropdownMenuGroup = React.createContext(false)
+
 function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
-  return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
+  return (
+    <InDropdownMenuGroup.Provider value={true}>
+      <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
+    </InDropdownMenuGroup.Provider>
+  )
 }
 
+/**
+ * A section heading inside a menu — and one that cannot crash the page.
+ *
+ * Base UI's `Menu.GroupLabel` throws "MenuGroupContext is missing" when it has
+ * no `Menu.Group` ancestor. That throw happens during render, so React unmounts
+ * the tree: a menu built one element short did not degrade, it took the whole
+ * screen to an error page. Neither `tsc` nor `next build` can see a context
+ * requirement, and a menu nobody opens in a test never proves itself, so the
+ * mistake reached production twice — the board's tools menu and the requests
+ * lens (fixed in d4dc034), both after board-switcher.tsx had already hit it and
+ * left a regression test explaining exactly this.
+ *
+ * Documenting the rule plainly did not work. So the rule is enforced here: a
+ * label with no group supplies one. `SelectGroup` in select.tsx has always been
+ * built this way — its label is rendered by the group, so the broken arrangement
+ * cannot be written at a call site — and this brings the menu into line.
+ *
+ * Wrapping explicitly is still better and is left as it is wherever it is
+ * already done: a group that holds its label *and* the items underneath is what
+ * `aria-labelledby` is for, whereas a self-supplied group labels only itself.
+ * The fallback buys correctness of the page, not of the semantics.
+ */
 function DropdownMenuLabel({
   className,
   inset,
@@ -60,7 +93,9 @@ function DropdownMenuLabel({
 }: MenuPrimitive.GroupLabel.Props & {
   inset?: boolean
 }) {
-  return (
+  const grouped = React.useContext(InDropdownMenuGroup)
+
+  const label = (
     <MenuPrimitive.GroupLabel
       data-slot="dropdown-menu-label"
       data-inset={inset}
@@ -70,6 +105,13 @@ function DropdownMenuLabel({
       )}
       {...props}
     />
+  )
+
+  if (grouped) return label
+  return (
+    <MenuPrimitive.Group data-slot="dropdown-menu-label-group">
+      {label}
+    </MenuPrimitive.Group>
   )
 }
 
