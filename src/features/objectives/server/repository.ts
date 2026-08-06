@@ -2,8 +2,16 @@ import type { PoolClient } from "pg";
 
 import { query, queryOne, withTransaction } from "@/shared/db/client";
 import { logActivity } from "@/features/activity/server/repository";
-import type { Actor, ObjectiveSnapshot } from "@/features/activity/types";
-import type { Principal } from "@/features/auth/server/principal";
+import type {
+  Actor,
+  KeyResultSnapshot,
+  ObjectiveSnapshot,
+} from "@/features/activity/types";
+import {
+  asPrincipal,
+  principalActor,
+  type Principal,
+} from "@/features/auth/server/principal";
 import {
   AuthzError,
   requireBoardRole,
@@ -26,9 +34,11 @@ import {
  * work with them, and a key result CASCADEs (it has no life apart from its
  * objective), so there is no blast radius for admin to gate.
  *
- * Objective lifecycle is logged (created/updated/deleted); key-result edits are
- * not — a KR's current value is nudged often and read live, so the feed tracks
- * the objective, not every measurement. See ObjectiveAction (037).
+ * Both lifecycles are logged, created/updated/deleted each. 037 logged the
+ * objective only, on the grounds that a KR is nudged too often to be worth a
+ * row; `score_key_result` becoming an agent tool retired that argument, since an
+ * unlogged measurement is an unattributable one. The noise it worried about is
+ * handled by writing no row when nothing changed. See KeyResultAction.
  */
 
 const OBJECTIVE_COLUMNS = `o.id, o.board_id AS "boardId", o.name,
@@ -265,11 +275,13 @@ export async function deleteObjective(
 }
 
 /** Resolves a key result's objective and the caller's standing on its board.
- *  Member — editing a measure is editing the objective's data. */
+ *  Member — editing a measure is editing the objective's data. The board and
+ *  workspace come back too: every mutation below logs, and an activity row is
+ *  located by both. */
 async function requireKeyResult(
   actor: string | Principal,
   keyResultId: number
-): Promise<{ objectiveId: number }> {
+): Promise<{ objectiveId: number; boardId: number; workspaceId: string }> {
   const row = await queryOne<{ objectiveId: number; boardId: number }>(
     `SELECT kr.objective_id AS "objectiveId", o.board_id AS "boardId"
        FROM key_result kr JOIN objective o ON o.id = kr.objective_id
@@ -277,9 +289,41 @@ async function requireKeyResult(
     [keyResultId]
   );
   if (!row) throw new AuthzError("not_found", "Key result not found");
-  await requireBoardRole(actor, row.boardId, "member");
-  return { objectiveId: row.objectiveId };
+  const { workspaceId } = await requireBoardRole(actor, row.boardId, "member");
+  return { objectiveId: row.objectiveId, boardId: row.boardId, workspaceId };
 }
+
+/** The KR row as the log records it — see KeyResultSnapshot for why the numbers
+ *  travel rather than being read live at render time. */
+function krSnapshot(kr: KeyResultRow): KeyResultSnapshot {
+  return {
+    keyResultId: kr.id,
+    objectiveId: kr.objectiveId,
+    title: kr.title,
+    currentValue: kr.currentValue,
+    targetValue: kr.targetValue,
+    unit: kr.unit,
+  };
+}
+
+async function selectKeyResult(
+  client: PoolClient,
+  id: number
+): Promise<KeyResultRow | undefined> {
+  const { rows } = await client.query<KeyResultRow>(
+    `SELECT ${KEY_RESULT_COLUMNS} FROM key_result WHERE id = $1`,
+    [id]
+  );
+  return rows[0];
+}
+
+/** The actor for a KR's log rows. Derived from the caller rather than taken as a
+ *  parameter the way the objective functions take `by`: these are reached by
+ *  both doors, and `principalActor` already turns either principal into the
+ *  same Actor — a second argument would only be a chance for the two to
+ *  disagree about who acted. */
+const krActor = (actor: string | Principal): Actor =>
+  principalActor(asPrincipal(actor));
 
 /**
  * Adds a key result and returns its objective, refreshed — the dialog re-renders
@@ -291,19 +335,30 @@ export async function createKeyResult(
   objectiveId: number,
   input: CreateKeyResultInput
 ): Promise<Objective> {
-  await requireObjective(actor, objectiveId);
+  const { boardId, workspaceId } = await requireObjective(actor, objectiveId);
   const start = input.startValue ?? 0;
   const current = input.currentValue ?? start;
 
   return withTransaction(async (client) => {
-    await client.query(
+    const { rows } = await client.query<{ id: number }>(
       `INSERT INTO key_result
          (objective_id, title, start_value, target_value, current_value, unit, position)
        VALUES ($1, $2, $3, $4, $5, $6,
                (SELECT COALESCE(MAX(position) + 1, 0)
-                  FROM key_result WHERE objective_id = $1))`,
+                  FROM key_result WHERE objective_id = $1))
+       RETURNING id`,
       [objectiveId, input.title.trim(), start, input.targetValue, current, input.unit?.trim() ?? ""]
     );
+    const created = (await selectKeyResult(client, rows[0].id))!;
+
+    await logActivity(client, {
+      workspaceId,
+      boardId,
+      taskId: null,
+      actor: krActor(actor),
+      action: "keyResult.created",
+      after: krSnapshot(created),
+    });
     return (await selectObjective(client, objectiveId))!;
   });
 }
@@ -313,9 +368,10 @@ export async function updateKeyResult(
   id: number,
   input: UpdateKeyResultInput
 ): Promise<Objective> {
-  const { objectiveId } = await requireKeyResult(actor, id);
+  const { objectiveId, boardId, workspaceId } = await requireKeyResult(actor, id);
 
   return withTransaction(async (client) => {
+    const before = await selectKeyResult(client, id);
     await client.query(
       `UPDATE key_result
           SET title = COALESCE($2, title),
@@ -335,15 +391,64 @@ export async function updateKeyResult(
         input.position ?? null,
       ]
     );
+    const after = await selectKeyResult(client, id);
+
+    // No row when nothing moved. This is the whole answer to 037's noise worry,
+    // and it matters most on the path that caused it: an agent re-scoring a KR
+    // to the value it already holds is a no-op, and a feed that reported it
+    // would fill with "moved NPS 45 → 45". `position` is excluded from the
+    // comparison on purpose — reordering the list is not a measurement, and the
+    // snapshot does not carry it.
+    if (before && after && changedKeyResult(before, after)) {
+      await logActivity(client, {
+        workspaceId,
+        boardId,
+        taskId: null,
+        actor: krActor(actor),
+        action: "keyResult.updated",
+        before: krSnapshot(before),
+        after: krSnapshot(after),
+      });
+    }
     return (await selectObjective(client, objectiveId))!;
   });
 }
 
+/** Whether an edit changed anything the log records. */
+function changedKeyResult(before: KeyResultRow, after: KeyResultRow): boolean {
+  return (
+    before.title !== after.title ||
+    before.currentValue !== after.currentValue ||
+    before.targetValue !== after.targetValue ||
+    before.startValue !== after.startValue ||
+    before.unit !== after.unit
+  );
+}
+
 export async function deleteKeyResult(
-  userId: string,
+  actor: string | Principal,
   id: number
 ): Promise<Objective> {
-  const { objectiveId } = await requireKeyResult(userId, id);
-  await query(`DELETE FROM key_result WHERE id = $1`, [id]);
-  return (await withTransaction((client) => selectObjective(client, objectiveId)))!;
+  const { objectiveId, boardId, workspaceId } = await requireKeyResult(actor, id);
+
+  // A transaction now, where the delete used to be a bare query: the row has to
+  // be read before it is gone, and the reading, the delete and the log entry
+  // have to stand or fall together — a logged deletion that rolled back would
+  // be a record of something that did not happen.
+  return withTransaction(async (client) => {
+    const before = await selectKeyResult(client, id);
+    await client.query(`DELETE FROM key_result WHERE id = $1`, [id]);
+
+    if (before) {
+      await logActivity(client, {
+        workspaceId,
+        boardId,
+        taskId: null,
+        actor: krActor(actor),
+        action: "keyResult.deleted",
+        before: krSnapshot(before),
+      });
+    }
+    return (await selectObjective(client, objectiveId))!;
+  });
 }

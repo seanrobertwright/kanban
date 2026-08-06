@@ -38,13 +38,29 @@ export interface BoardViewProps {
   agentsById: Record<string, AgentSummary>;
   labelsById: Record<number, LabelData>;
   /**
-   * Custom-field definitions by id (035 → 036 follow-up), for the list's per-field
-   * columns and — where a view renders cards — their value chips. Optional: only
-   * the list and the board columns read it; the calendar, timeline and gantt
-   * ignore it, so their call sites need not thread it.
+   * Custom-field definitions by id (035 → 036 follow-up), for the list's
+   * per-field columns, the value chips where a view renders cards, and the
+   * schedule lenses' bar annotations. Optional only because the calendar has no
+   * use for it — every other lens reads it now.
    */
   customFieldsById?: Record<number, CustomField>;
   onEditTask: (task: Task) => void;
+}
+
+/**
+ * The Timeline and the Gantt, which differ in how they draw a bar and agree on
+ * everything else.
+ *
+ * The custom-field annotation is owned by the board rather than by each lens,
+ * for a reason that is not only testability: the Timeline and the Gantt are two
+ * views of one schedule, and someone who annotates by Client and then switches
+ * to see the dependency arrows has not changed their mind about what they are
+ * looking for. Lens-local state would silently drop the choice on every switch.
+ */
+export interface ScheduleViewProps extends BoardViewProps {
+  /** The custom field whose answer each bar shows, or null for none. */
+  annotateWith?: number | null;
+  onAnnotateWith?: (fieldId: number | null) => void;
 }
 
 interface ListViewProps extends BoardViewProps {

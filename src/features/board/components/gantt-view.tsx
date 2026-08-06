@@ -18,13 +18,15 @@ import {
   shortLabel,
   spanOf,
 } from "../lib/schedule";
-import type { BoardViewProps } from "./list-view";
+import { annotatableFields, fieldAnnotation } from "../lib/field-annotation";
+import { FieldAnnotationPicker } from "./field-annotation-picker";
+import type { ScheduleViewProps } from "./list-view";
 
 /** One row's fixed height in px — the arrows read row centres off it, so it is a
  *  constant rather than a gap-driven layout whose centres would need measuring. */
 const ROW_H = 32;
 
-export interface GanttViewProps extends BoardViewProps {
+export interface GanttViewProps extends ScheduleViewProps {
   /** Every blocked-by edge on the board (036) — the arrows and critical path. */
   dependencies: TaskDependencyEdge[];
 }
@@ -60,9 +62,17 @@ export function GanttView({
   columns,
   itemsByColumn,
   dependencies,
+  customFieldsById,
+  annotateWith = null,
+  onAnnotateWith,
   onEditTask,
 }: GanttViewProps) {
   const today = useToday();
+  const fields = useMemo(
+    () => annotatableFields(customFieldsById),
+    [customFieldsById]
+  );
+  const annotationField = fields.find((f) => f.id === annotateWith);
   const trackRef = useRef<HTMLDivElement>(null);
   const [trackWidth, setTrackWidth] = useState(0);
 
@@ -220,6 +230,13 @@ export function GanttView({
             Critical path
           </span>
         )}
+        <span className="ml-auto">
+          <FieldAnnotationPicker
+            fields={fields}
+            value={annotateWith}
+            onChange={onAnnotateWith ?? (() => {})}
+          />
+        </span>
       </div>
 
       <div className="overflow-x-auto">
@@ -315,6 +332,7 @@ export function GanttView({
               const single =
                 p.task.startDate == null || p.task.dueDate == null;
               const isCritical = critical.nodes.has(p.task.id);
+              const annotation = fieldAnnotation(p.task, annotationField);
               return (
                 <div
                   key={p.task.id}
@@ -326,7 +344,7 @@ export function GanttView({
                     onClick={() => onEditTask(p.task)}
                     title={`${p.task.title} · ${p.span[0]}${
                       p.span[0] === p.span[1] ? "" : ` → ${p.span[1]}`
-                    }`}
+                    }${annotation ? ` · ${annotationField!.name}: ${annotation}` : ""}`}
                     className={`absolute top-1/2 flex h-5 -translate-y-1/2 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-xs hover:ring-2 hover:ring-ring/50 ${
                       isCritical ? "ring-1 ring-primary" : ""
                     }`}
@@ -344,6 +362,11 @@ export function GanttView({
                   >
                     <PriorityDot priority={p.task.priority} />
                     <span className="truncate">{p.task.title}</span>
+                    {annotation && (
+                      <span className="shrink truncate text-micro opacity-80">
+                        {annotation}
+                      </span>
+                    )}
                   </button>
                 </div>
               );

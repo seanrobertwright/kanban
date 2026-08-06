@@ -208,14 +208,34 @@ export type EpicAction =
 
 /**
  * Objective lifecycle (037) — board-scoped entries (taskId null, boardId
- * locates), epic's three verbs for epic's reasons. Key-result edits are not
- * logged separately: a KR's current value is read live and nudged often, so the
- * feed tracks the objective's own fields, not every measurement.
+ * locates), epic's three verbs for epic's reasons.
  */
 export type ObjectiveAction =
   | "objective.created"
   | "objective.updated"
   | "objective.deleted";
+
+/**
+ * Key-result lifecycle. 037 deliberately did NOT log these, on the grounds that
+ * a KR's current value is read live and nudged often, so the feed should track
+ * the objective rather than every measurement. Two things since then made that
+ * the wrong trade:
+ *
+ *   - `score_key_result` became an agent tool (roadmap item 2, 2026-07-28), and
+ *     an unlogged measurement is an unattributable one. "The board moved and
+ *     nobody can say who moved it" is the exact failure the activity log exists
+ *     to prevent, and it does not stop being true because the field is numeric.
+ *   - The measurement *is* the progress. An objective whose own fields never
+ *     change still advances every time a KR is scored, so a feed that tracks
+ *     only the objective shows a goal that never moves.
+ *
+ * The original worry — noise — is answered by not writing a row when nothing
+ * changed (see updateKeyResult) rather than by not writing rows at all.
+ */
+export type KeyResultAction =
+  | "keyResult.created"
+  | "keyResult.updated"
+  | "keyResult.deleted";
 
 /**
  * The time ledger (027). Logged and deleted, never edited — a wrong entry is
@@ -309,6 +329,7 @@ export type ActivityAction =
   | ReleaseAction
   | EpicAction
   | ObjectiveAction
+  | KeyResultAction
   | TimeAction
   | SprintAction
   | CustomFieldValueAction
@@ -572,6 +593,25 @@ export interface ObjectiveSnapshot {
 }
 
 /**
+ * What a key result looked like at one instant.
+ *
+ * Richer than ObjectiveSnapshot on purpose: a KR entry's whole point is the
+ * measurement, so the numbers have to be *in* the row rather than read live. A
+ * feed that said "changed a key result" and then fetched the current value would
+ * report today's number against a year-old event, and would say nothing at all
+ * once the KR is deleted. `unit` travels for the same reason — "40 → 45" and
+ * "40% → 45%" are different claims.
+ */
+export interface KeyResultSnapshot {
+  keyResultId: number;
+  objectiveId: number;
+  title: string;
+  currentValue: number;
+  targetValue: number;
+  unit: string;
+}
+
+/**
  * What a time entry said (027). Carries `by` for CommentSnapshot.author's
  * reason: an admin deleting someone's entry makes actor and author two
  * different people, and the row must say whose minutes vanished.
@@ -672,6 +712,7 @@ export type Snapshot =
   | ReleaseSnapshot
   | EpicSnapshot
   | ObjectiveSnapshot
+  | KeyResultSnapshot
   | TimeSnapshot
   | SprintSnapshot
   | CustomFieldValueSnapshot
@@ -748,6 +789,12 @@ export interface ObjectiveActivity extends ActivityBase {
   after: ObjectiveSnapshot | null;
 }
 
+export interface KeyResultActivity extends ActivityBase {
+  action: KeyResultAction;
+  before: KeyResultSnapshot | null;
+  after: KeyResultSnapshot | null;
+}
+
 export interface TimeActivity extends ActivityBase {
   action: TimeAction;
   before: TimeSnapshot | null;
@@ -793,6 +840,7 @@ export type Activity =
   | ReleaseActivity
   | EpicActivity
   | ObjectiveActivity
+  | KeyResultActivity
   | TimeActivity
   | SprintActivity
   | CustomFieldValueActivity

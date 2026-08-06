@@ -28,6 +28,8 @@ import type {
   EpicSnapshot,
   GitAction,
   GitSnapshot,
+  KeyResultAction,
+  KeyResultSnapshot,
   ObjectiveAction,
   ObjectiveSnapshot,
   LabelAction,
@@ -101,6 +103,11 @@ export type ActivityInput =
       action: ObjectiveAction;
       before?: ObjectiveSnapshot | null;
       after?: ObjectiveSnapshot | null;
+    })
+  | (ActivityInputBase & {
+      action: KeyResultAction;
+      before?: KeyResultSnapshot | null;
+      after?: KeyResultSnapshot | null;
     })
   | (ActivityInputBase & {
       action: TimeAction;

@@ -187,8 +187,9 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
 - [x] **Objective agent tools** — done 2026-07-28; see the roadmap-item-2 section
       at the end of this file. `set_objective` (changeset) and `score_key_result`
       (auto) in both doors, after the `AskUserQuestion` PRD §7/§12 requires.
-- [ ] **Key-result activity** — KR nudges are read live, not logged; a
-      `keyResult.*` family would put "moved NPS 40 → 45" in the feed.
+- [x] **Key-result activity** — done 2026-08-05; see the small-ones section at
+      the end of this file. `keyResult.created/updated/deleted`, the numbers in
+      the snapshot, and no row when nothing changed.
 
 ### Portfolio breadth
 - [x] **Portfolio view + rollups** — a workspace-level glance at every board:
@@ -211,8 +212,9 @@ Migrations are numbered in `src/shared/db/migrations/` and applied 001–044.
       time_entry only records a human session. → `9e0ddfd`
 
 ### Custom-fields follow-ups (035 cuts, if the wedge wants them)
-- [ ] **Custom-field values on the Gantt/Timeline** — answers show on cards and
-      list columns now; the schedule lenses do not read them.
+- [x] **Custom-field values on the Gantt/Timeline** — done 2026-08-05; see the
+      small-ones section at the end of this file. One field at a time, chosen by
+      the viewer, annotating each bar.
 
 ## Done — 2026-07-22 rocks sweep (finish Core Work Items + Planning & Views areas)
 
@@ -1815,3 +1817,80 @@ provoked it; single small edits survived. Pause OneDrive before any pass that
 touches many files at once — or move the repo off OneDrive.
 `scripts/create-agent-Living-Room.mjs` is an older conflict copy of the same
 kind, still unresolved and left alone.
+
+## The last two open items in this file (2026-08-05)
+
+Both were one-line cuts from earlier slices — 037's and 035's — left with a
+reason. Neither reason survived contact with what shipped since.
+
+### Key-result activity (the 037 cut)
+
+- [x] **Reversed a documented decision, and said so where the decision lives.**
+      037 wrote that KR edits are deliberately unlogged: a current value is read
+      live and nudged often, so the feed should track the objective rather than
+      every measurement. Two things retired that. `score_key_result` became an
+      agent tool on 2026-07-28, and an unlogged measurement is an unattributable
+      one — "the board moved and nobody can say who" is the exact failure the
+      log exists to prevent, and it does not stop being one because the field is
+      numeric. And the measurement *is* the progress: an objective whose own
+      fields never change still advances every time a KR is scored, so a feed
+      tracking only the objective shows a goal that never moves. The old
+      rationale is replaced in `ObjectiveAction`'s docstring rather than left
+      standing next to code that now contradicts it.
+- [x] **The noise worry is answered by silence, not by absence.** No row is
+      written when nothing changed — which is precisely the agent case that
+      caused the worry, an agent re-scoring a KR to the value it already holds.
+      `position` is excluded from the comparison: reordering the list is not a
+      measurement, and the snapshot does not carry it.
+- [x] **The numbers travel in the snapshot.** `KeyResultSnapshot` carries title,
+      current, target and unit, where `ObjectiveSnapshot` carries only a name. A
+      row that named the KR and read its value live would report today's number
+      against a year-old event and would say nothing at all once the KR is
+      deleted. `unit` is in there because "40 → 45" and "40% → 45%" are
+      different claims.
+- [x] **`deleteKeyResult` grew a transaction**, where it was a bare query: the
+      row has to be read before it is gone, and the read, the delete and the log
+      entry have to stand or fall together.
+- [x] **The feed reads the measurement**, not the fact of an edit — "moved NPS
+      40 → 45", with a rename and a re-target getting their own sentences and
+      the both-at-once case falling back to naming the measure, because "moved X
+      1 → 2 and renamed it to Y" is a sentence nobody scans.
+
+### Custom-field answers on the schedule lenses (the 035 cut)
+
+- [x] **The lenses were not given the fields at all.** `BoardViewProps` has
+      carried `customFieldsById` since 036 and its own comment said the timeline
+      and gantt ignore it — and board.tsx duly passed it to neither. The fix is
+      one prop each plus somewhere to put the answer.
+- [x] **One field at a time, chosen by the viewer.** A schedule row is mostly
+      track: the label shares its line with the bar, and a task with six custom
+      fields would push its own dates off screen. The list view is where every
+      answer is read at once — it has a column per field precisely because it
+      can afford them. An unanswered field annotates nothing rather than "—":
+      spending the row's scarcest space to report that a question was not
+      answered is the worst trade available.
+- [x] **The choice belongs to the board, not to each lens.** It started as
+      component state and moved up when the test could not reach it — which was
+      the design telling on itself. Timeline and Gantt are two views of one
+      schedule, and someone who annotates by Client and then switches to see the
+      dependency arrows has not changed their mind; lens-local state dropped the
+      choice on every switch. It is still not persisted into saved views: that
+      is a bigger change than this follow-up, and guessing that someone wants
+      last week's annotation back is worse than re-picking it.
+- [x] **6 pure + 4 component cases.** Formatting (including a checkbox reading
+      as its word, as the list renders it), the three ways to have nothing to
+      say, reading the chosen field rather than the first answer, picker
+      ordering by position with id breaking ties; then the lens itself — no
+      picker on a board with no fields, a picker once there are any, the answer
+      on the bar *and* in the tooltip, and a task that never answered annotating
+      nothing.
+
+**Suite: 1277 → 1295 passing** (1 expected fail), 148 files. tsc, build and
+eslint clean bar the pre-existing component errors. Verified live through the
+agent door: scoring KR #13 from 45 to 48 wrote one `keyResult.updated` row
+attributed to the agent and carrying both numbers, re-scoring it to 48 again
+wrote nothing, and the value was put back to 45 afterwards — which honestly left
+two rows, since the log is append-only and that is what actually happened. The
+bar annotation is covered by component tests rather than a screenshot: the
+schedule lenses are behind auth, and minting a session for a look was refused by
+the sandbox.

@@ -245,6 +245,36 @@ function describe(
       if (author.type === "agent") return "deleted an agent's comment";
       return `deleted ${name(author)}'s comment`;
     }
+    // Key results (the 037 follow-up). The numbers are in the snapshot, so an
+    // old entry keeps reporting the values it was written with rather than
+    // today's — and a deleted KR's entries still read.
+    case "keyResult.created":
+      return entry.after
+        ? `added the key result "${entry.after.title}"`
+        : "added a key result";
+    case "keyResult.deleted":
+      return entry.before
+        ? `removed the key result "${entry.before.title}"`
+        : "removed a key result";
+    case "keyResult.updated": {
+      if (!entry.before || !entry.after) return "changed a key result";
+      const { before: b, after: a } = entry;
+      const unit = a.unit ? ` ${a.unit}` : "";
+      // The measurement is the common case and reads as its own sentence; a
+      // rename or a re-targeted goal is rarer and says so plainly. Both at once
+      // falls back to naming the measure, because "moved X 1 → 2 and renamed it
+      // to Y" is a sentence nobody scans.
+      const moved = b.currentValue !== a.currentValue;
+      const renamed = b.title !== a.title;
+      const retargeted = b.targetValue !== a.targetValue;
+      if (moved && !renamed && !retargeted)
+        return `moved ${a.title} ${b.currentValue}${unit} → ${a.currentValue}${unit}`;
+      if (renamed && !moved && !retargeted)
+        return `renamed the key result "${b.title}" to "${a.title}"`;
+      if (retargeted && !moved && !renamed)
+        return `re-targeted ${a.title} to ${a.targetValue}${unit}`;
+      return `updated the key result "${a.title}"`;
+    }
     case "customField.valued": {
       if (!entry.before || !entry.after) return "changed a custom field";
       // The name travels in the snapshot (CustomFieldValueSnapshot), so a

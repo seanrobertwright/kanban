@@ -403,6 +403,11 @@ export function Board({
     useState<TaskDependencyEdge[]>(initialDependencies);
   const [customFields, setCustomFields] =
     useState<CustomField[]>(initialCustomFields);
+  // Which custom field the schedule lenses annotate their bars with (the 035
+  // follow-up). Owned here rather than inside each lens so switching Timeline ↔
+  // Gantt keeps the choice: they are two views of one schedule, and someone who
+  // annotated by Client has not changed their mind by wanting to see the arrows.
+  const [annotateWith, setAnnotateWith] = useState<number | null>(null);
   const customFieldsById = useMemo(
     () => Object.fromEntries(customFields.map((f) => [f.id, f])),
     [customFields]
@@ -1383,6 +1388,9 @@ export function Board({
           membersById={membersById}
           agentsById={agentsById}
           labelsById={labelsById}
+          customFieldsById={customFieldsById}
+          annotateWith={annotateWith}
+          onAnnotateWith={setAnnotateWith}
           onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
         />
       ) : view === "gantt" ? (
@@ -1392,6 +1400,9 @@ export function Board({
           membersById={membersById}
           agentsById={agentsById}
           labelsById={labelsById}
+          customFieldsById={customFieldsById}
+          annotateWith={annotateWith}
+          onAnnotateWith={setAnnotateWith}
           dependencies={dependencies}
           onEditTask={(task) => setDialog({ columnId: task.columnId, task })}
         />

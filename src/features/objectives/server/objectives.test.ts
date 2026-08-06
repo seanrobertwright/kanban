@@ -228,4 +228,116 @@ describe("objectives", () => {
     const updated = entries.find((e) => e.action === "task.updated");
     expect(updated).toBeDefined();
   });
+
+  /**
+   * Key-result activity — the 037 cut, reversed once `score_key_result` became
+   * an agent tool. These are board-scoped rows (taskId null), so they are read
+   * straight from activity_log rather than through listActivityForTask.
+   */
+  describe("key-result activity", () => {
+    const krRows = async (objectiveId: number) =>
+      query<{ action: string; before: unknown; after: unknown }>(
+        `SELECT action, before, after FROM activity_log
+          WHERE board_id = $1 AND action LIKE 'keyResult.%'
+            AND COALESCE(after ->> 'objectiveId', before ->> 'objectiveId') = $2
+          ORDER BY id`,
+        [boardId, String(objectiveId)]
+      );
+
+    it("records a measurement with the numbers in the row", async () => {
+      const objective = await createObjective(
+        alice,
+        boardId,
+        { name: "Grow NPS" },
+        human()
+      );
+      const withKr = await createKeyResult(alice, objective.id, {
+        title: "NPS",
+        startValue: 40,
+        targetValue: 60,
+        unit: "pts",
+      });
+      const krId = withKr.keyResults[0].id;
+      await updateKeyResult(alice, krId, { currentValue: 45 });
+
+      const rows = await krRows(objective.id);
+      expect(rows.map((r) => r.action)).toEqual([
+        "keyResult.created",
+        "keyResult.updated",
+      ]);
+      // The values are IN the row, not read live: this is what lets an old
+      // entry keep reporting the numbers it was written with.
+      expect(rows[1].before).toMatchObject({ currentValue: 40, title: "NPS" });
+      expect(rows[1].after).toMatchObject({
+        currentValue: 45,
+        targetValue: 60,
+        unit: "pts",
+      });
+    });
+
+    // The whole answer to 037's noise objection, and the case that matters most
+    // for an agent re-scoring a KR to the value it already holds.
+    it("writes nothing when an edit changes nothing", async () => {
+      const objective = await createObjective(
+        alice,
+        boardId,
+        { name: "Steady" },
+        human()
+      );
+      const withKr = await createKeyResult(alice, objective.id, {
+        title: "Same",
+        targetValue: 10,
+        currentValue: 3,
+      });
+      const krId = withKr.keyResults[0].id;
+
+      await updateKeyResult(alice, krId, { currentValue: 3 });
+      await updateKeyResult(alice, krId, {});
+
+      expect((await krRows(objective.id)).map((r) => r.action)).toEqual([
+        "keyResult.created",
+      ]);
+    });
+
+    // Reordering is not a measurement, and the snapshot does not carry position.
+    it("does not log a reorder", async () => {
+      const objective = await createObjective(
+        alice,
+        boardId,
+        { name: "Ordered" },
+        human()
+      );
+      const withKr = await createKeyResult(alice, objective.id, {
+        title: "Movable",
+        targetValue: 1,
+      });
+      await updateKeyResult(alice, withKr.keyResults[0].id, { position: 5 });
+
+      expect((await krRows(objective.id)).map((r) => r.action)).toEqual([
+        "keyResult.created",
+      ]);
+    });
+
+    it("records a deletion with what was lost", async () => {
+      const objective = await createObjective(
+        alice,
+        boardId,
+        { name: "Doomed measure" },
+        human()
+      );
+      const withKr = await createKeyResult(alice, objective.id, {
+        title: "Gone soon",
+        targetValue: 7,
+      });
+      await deleteKeyResult(alice, withKr.keyResults[0].id);
+
+      const rows = await krRows(objective.id);
+      expect(rows.map((r) => r.action)).toEqual([
+        "keyResult.created",
+        "keyResult.deleted",
+      ]);
+      // The row survives the KR: the title is in the snapshot, not joined.
+      expect(rows[1].before).toMatchObject({ title: "Gone soon" });
+    });
+  });
 });

@@ -5,8 +5,10 @@ import { useMemo } from "react";
 import { PriorityDot } from "@/features/tasks/components/task-card";
 import type { Task } from "@/features/tasks/types";
 import { useToday } from "@/shared/lib/due-date";
+import { annotatableFields, fieldAnnotation } from "../lib/field-annotation";
 import { addDays, dayDiff, shortLabel, spanOf } from "../lib/schedule";
-import type { BoardViewProps } from "./list-view";
+import { FieldAnnotationPicker } from "./field-annotation-picker";
+import type { ScheduleViewProps } from "./list-view";
 
 /**
  * The board's tasks as bars over time (032) — the one lens a single date could
@@ -22,9 +24,17 @@ import type { BoardViewProps } from "./list-view";
 export function TimelineView({
   columns,
   itemsByColumn,
+  customFieldsById,
+  annotateWith = null,
+  onAnnotateWith,
   onEditTask,
-}: BoardViewProps) {
+}: ScheduleViewProps) {
   const today = useToday();
+  const fields = useMemo(
+    () => annotatableFields(customFieldsById),
+    [customFieldsById]
+  );
+  const annotationField = fields.find((f) => f.id === annotateWith);
 
   const tasks = useMemo(
     () => columns.flatMap((c) => itemsByColumn[c.id] ?? []),
@@ -96,6 +106,13 @@ export function TimelineView({
         <span className="text-muted-foreground">
           {shortLabel(w.start)} – {shortLabel(w.end)}
         </span>
+        <span className="ml-auto">
+          <FieldAnnotationPicker
+            fields={fields}
+            value={annotateWith}
+            onChange={onAnnotateWith ?? (() => {})}
+          />
+        </span>
       </div>
 
       <div className="overflow-x-auto">
@@ -137,6 +154,7 @@ export function TimelineView({
               const offset = dayDiff(w.start, span[0]);
               const length = dayDiff(span[0], span[1]) + 1;
               const single = task.startDate == null || task.dueDate == null;
+              const annotation = fieldAnnotation(task, annotationField);
               return (
                 <div key={task.id} className="relative h-7">
                   <button
@@ -144,7 +162,7 @@ export function TimelineView({
                     onClick={() => onEditTask(task)}
                     title={`${task.title} · ${span[0]}${
                       span[0] === span[1] ? "" : ` → ${span[1]}`
-                    }`}
+                    }${annotation ? ` · ${annotationField!.name}: ${annotation}` : ""}`}
                     className="absolute top-1/2 flex h-5 -translate-y-1/2 items-center gap-1 overflow-hidden rounded px-1.5 text-left text-xs hover:ring-2 hover:ring-ring/50"
                     style={{
                       left: pct(offset),
@@ -157,6 +175,14 @@ export function TimelineView({
                   >
                     <PriorityDot priority={task.priority} />
                     <span className="truncate">{task.title}</span>
+                    {/* The answer rides after the title and is the first thing
+                        to be truncated away, because a bar that has room for
+                        one of the two should show which task it is. */}
+                    {annotation && (
+                      <span className="shrink truncate text-micro text-muted-foreground">
+                        {annotation}
+                      </span>
+                    )}
                   </button>
                 </div>
               );

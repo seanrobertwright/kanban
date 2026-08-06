@@ -7,6 +7,8 @@ import type {
   ActivityEntry,
   CommentAction,
   CommentSnapshot,
+  KeyResultAction,
+  KeyResultSnapshot,
   TaskAction,
   TaskSnapshot,
 } from "../types";
@@ -100,6 +102,40 @@ function commentEntry(over: Partial<CommentEntry> = {}): CommentEntry {
   };
 }
 
+type KeyResultEntry = Extract<ActivityEntry, { action: KeyResultAction }>;
+
+function krSnapshot(over: Partial<KeyResultSnapshot> = {}): KeyResultSnapshot {
+  return {
+    keyResultId: 3,
+    objectiveId: 2,
+    title: "NPS",
+    currentValue: 40,
+    targetValue: 60,
+    unit: "",
+    ...over,
+  };
+}
+
+function krEntry(over: Partial<KeyResultEntry> = {}): KeyResultEntry {
+  return {
+    id: "1",
+    workspaceId: "ws-1",
+    boardId: 1,
+    // Board-scoped, like every objective row: the subject is the measure, and
+    // the board is what locates it.
+    taskId: null,
+    actorType: "human",
+    actorId: "user-1",
+    actorName: "Alice",
+    actorImage: null,
+    action: "keyResult.updated",
+    before: krSnapshot(),
+    after: krSnapshot({ currentValue: 45 }),
+    createdAt: new Date().toISOString(),
+    ...over,
+  };
+}
+
 async function renderFeed(entries: ActivityEntry[]) {
   vi.mocked(fetchTaskActivity).mockResolvedValue(entries);
   render(
@@ -121,6 +157,67 @@ async function renderFeed(entries: ActivityEntry[]) {
  */
 describe("ActivityFeed", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  // Key results. The measurement is the reason these rows exist, so the line a
+  // reader sees has to be the measurement — "updated a key result" would be a
+  // row that costs storage and says nothing.
+  describe("key results", () => {
+    it("reads the measurement", async () => {
+      await renderFeed([krEntry()]);
+      expect(screen.getByText(/moved NPS 40 → 45/)).toBeDefined();
+    });
+
+    // "40 → 45" and "40% → 45%" are different claims, which is why the unit
+    // travels in the snapshot rather than being looked up at render time.
+    it("carries the unit through", async () => {
+      await renderFeed([
+        krEntry({
+          before: krSnapshot({ unit: "pts" }),
+          after: krSnapshot({ currentValue: 45, unit: "pts" }),
+        }),
+      ]);
+      expect(screen.getByText(/moved NPS 40 pts → 45 pts/)).toBeDefined();
+    });
+
+    it("distinguishes a rename and a re-target from a measurement", async () => {
+      await renderFeed([
+        krEntry({
+          id: "a",
+          before: krSnapshot({ title: "NPS" }),
+          after: krSnapshot({ title: "Net promoter" }),
+        }),
+        krEntry({
+          id: "b",
+          before: krSnapshot(),
+          after: krSnapshot({ targetValue: 80 }),
+        }),
+      ]);
+      expect(
+        screen.getByText(/renamed the key result "NPS" to "Net promoter"/)
+      ).toBeDefined();
+      expect(screen.getByText(/re-targeted NPS to 80/)).toBeDefined();
+    });
+
+    it("names the measure on create and delete, from the snapshot", async () => {
+      await renderFeed([
+        krEntry({
+          id: "a",
+          action: "keyResult.created",
+          before: null,
+          after: krSnapshot({ title: "Signups" }),
+        }),
+        krEntry({
+          id: "b",
+          action: "keyResult.deleted",
+          before: krSnapshot({ title: "Churn" }),
+          after: null,
+        }),
+      ]);
+      expect(screen.getByText(/added the key result "Signups"/)).toBeDefined();
+      // Still reads after the KR is gone — the title is in the row, not joined.
+      expect(screen.getByText(/removed the key result "Churn"/)).toBeDefined();
+    });
+  });
 
   it("names the columns a task moved between", async () => {
     await renderFeed([
