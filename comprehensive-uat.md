@@ -1,8 +1,19 @@
 # Kanban App — Comprehensive User Acceptance Test (UAT) Plan
 
 **Application:** Kanban (self-hosted task management, `scrap/kanban` repository)
-**Document version:** 1.0 (draft)
-**Date prepared:** 2026-07-25
+**Document version:** 1.1
+**Date prepared:** 2026-07-25 · **Revised:** 2026-08-06
+
+> **What changed in 1.1.** The 2026-08-06 run (`devdocs/uat-run-2026-08-06.md`)
+> found that the plan described a UI the app had moved on from, in ways that
+> would make a diligent tester file failures against working software. Corrected
+> here: the sign-in copy and the SSO button (Suite 1), the sidebar and toolbar
+> descriptions (§3), and the route to every panel — the eighteen-button toolbar
+> was cut down, so `Toolbar → Sprints` and its siblings now name where those
+> panels actually live. §1.4 gains the two environment rules that run learned the
+> hard way: serve the app on the origin sign-in is configured for, and warm it up
+> first. Expectations about *behaviour* are unchanged; only the routes and the
+> chrome descriptions were stale.
 **Intended tester:** Someone with ZERO prior experience with this application. Every step tells you exactly what to click and exactly what you should see.
 
 ---
@@ -30,7 +41,7 @@ Do not stop on a Fail unless the app is unusable — mark it and continue.
 | Item | Requirement |
 |---|---|
 | Browser | A current desktop Chrome, Edge, or Firefox, window at least 1280 px wide (the left sidebar is hidden on narrow windows — the same tool buttons then appear across the top of the page instead). |
-| Test account A ("Owner") | A GitHub account you can sign in with: `__________________` (the app signs in ONLY via GitHub OAuth — there is no email/password form). |
+| Test account A ("Owner") | A GitHub account you can sign in with: `__________________`. There is no email/password form: the app signs in through **GitHub OAuth** or an **enterprise IdP** (the **Sign in with SSO** button, which needs the setup in UAT-098 — without it, use GitHub). |
 | Test account B ("Second user") | A second, different GitHub account, ideally in a second browser or a private/incognito window: `__________________`. Needed for the members/roles, viewer-negative, and notification tests. |
 | Keyboard note | "Ctrl+K" below means Cmd+K on macOS. |
 
@@ -41,9 +52,27 @@ Perform (or have a developer perform) the following before testing. Skip to step
 1. In a terminal at the repository root, run: `docker compose up -d` — starts Postgres (host port 5434) and MinIO (attachment storage).
 2. Ensure `.env.local` exists with `DATABASE_URL`, GitHub OAuth client id/secret, and auth secret configured (developer task).
 3. Run `npm run db:setup` (runs the auth migration then the app migrations). **Expected:** finishes without error.
-4. Run `npm run dev`. **Expected:** "ready" output naming `http://localhost:3000`.
+4. Run `npm run dev` (set `PORT` to match `BETTER_AUTH_URL` — see the port rule below). **Expected:** "ready" output naming that URL.
 5. Optional (needed only for UAT-095 real-time co-editing): run `npm run realtime` in a second terminal.
-6. **Verify:** open `http://localhost:3000` in the browser. **Expected:** you are redirected to `/sign-in` and see a card titled **Sign in** with the text "Use your GitHub account to access the kanban board." and a button **Continue with GitHub**.
+6. **Verify:** open the app in the browser (see the port rule below). **Expected:** you are redirected to `/sign-in` and see the card described in UAT-001.
+
+**The port is not incidental — sign-in fails on the wrong one.** `BETTER_AUTH_URL`
+is both the origin better-auth trusts and the callback GitHub redirects to, and
+that callback is registered in the GitHub OAuth app. Serve the app anywhere else
+and **Continue with GitHub** answers `403` with `Invalid origin` — visible only in
+the server log, not on screen. Check which origin is configured before you start:
+
+- compose stack: `docker compose ps` — the `app` host port (this repo defaults to
+  `APP_PORT=6810`, and the container sets `BETTER_AUTH_URL` to match);
+- local `npm run dev`: `BETTER_AUTH_URL` in `.env.local`, and set `PORT` to the
+  same port.
+
+**Warm the app before testing.** Next compiles each route on first request, and
+in the compose stack (a bind-mounted `next dev`) that is 3–24 seconds *per route*
+— slow enough that a save looks like it silently failed when it is merely in
+flight. Either click through the app once to warm it, or curl the API routes
+before you start. For a full UI run, local `npm run dev` is markedly faster than
+the compose stack.
 
 Record the build under test (git commit hash) in the sign-off table at the end: run `git rev-parse --short HEAD` in the repo, or ask the developer.
 
@@ -76,8 +105,18 @@ Unless a case says otherwise, **all work happens on board `UAT-Board-01` inside 
 Conventions used in the steps below:
 
 - **Bold text** is an exact UI label — a button, menu item, field label, or placeholder.
-- "Sidebar" = the left column of the app, containing the **KANBAN** logo, the **Search / command** pill, the **// Workspace** board switcher, the **// Tools** button list, and your avatar at the bottom.
-- "Toolbar" = the row above the board with the **Search tasks** box, the **Priority / Label / Assignee** filters, **Views**, **Save**, the view switcher (**Board · List · Calendar · Timeline · Gantt · Backlog · Roadmap · Dashboard**), and the buttons **Templates, Labels, Sprints, Milestones, Releases, Epics, Objectives, Fields, Insights, Schedule, Timesheet, Forms, Automations, Requests, Capacity, Budget, Discovery, Export**.
+- "Sidebar" = the left column: the **KANBAN** logo, the **Search / command** pill (with a **⌘K** hint), a **WORKSPACE** heading with the board switcher, then grouped tool headings — **COLLABORATE** (**Ask**, **Docs**, **Chat**, **Whiteboards**), **PLAN** (**Programs**, **Scaled Agile**, **Portfolio**, **Reports**) and **ADMINISTER** (**Settings**) — and at the bottom your avatar, name, role and a theme toggle.
+- "Toolbar" = the row above the board: the **Search tasks** box, the **Priority** and **Assignee** filters, **Views**, **Save**, four view tabs (**Board · List · Timeline · Dashboard**), a **More views** dropdown (**Calendar**, **Gantt**, **Backlog**, **Roadmap**, **Requests**), a primary **NEW TASK** button, and a **⋯** overflow menu.
+
+**Where the panels live.** The toolbar used to carry eighteen buttons; they were
+consolidated, so a case that needs one of them says where it is now. Three routes
+reach everything, and the fastest is always the palette:
+
+| Route | What is behind it |
+|---|---|
+| **⌘K palette** | Every panel below, by name — type the panel's name and press Enter. The universal route; use it if a menu path ever disagrees with this table. |
+| **Settings…** (⋯ menu, or sidebar **Settings**) | *Board*: **Labels**, **Custom fields**, **Templates**, **Automations**, **Forms**. *Planning*: **Sprints**, **Milestones**, **Releases**, **Epics**, **Objectives**. *Workspace*: **Overview**, **Members**, **Agents**, **Webhooks**, **Permissions**, **Repositories**, **Email intake**, **Audit log**, **Security & compliance**. |
+| **⋯** overflow | **Settings…**, **Schedule**, *Measure* (**Insights**, **Timesheet**, **Capacity**, **Budget**), *Intake* (**Requests**, **Discovery**), **Share…**, **Export CSV**, **Export JSON**, *Density*. |
 - "Task dialog" = the panel that slides in from the right edge when you create or open a task.
 
 ---
@@ -86,8 +125,8 @@ Conventions used in the steps below:
 
 ### UAT-001 — Unauthenticated visit redirects to sign-in
 **Preconditions:** Environment running (§1.4). Browser has no session (fresh/incognito window).
-1. Navigate to `http://localhost:3000`.
-   - **Expected:** URL changes to `http://localhost:3000/sign-in`. A centred card shows the title **Sign in**, the sentence "Use your GitHub account to access the kanban board.", and a button **Continue with GitHub**.
+1. Navigate to the app's configured origin (§1.4).
+   - **Expected:** the URL changes to `/sign-in`. A centred card shows the title **Sign in**, the sentence "Use your GitHub account or your company's identity provider.", a primary button **Continue with GitHub**, and beneath it a secondary button **Sign in with SSO**.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
 
@@ -96,15 +135,15 @@ Conventions used in the steps below:
 1. Click **Continue with GitHub**.
    - **Expected:** button text changes to **Redirecting…** and the browser goes to github.com.
 2. Complete the GitHub login/authorize screen with account A.
-   - **Expected:** you land back on `http://localhost:3000` showing the app shell (next case describes it). No error page.
+   - **Expected:** you land back on the app origin showing the app shell (next case describes it). No error page.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
 
 ### UAT-003 — Application shell layout
 **Preconditions:** Signed in as account A.
 1. Look at the left sidebar, top to bottom.
-   - **Expected:** a "K" logo tile and the word **KANBAN**; a pill reading **Search / command** with a **⌘K** key hint; a **// Workspace** heading with a board-switcher button; a **// Tools** heading with (at minimum) the buttons **Ask**, **Docs**, **Chat**, **Whiteboards**, **Programs**, **Scaled Agile**, **Portfolio**, **Reports**; at the bottom your GitHub avatar, your name, your role (e.g. `owner`), and a theme toggle button.
-   - **Expected:** an **Admin console** shield icon button appears in the tools list (you are owner of your personal workspace).
+   - **Expected:** a "K" logo tile and the word **KANBAN**; a pill reading **Search / command** with a **⌘K** key hint; a **WORKSPACE** heading with a board-switcher button; then three grouped headings — **COLLABORATE** (**Ask**, **Docs**, **Chat**, **Whiteboards**), **PLAN** (**Programs**, **Scaled Agile**, **Portfolio**, **Reports**) and **ADMINISTER** (**Settings**); at the bottom your GitHub avatar, your name, your role (e.g. `OWNER`), and a theme toggle button.
+   - **Expected:** **Settings** is present under ADMINISTER — it is the admin surface, and its *Workspace* group carries the console sections (Overview, Members, Agents, Webhooks, Permissions, Audit log, Security & compliance) because you own this workspace.
 2. Look at the top header of the main area.
    - **Expected:** breadcrumb "workspace-name / BOARD-NAME" (a personal workspace and default board were auto-created on first sign-in); the hint "Drag tasks between columns to update their status."; a stack of member avatars; a bell (notifications) button.
 3. Look at the main area.
@@ -124,8 +163,8 @@ Conventions used in the steps below:
 
 ### UAT-005 — Create workspace UAT-WS-01
 **Preconditions:** Signed in as account A.
-1. In the sidebar under **// Workspace**, click the board-switcher button (shows the current workspace/board name).
-   - **Expected:** a dropdown opens listing your workspace(s) and boards, with entries **New board**, **Members**, **Agents**, **Webhooks**, and at the bottom **New workspace**.
+1. In the sidebar under **WORKSPACE**, click the board-switcher button (shows the current board's name).
+   - **Expected:** a dropdown opens, grouped one block per workspace — each headed by the workspace name and your role in it, then its boards (the current one ticked), then **New board**, **Rename workspace**, **Delete workspace**, and the workspace-scoped entries **Members**, **Agents**, **Webhooks**, **Repositories**. At the very bottom: **New workspace**.
 2. Click **New workspace**.
    - **Expected:** a dialog titled **New workspace** opens with a name field (placeholder **Acme Inc**).
 3. Type `UAT-WS-01` and submit (**Create** button / Enter).
@@ -149,7 +188,7 @@ Conventions used in the steps below:
 
 ### UAT-008 — NEGATIVE: cannot open a board in someone else's workspace
 **Preconditions:** Account B signed in (other browser/incognito) at least once. Know the numeric id of one of account A's boards: while on `UAT-Board-01` as account A, note the `?board=NN` number in the URL (switch boards once if the URL has no `?board=`).
-1. As **account B**, navigate to `http://localhost:3000/?board=NN` (account A's board id).
+1. As **account B**, navigate to `<app-origin>/?board=NN` (account A's board id).
    - **Expected:** a "not found" (404) page — NOT account A's board. No column or task titles from account A's board are visible.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
@@ -419,7 +458,7 @@ All inside the **Edit task** dialog for `UAT-Task-01` (open it, scroll below the
 ## Suite 7 — Labels
 
 ### UAT-038 — Create labels
-1. In the toolbar click **Labels**.
+1. Open **Labels** (⌘K → "Labels", or **Settings…** → *Board* → **Labels**).
    - **Expected:** the **Labels** dialog opens (empty at first) with a **New label** input (placeholder **bug**) and a colour picker (**Label colour**).
 2. Create `uat-bug` (pick red) and `uat-frontend` (another colour).
    - **Expected:** both appear with their colour dots.
@@ -539,7 +578,7 @@ Prepare: ensure `UAT-Task-01` has start+due dates (UAT-025) and `UAT-Task-02` is
 ## Suite 10 — Templates
 
 ### UAT-051 — Create a task template
-1. Toolbar → **Templates**.
+1. Open **Templates** (⌘K → "Templates", or **Settings…** → *Board* → **Templates**).
    - **Expected:** the **Templates** dialog with a **New template** form: title (placeholder **Bug report**), **Template description** (placeholder **Steps to reproduce, expected vs actual…**), **Priority**, **Labels**, and an **Add template** button.
 2. Create `UAT-Tmpl-01` with description `From template`, Priority **High**, label `uat-bug`; click **Add template**.
    - **Expected:** it appears in the list with an **Edit template** control.
@@ -561,7 +600,7 @@ Prepare: ensure `UAT-Task-01` has start+due dates (UAT-025) and `UAT-Task-02` is
 ## Suite 11 — Sprints
 
 ### UAT-053 — Create sprints
-1. Toolbar → **Sprints**.
+1. Open **Sprints** (⌘K → "Sprints", or **Settings…** → *Planning* → **Sprints**).
    - **Expected:** the **Sprints** dialog shows **No sprints yet.** and a **New sprint** form: name (placeholder **Sprint 1**), **Sprint goal** (placeholder **Goal (optional)**), start and end date inputs, **Add**.
 2. Create `UAT-Sprint-01` (goal `UAT goal`, start today, end +14 days) and `UAT-Sprint-02` (no dates).
    - **Expected:** both listed with status **Planning**, a progress bar, and `0/0 tasks · 0/0 pts`.
@@ -603,7 +642,7 @@ Prepare: ensure `UAT-Task-01` has start+due dates (UAT-025) and `UAT-Task-02` is
 ## Suite 12 — Milestones
 
 ### UAT-057 — Create a milestone and attach a task
-1. Toolbar → **Milestones**.
+1. Open **Milestones** (⌘K → "Milestones", or **Settings…** → *Planning* → **Milestones**).
    - **Expected:** **Milestones** dialog with a **New milestone** form (name placeholder **v1.0**, a **Milestone due date** input, optional **Epic** / **Objective** links).
 2. Create `UAT-MS-01`, due +30 days.
    - **Expected:** listed with a progress bar.
@@ -618,7 +657,7 @@ Prepare: ensure `UAT-Task-01` has start+due dates (UAT-025) and `UAT-Task-02` is
 ## Suite 13 — Releases
 
 ### UAT-058 — Create a release and add tasks
-1. Toolbar → **Releases**.
+1. Open **Releases** (⌘K → "Releases", or **Settings…** → *Planning* → **Releases**).
    - **Expected:** **Releases** dialog, **No releases yet.**, a name input (placeholder **v1.2.0**), an add button.
 2. Create `UAT-Rel-01`.
    - **Expected:** listed with state chip **planned**, a progress bar, and buttons **Ship** and **Delete** (Delete asks **Really?** on first click).
@@ -638,14 +677,14 @@ Prepare: ensure `UAT-Task-01` has start+due dates (UAT-025) and `UAT-Task-02` is
 ## Suite 14 — Epics and Objectives
 
 ### UAT-060 — Epics
-1. Toolbar → **Epics**; in the **New epic** form (placeholder **Billing**) create `UAT-Epic-01`.
+1. Open **Epics** (⌘K → "Epics", or **Settings…** → *Planning* → **Epics**); in the **New epic** form (placeholder **Billing**) create `UAT-Epic-01`.
    - **Expected:** listed with progress.
 2. Open `UAT-Task-01`; an **Epic** select now exists; choose `UAT-Epic-01`; **Save changes**. Reopen **Epics** — it counts 1 task.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
 
 ### UAT-061 — Objectives and key results
-1. Toolbar → **Objectives**; in the **New objective** form (name placeholder **Delight new users**, description placeholder **Why it matters (optional)**, an **Objective due date**) create `UAT-Obj-01`.
+1. Open **Objectives** (⌘K → "Objectives", or **Settings…** → *Planning* → **Objectives**); in the **New objective** form (name placeholder **Delight new users**, description placeholder **Why it matters (optional)**, an **Objective due date**) create `UAT-Obj-01`.
 2. On the objective, add a key result: title placeholder **Key result (e.g. NPS)** → `UAT-KR NPS`, **Start** `0`, **Target** `10`, **Unit** `pts`.
    - **Expected:** the KR lists with 0% progress; updating its current value moves the progress bar.
 3. Open `UAT-Task-01`; an **Objective** select now exists; choose `UAT-Obj-01`; **Save changes**.
@@ -657,7 +696,7 @@ Prepare: ensure `UAT-Task-01` has start+due dates (UAT-025) and `UAT-Task-02` is
 ## Suite 15 — Custom fields
 
 ### UAT-062 — Define custom fields
-1. Toolbar → **Fields**.
+1. Open **Custom fields** (⌘K → "Custom fields", or **Settings…** → *Board* → **Custom fields**).
    - **Expected:** **Custom fields** dialog, **No custom fields yet.**, a **New field** form: name (placeholder **Field name**), a **Field type** select, and for select-type fields an options input (**Options, comma separated**, placeholder **Low, Medium, High**).
 2. Create `UAT-Severity` (type select, options `Low, Medium, High`) and `UAT-Account` (type text).
    - **Expected:** both listed.
@@ -677,7 +716,7 @@ Prepare: ensure `UAT-Task-01` has start+due dates (UAT-025) and `UAT-Task-02` is
 ## Suite 16 — Forms (intake)
 
 ### UAT-064 — Create a form
-1. Toolbar → **Forms**.
+1. Open **Forms** (⌘K → "Forms", or **Settings…** → *Board* → **Forms**).
    - **Expected:** the **Forms** dialog: "Structured intake. A submission creates a task — the first answer becomes its title, the rest its description." Initially **No forms yet.**, with a **New form** builder: name (placeholder **Bug report**), **Form description** (placeholder **What this intake is for (optional)**), a **Target column** select (default **First column**), questions (placeholder **Question**) with an **Add question** control.
 2. Create `UAT-Form-01` targeting `UAT-Col-Todo`, with questions `Summary?` and `Details?`; save it.
    - **Expected:** the form card lists showing its name and target column.
@@ -699,7 +738,7 @@ Prepare: ensure `UAT-Task-01` has start+due dates (UAT-025) and `UAT-Task-02` is
 Automation rule authoring is admin-gated; you are owner so all controls show.
 
 ### UAT-066 — Create and enable a rule
-1. Toolbar → **Automations**.
+1. Open **Automations** (⌘K → "Automations", or **Settings…** → *Board* → **Automations**).
    - **Expected:** the **Automations** dialog: a rule list (empty), a **New automation** builder (name placeholder **Move urgent bugs to the top**, a **Trigger event** select whose options include "a task is created", "a task is moved", "a task is edited", "a task is assigned", "a task's priority changes", "a task's dates change", "a task's labels change", "on a schedule", "an external tool fires it", plus git events), an **all of / any of** condition combinator with condition rows, and an action list with types **move, set_field, add_label, comment, notify, create_task, run script** and **assign**. Also visible: a **Describe an automation** box, an **SLA policies** section, an **Inbound triggers** section, and a **Workflow templates** section, plus the transitions matrix ("Enforce allowed column transitions").
 2. Build rule `UAT-Rule-01`: When **a task's priority changes**, no conditions, Then **comment** with text `Priority changed (UAT)`. Save it.
    - **Expected:** the rule card appears, summarised as a sentence ("When a task's priority changes … then comment …"), marked **paused**.
@@ -753,7 +792,7 @@ Automation rule authoring is admin-gated; you are owner so all controls show.
 ## Suite 18 — Requests
 
 ### UAT-071 — Requests view
-1. Toolbar → **Requests**.
+1. Switch to the **Requests** lens (**More views** → **Requests**, or **⋯** → *Intake* → **Requests**, or the chord `G Q`).
    - **Expected:** the **Requests** dialog opens — an intake queue of form-submitted tasks with requester and SLA info. `UAT-Intake-01` (from UAT-065) appears; with no submissions it would read **No requests yet.**
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
@@ -763,7 +802,7 @@ Automation rule authoring is admin-gated; you are owner so all controls show.
 ## Suite 19 — Discovery (ideas and feedback)
 
 ### UAT-072 — Capture ideas and feedback
-1. Toolbar → **Discovery**.
+1. Open **Discovery** (⌘K → "Discovery", or **⋯** → *Intake* → **Discovery**).
    - **Expected:** the **Discovery** dialog with an ideas side (**New idea** input, placeholder **Capture an idea…**) and a feedback side (**New feedback**, placeholder **What did a customer or stakeholder say?**, plus **Source** placeholder **Source (e.g. Acme, sales)** and a **Sentiment** select).
 2. Add idea `UAT-Idea-01`. Add feedback `Customer wants UAT-Idea-01` with source `Acme`.
    - **Expected:** both listed. Idea rows expose scoring inputs (**Reach**, **Impact 1-5**, **Confid %**, **Effort wk**) that compute a score, an upvote control (**Upvote feedback** on feedback), and a **File under idea** select on feedback rows.
@@ -809,7 +848,7 @@ Automation rule authoring is admin-gated; you are owner so all controls show.
 ## Suite 21 — Insights, Reports, Schedule, Timesheet, Capacity, Budget, Export
 
 ### UAT-077 — Board insights
-1. Toolbar → **Insights**.
+1. Open **Insights** (⌘K → "Insights", or **⋯** → *Measure* → **Insights**).
    - **Expected:** the **Board insights** dialog (may briefly show "Crunching the log…") with flow analytics: cumulative flow ("Cumulative flow, last 30 days"), cycle/lead time, per-column and per-assignee stats, and a **Risks — explainable delivery signals** section listing at-risk tasks with reasons.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
@@ -823,7 +862,7 @@ Automation rule authoring is admin-gated; you are owner so all controls show.
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
 
 ### UAT-079 — Schedule proposal (CPM)
-1. Toolbar → **Schedule**.
+1. Open **Schedule** (⌘K → "Schedule", or **⋯** → **Schedule**).
    - **Expected:** a dialog that computes a **Proposed schedule** (may show "Planning…") — proposed start/due dates per task honouring the dependency `UAT-Task-01` → `UAT-Task-02`, with an **Apply** action.
 2. Apply it.
    - **Expected:** the affected tasks' dates update (verify on one task).
@@ -831,19 +870,19 @@ Automation rule authoring is admin-gated; you are owner so all controls show.
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
 
 ### UAT-080 — Timesheet
-1. Toolbar → **Timesheet**.
+1. Open **Timesheet** (⌘K → "Timesheet", or **⋯** → *Measure* → **Timesheet**).
    - **Expected:** the **Timesheet** dialog: a week grid with **Previous week** / **Next week** arrows, an **All**/member filter, rows for logged time (the 30 min from UAT-034 appears on today), and a **Total** row showing 0:30.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
 
 ### UAT-081 — Capacity
-1. Toolbar → **Capacity**.
+1. Open **Capacity** (⌘K → "Capacity", or **⋯** → *Measure* → **Capacity**).
    - **Expected:** the **Capacity** dialog: per-person (and agent) demand vs capacity for the workspace; your open assigned points appear; a **Role** input / weekly capacity setting exists for admins; unassigned work shows under **Unassigned**.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
 
 ### UAT-082 — Budget
-1. Toolbar → **Budget**.
+1. Open **Budget** (⌘K → "Budget", or **⋯** → *Measure* → **Budget**).
    - **Expected:** the **Budget** dialog with **Budget amount** (placeholder **none**), **Hourly rate**, **Currency**, and a **Save budget** button.
 2. Set amount `1000`, rate `50`; **Save budget**.
    - **Expected:** saved; spend derived from logged time (0.5 h × 50 = 25) shows against the 1000 budget.
@@ -851,7 +890,7 @@ Automation rule authoring is admin-gated; you are owner so all controls show.
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
 
 ### UAT-083 — Export CSV and JSON
-1. Toolbar → **Export**; click **CSV**.
+1. Open **⋯** and click **Export CSV**.
    - **Expected:** the browser downloads a .csv containing the board's tasks (open it: UAT task titles present, with column/priority/label data).
 2. **Export** → **JSON**.
    - **Expected:** a .json download with the same tasks as structured data.
@@ -937,7 +976,7 @@ Automation rule authoring is admin-gated; you are owner so all controls show.
 
 ### UAT-090 — Register a webhook and receive an event
 **Preconditions:** *Requires external setup:* an HTTPS endpoint you can inspect (e.g. a webhook.site URL). Without one, do steps 1–3 and mark the delivery checkpoint Blocked.
-1. Open the board switcher → **Webhooks** (admin-only entry; also reachable from **Admin console**).
+1. Open the board switcher → **Webhooks** (admin-only entry; also reachable at **Settings** → *Workspace* → **Webhooks**).
    - **Expected:** the **Webhooks** dialog: **No webhooks yet.**, **Endpoint URL** (placeholder **https://example.com/hooks/kanban**) and **Events (optional)** (placeholder **task.created, task.moved — empty for all**).
 2. Register your receiver URL with events blank; save.
    - **Expected:** the webhook lists as active, showing a signing secret.
@@ -956,7 +995,7 @@ Automation rule authoring is admin-gated; you are owner so all controls show.
    - **Expected:** the **Members** dialog "Who can access UAT-WS-01." with an **Invite by email** field (placeholder **teammate@company.com**), an **Invite role** select (**owner, admin, member, viewer, guest** — owner only offered because you are owner), an **Invite** button, and the note "No email is sent yet — they join automatically the next time they sign in with this address."
 2. Enter account B's GitHub email address, role **member**; click **Invite**.
    - **Expected:** B's email appears under **Pending invitations** with role member and a revoke (X) control.
-3. As **account B**, sign out/in (or sign in for the first time) at `http://localhost:3000`.
+3. As **account B**, sign out/in (or sign in for the first time) at the app origin.
    - **Expected:** B lands in workspace `UAT-WS-01` (the invitation redeemed on sign-in). In A's Members dialog, B moves from Pending invitations into the member list.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
@@ -982,12 +1021,12 @@ Automation rule authoring is admin-gated; you are owner so all controls show.
 
 ---
 
-## Suite 28 — Admin console and enterprise controls
+## Suite 28 — Workspace administration and enterprise controls
 
-All as account A (owner). Sidebar → **Admin console** (shield icon).
+All as account A (owner). The admin surface is **Settings** (sidebar → **Settings**, or **⋯** → **Settings…**); its *Workspace* group holds the sections below.
 
 ### UAT-094 — Console summary and shortcuts
-1. Open the **Admin console**.
+1. Open **Settings** and select *Workspace* → **Overview**.
    - **Expected:** dialog "Central workspace administration for UAT-WS-01." with a summary grid — **N members, N agents, N boards, N active webhooks, N audit events** — and shortcut buttons **Members**, **Agents**, **Webhooks** that open those dialogs. Below: sections **Board permissions**, **IP allowlist**, **Retention**, **Legal holds** (with a workspace search **Search tasks, comments, docs, audit** and **Export JSON**), **Identity providers**, **Work integrations** (**Connect Slack**, **Connect Google Workspace**, **Connect Microsoft 365**, **Connect Teams**), and **Extensions**.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
@@ -1046,7 +1085,7 @@ All as account A (owner). Sidebar → **Admin console** (shield icon).
 ## Suite 29 — Agents (AI) and the MCP door
 
 ### UAT-101 — Create an agent
-1. Board switcher (or Admin console) → **Agents**.
+1. Board switcher → **Agents** (or **Settings** → *Workspace* → **Agents**).
    - **Expected:** the **Agents** dialog with an **Add an agent** form: name (placeholder **Triage Bot**), **Agent kind**, **Agent role**, **Model** (placeholder **claude-opus-4-8**), **System prompt (optional)**, **Monthly budget cap** (placeholder **Uncapped**).
 2. Create `UAT-Agent-01`.
    - **Expected:** the agent lists. It now appears: in the task dialog's **Assignee** select under an **Agents** group, and in the filter bar's **Assignee** facet with a robot icon.
@@ -1095,7 +1134,7 @@ All as account A (owner). Sidebar → **Admin console** (shield icon).
 1. As account A, click your avatar at the bottom of the sidebar (**Account**).
    - **Expected:** a menu opens showing your name/email and a **Sign out** item.
 2. Click **Sign out**.
-   - **Expected:** you are returned to `/sign-in`. Navigating to `http://localhost:3000` redirects back to `/sign-in` (session gone).
+   - **Expected:** you are returned to `/sign-in`. Navigating to the app origin redirects back to `/sign-in` (session gone).
 3. Sign in again (for the regression sweep).
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
@@ -1109,11 +1148,11 @@ Run through this condensed checklist in one pass; any single failure fails the c
 1. Sign in → `UAT-Board-01` loads with all UAT columns and tasks intact (nothing lost during the run).
 2. Create a task, drag it across all three columns, delete it.
 3. Open `UAT-Task-01`: fields, subtask, checklist, dependency, attachment, time total, comments, and History all present and consistent.
-4. Flip through all eight lenses (**Board → List → Calendar → Timeline → Gantt → Backlog → Roadmap → Dashboard**) — each renders without error.
+4. Flip through all nine lenses — the four tabs (**Board → List → Timeline → Dashboard**) and the five under **More views** (**Calendar → Gantt → Backlog → Roadmap → Requests**) — each renders without error.
 5. Filter by **Urgent** + `uat-bug`, clear.
-6. Open each toolbar dialog once (**Templates, Labels, Sprints, Milestones, Releases, Epics, Objectives, Fields, Insights, Schedule, Timesheet, Forms, Automations, Requests, Capacity, Budget, Discovery**) — each opens and closes cleanly.
-7. Open each sidebar tool once (**Ask, Docs, Chat, Whiteboards, Programs, Scaled Agile, Portfolio, Reports, Admin console**) — each opens and closes cleanly.
-8. **Export → CSV** downloads and contains the UAT tasks.
+6. Open the **⋯** menu — it must open without crashing the board — and every panel behind it once: **Schedule**, *Measure* (**Insights, Timesheet, Capacity, Budget**), *Intake* (**Requests, Discovery**). Then **Settings…** and each of its *Board* and *Planning* sections (**Labels, Custom fields, Templates, Automations, Forms, Sprints, Milestones, Releases, Epics, Objectives**). Each opens and closes cleanly.
+7. Open each sidebar tool once (**Ask, Docs, Chat, Whiteboards, Programs, Scaled Agile, Portfolio, Reports, Settings**) — each opens and closes cleanly.
+8. **⋯ → Export CSV** downloads and contains the UAT tasks.
 9. Browser console (F12) shows no uncaught errors during steps 1–8.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
