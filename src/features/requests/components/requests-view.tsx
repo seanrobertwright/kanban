@@ -13,6 +13,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -250,15 +251,19 @@ function RequestRow({
                 : "Into…"
             }
           >
-            <DropdownMenuLabel>Accept into</DropdownMenuLabel>
-            {columns.map((column) => (
-              <DropdownMenuItem
-                key={column.id}
-                onClick={() => setPending((p) => ({ ...p, columnId: column.id }))}
-              >
-                {column.title}
-              </DropdownMenuItem>
-            ))}
+            {/* Grouped because DropdownMenuLabel is Base UI's Menu.GroupLabel:
+                outside a Group it throws and takes the view down with it. */}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Accept into</DropdownMenuLabel>
+              {columns.map((column) => (
+                <DropdownMenuItem
+                  key={column.id}
+                  onClick={() => setPending((p) => ({ ...p, columnId: column.id }))}
+                >
+                  {column.title}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() =>
@@ -274,22 +279,24 @@ function RequestRow({
           </Menu>
 
           <Menu label={pendingAssigneeName ?? "Assign"}>
-            <DropdownMenuLabel>People</DropdownMenuLabel>
-            {Object.values(membersById).map((member) => (
-              <DropdownMenuItem
-                key={member.userId}
-                onClick={() =>
-                  setPending((p) => ({
-                    ...p,
-                    assignee: { type: "human", id: member.userId },
-                  }))
-                }
-              >
-                {member.name}
-              </DropdownMenuItem>
-            ))}
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>People</DropdownMenuLabel>
+              {Object.values(membersById).map((member) => (
+                <DropdownMenuItem
+                  key={member.userId}
+                  onClick={() =>
+                    setPending((p) => ({
+                      ...p,
+                      assignee: { type: "human", id: member.userId },
+                    }))
+                  }
+                >
+                  {member.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
             {Object.values(agentsById).length > 0 && (
-              <>
+              <DropdownMenuGroup>
                 <DropdownMenuLabel>Agents</DropdownMenuLabel>
                 {Object.values(agentsById).map((agent) => (
                   <DropdownMenuItem
@@ -304,7 +311,7 @@ function RequestRow({
                     {agent.name}
                   </DropdownMenuItem>
                 ))}
-              </>
+              </DropdownMenuGroup>
             )}
           </Menu>
 

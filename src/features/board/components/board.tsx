@@ -89,6 +89,7 @@ import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -1287,29 +1288,40 @@ export function Board({
                 <Clock /> Schedule
               </DropdownMenuItem>
 
+              {/* Every label lives inside a Group, and that is not cosmetic:
+                  DropdownMenuLabel is Base UI's Menu.GroupLabel, which throws
+                  "MenuGroupContext is missing" if it is rendered as a bare
+                  sibling — taking the whole board down with it, because an
+                  uncaught render error unmounts the tree. board-switcher.tsx
+                  has always done this correctly; this menu did not, and nothing
+                  caught it because no test opened it. */}
               <DropdownMenuSeparator />
-              <DropdownMenuLabel>Measure</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => setInsightsOpen(true)}>
-                <ChartNoAxesColumn /> Insights
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTimesheetOpen(true)}>
-                <Clock /> Timesheet
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setCapacityOpen(true)}>
-                <Gauge /> Capacity
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setBudgetOpen(true)}>
-                <Landmark /> Budget
-              </DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Measure</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setInsightsOpen(true)}>
+                  <ChartNoAxesColumn /> Insights
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setTimesheetOpen(true)}>
+                  <Clock /> Timesheet
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCapacityOpen(true)}>
+                  <Gauge /> Capacity
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setBudgetOpen(true)}>
+                  <Landmark /> Budget
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
 
               <DropdownMenuSeparator />
-              <DropdownMenuLabel>Intake</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => setView("requests")}>
-                <Ticket /> Requests
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setDiscoveryOpen(true)}>
-                <Lightbulb /> Discovery
-              </DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Intake</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setView("requests")}>
+                  <Ticket /> Requests
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDiscoveryOpen(true)}>
+                  <Lightbulb /> Discovery
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
 
               <DropdownMenuSeparator />
               {/* Sharing is minting capabilities, an admin-only power server-side —
@@ -1330,23 +1342,25 @@ export function Board({
               />
 
               <DropdownMenuSeparator />
-              <DropdownMenuLabel>Density</DropdownMenuLabel>
-              {/* A per-browser reading preference, not a board setting: it says
-                  how much of the screen this person wants a row to take, which
-                  is about their eyes and their monitor rather than about the
-                  work. Stored locally for the same reason. */}
-              {(["comfortable", "compact"] as const).map((value) => (
-                <DropdownMenuItem
-                  key={value}
-                  onClick={() => setDensity(value)}
-                  aria-current={density === value ? "true" : undefined}
-                >
-                  <span className="w-3 text-primary" aria-hidden>
-                    {density === value ? "✓" : ""}
-                  </span>
-                  {value === "compact" ? "Compact" : "Comfortable"}
-                </DropdownMenuItem>
-              ))}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Density</DropdownMenuLabel>
+                {/* A per-browser reading preference, not a board setting: it says
+                    how much of the screen this person wants a row to take, which
+                    is about their eyes and their monitor rather than about the
+                    work. Stored locally for the same reason. */}
+                {(["comfortable", "compact"] as const).map((value) => (
+                  <DropdownMenuItem
+                    key={value}
+                    onClick={() => setDensity(value)}
+                    aria-current={density === value ? "true" : undefined}
+                  >
+                    <span className="w-3 text-primary" aria-hidden>
+                      {density === value ? "✓" : ""}
+                    </span>
+                    {value === "compact" ? "Compact" : "Comfortable"}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
