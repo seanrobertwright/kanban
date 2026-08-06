@@ -755,7 +755,7 @@ export function TaskDialog({
                 rather than spreading down a tall panel, and its own scroll so a
                 long main column never pushes the labels out of reach. */}
             <aside className="grid auto-rows-min content-start gap-3 overflow-y-auto border-t p-4 md:border-t-0 md:border-l">
-              <p className="text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+              <p className="text-meta font-semibold tracking-wider text-muted-foreground/70 uppercase">
                 Properties
               </p>
               {/* Status, for a piece only. A top-level task's column is its place
@@ -971,7 +971,7 @@ export function TaskDialog({
                   milestones.length > 0 ||
                   epics.length > 0 ||
                   objectives.length > 0) && (
-                  <p className="pt-1 text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                  <p className="pt-1 text-meta font-semibold tracking-wider text-muted-foreground/70 uppercase">
                     Plan
                   </p>
                 )}

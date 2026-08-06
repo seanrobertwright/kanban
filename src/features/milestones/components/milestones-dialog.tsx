@@ -1,5 +1,7 @@
 "use client";
 
+import { Flag } from "lucide-react";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useState } from "react";
 
 import { formatDueDate } from "@/shared/lib/due-date";
@@ -149,7 +151,7 @@ export function MilestonesDialog({
         )}
 
         {milestones.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No milestones yet.</p>
+          <EmptyState icon={Flag} title="No milestones yet" hint="A milestone is a dated target tasks aim at. Progress rolls up from the work filed against it." />
         ) : (
           <ul className="grid gap-2">
             {milestones.map((milestone) => {

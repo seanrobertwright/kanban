@@ -135,7 +135,7 @@ export function DevelopmentSection({
                 </a>
                 {link.state && (
                   <span
-                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium capitalize ${STATE_CHIP[link.state]}`}
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-micro font-medium capitalize ${STATE_CHIP[link.state]}`}
                   >
                     {link.state}
                   </span>
@@ -167,7 +167,7 @@ export function DevelopmentSection({
                   </span>
                 )}
                 <span
-                  className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium capitalize ${chip}`}
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-micro font-medium capitalize ${chip}`}
                 >
                   {label}
                 </span>
@@ -182,7 +182,7 @@ export function DevelopmentSection({
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <GitBranch className="size-4 shrink-0" aria-hidden />
         <span>Branch:</span>
-        <code className="min-w-0 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+        <code className="min-w-0 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-meta text-foreground">
           {branchName}
         </code>
       </p>

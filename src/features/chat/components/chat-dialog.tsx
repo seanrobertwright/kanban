@@ -1,7 +1,8 @@
 "use client";
 
-import { Lock, MessageCircle, Send, X } from "lucide-react";
+import { Lock, MessageCircle, MessagesSquare, Send, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { RichText } from "@/shared/ui/rich-text";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
@@ -47,7 +48,7 @@ function ChatDialog({workspaceId,canEdit,currentUserId,open,onOpenChange}:{works
   <section className="flex min-w-0 flex-col gap-2">{selected?<>
    {selected.isPrivate&&canEdit&&<div className="flex items-center justify-between text-xs text-muted-foreground"><span className="truncate">{channelLabel(selected)}</span><Button variant="ghost" size="sm" onClick={()=>setManage(v=>!v)}>{manage?"Hide members":"Members"}</Button></div>}
    {selected.isPrivate&&manage&&<div className="rounded border p-2 text-sm"><p className="mb-1 text-xs font-medium text-muted-foreground">Channel members</p><ul className="grid gap-1">{chMembers.map(m=><li key={m.userId} className="flex items-center justify-between gap-2"><span className="truncate">{m.name??"Former member"}</span>{m.userId!==currentUserId&&<Button variant="ghost" size="sm" aria-label={`Remove ${m.name??m.userId}`} onClick={()=>void removeMember(m.userId)}><X/></Button>}</li>)}</ul>{addable.length>0&&<div className="mt-2 flex flex-wrap gap-1">{addable.map(m=><Button key={m.userId} variant="outline" size="sm" onClick={()=>void addMember(m.userId)}>+ {m.name}</Button>)}</div>}</div>}
-   <div className="min-h-56 flex-1 space-y-3 overflow-y-auto rounded border p-3">{messages.length?messages.map(m=><article key={m.id} className={m.parentId?"ml-5 border-l pl-3":""}><p className="text-xs text-muted-foreground">{m.authorName??"Former member"} · {new Date(m.createdAt).toLocaleTimeString()}{canEdit&&<button className="ml-2 underline-offset-2 hover:underline" onClick={()=>setReplyTo(m)}>Reply</button>}</p><RichText text={m.body}/></article>):<p className="text-sm text-muted-foreground">No messages yet.</p>}</div>
+   <div className="min-h-56 flex-1 space-y-3 overflow-y-auto rounded border p-3">{messages.length?messages.map(m=><article key={m.id} className={m.parentId?"ml-5 border-l pl-3":""}><p className="text-xs text-muted-foreground">{m.authorName??"Former member"} · {new Date(m.createdAt).toLocaleTimeString()}{canEdit&&<button className="ml-2 underline-offset-2 hover:underline" onClick={()=>setReplyTo(m)}>Reply</button>}</p><RichText text={m.body}/></article>):<EmptyState icon={MessagesSquare} dense title="No messages yet" hint="Say something to start this channel." />}</div>
    {canEdit&&<>{replyTo&&<p className="flex items-center gap-2 text-xs text-muted-foreground">Replying to {replyTo.authorName??"a former member"}: <span className="min-w-0 flex-1 truncate">{replyTo.body}</span><Button variant="ghost" size="sm" aria-label="Cancel reply" onClick={()=>setReplyTo(null)}><X/></Button></p>}<div className="flex gap-2"><Textarea aria-label="Message" value={body} onChange={e=>setBody(e.target.value)} className="min-h-14" placeholder={replyTo?"Write a reply…":"Write a message…"}/><Button size="sm" onClick={()=>void send()}><Send/> Send</Button></div></>}
   </>:<p className="text-sm text-muted-foreground">Create a channel.</p>}</section>
  </div></DialogContent></Dialog>;

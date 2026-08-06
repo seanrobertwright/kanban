@@ -1,5 +1,7 @@
 "use client";
 
+import { Target } from "lucide-react";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useState } from "react";
 
 import { Button } from "@/shared/ui/button";
@@ -108,7 +110,7 @@ export function ObjectivesDialog({
         )}
 
         {objectives.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No objectives yet.</p>
+          <EmptyState icon={Target} title="No objectives yet" hint="An objective says what the team is for; its key results are how you measure whether it happened." />
         ) : (
           <ul className="grid gap-3">
             {objectives.map((objective) => (

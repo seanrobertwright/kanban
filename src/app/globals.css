@@ -46,6 +46,23 @@
   --color-neon-orange: var(--neon-orange);
   --color-neon-red: var(--neon-red);
   --color-neon-purple: var(--neon-purple);
+  /* The type scale, by role rather than by pixel.
+     Four rungs, and the fourth is Tailwind's own `text-sm` (14px) — naming it
+     twice would only invite half the codebase to say `text-ui` and the other
+     half `text-sm` for the same size, which is the ad-hoc problem wearing a
+     token's clothes. These three are the sizes below it that had no name and so
+     were written as `text-[10px]` in 33 places.
+
+     Nothing here is a resize: each token is exactly the value its call sites
+     already used, so this pass changes what the code *says*, not what it
+     renders. 9px folded into micro on the way — three sites, and below 10px is
+     not a size, it is a squint. */
+  --text-micro: 10px;
+  --text-micro--line-height: 1.4;
+  --text-meta: 11px;
+  --text-meta--line-height: 1.45;
+  --text-body: 13px;
+  --text-body--line-height: 1.5;
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -56,10 +73,18 @@
 }
 
 /* Neon-grid theme (docs/Kanban tool design synthesis): near-black #04060c
-   surfaces over an animated cyan grid floor, electric cyan #00e5ff primary,
+   surfaces over a still cyan grid floor, electric cyan #00e5ff primary,
    magenta #ff4fd8 reserved for AI surfaces, and a fixed accent family
-   (green/orange/red/purple) for status. Rajdhani UI text, Share Tech Mono
-   data/labels, Orbitron brand headings. */
+   (green/orange/red/purple) for status. Geist UI text and mono; Orbitron is
+   the brand mark alone.
+
+   Borders are NEUTRAL, and that is the whole of the review's "the theme fights
+   the enterprise goal" note (§2, item 5). Cyan was doing two jobs at once —
+   every edge of every box, and also "this element has focus" — so the signal
+   was invisible inside its own wallpaper. Now cyan means exactly four things:
+   focus, selection, the primary action, and the brand mark. The surfaces and
+   the primary are unchanged, so it is the same product with the shouting
+   turned down, not a different one. */
 :root {
   /* The light theme keeps usable, softened counterparts of the same hues so
      the toggle still works; the design language itself is dark-first. */
@@ -83,8 +108,8 @@
   --accent: #d9edf3;
   --accent-foreground: #086476;
   --destructive: #d4374a;
-  --border: #d3e3ea;
-  --input: #d3e3ea;
+  --border: #dae0e5;
+  --input: #d3dade;
   --ring: #0092a8;
   --chart-1: #0092a8;
   --chart-2: #0d9b62;
@@ -104,7 +129,7 @@
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #d9edf3;
   --sidebar-accent-foreground: #086476;
-  --sidebar-border: #d3e3ea;
+  --sidebar-border: #dae0e5;
   --sidebar-ring: #0092a8;
 }
 
@@ -125,8 +150,8 @@
   --accent: rgba(0, 229, 255, 0.1);
   --accent-foreground: #eafcff;
   --destructive: #ff4d5e;
-  --border: rgba(0, 229, 255, 0.16);
-  --input: rgba(0, 229, 255, 0.22);
+  --border: rgba(148, 176, 194, 0.16);
+  --input: rgba(148, 176, 194, 0.24);
   --ring: #00e5ff;
   --chart-1: #00e5ff;
   --chart-2: #39ff9e;
@@ -145,7 +170,7 @@
   --sidebar-primary-foreground: #04060c;
   --sidebar-accent: rgba(0, 229, 255, 0.08);
   --sidebar-accent-foreground: #eafcff;
-  --sidebar-border: rgba(0, 229, 255, 0.16);
+  --sidebar-border: rgba(148, 176, 194, 0.16);
   --sidebar-ring: #00e5ff;
 }
 
@@ -179,7 +204,9 @@
   .dark ::placeholder {
     color: #4a6577;
   }
-  /* Slim neon scrollbars (WebKit; Firefox falls back to scrollbar-color). */
+  /* Slim scrollbars (WebKit; Firefox falls back to scrollbar-color). Neutral
+     for the same reason the borders are: a scrollbar is chrome, and chrome is
+     not one of the four things cyan is now allowed to mean. */
   .dark ::-webkit-scrollbar {
     height: 10px;
     width: 10px;
@@ -188,17 +215,17 @@
     background: transparent;
   }
   .dark ::-webkit-scrollbar-thumb {
-    background: rgba(0, 229, 255, 0.18);
+    background: rgba(148, 176, 194, 0.2);
     border-radius: 6px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
   .dark ::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 229, 255, 0.4);
+    background: rgba(148, 176, 194, 0.38);
     background-clip: content-box;
   }
   .dark * {
-    scrollbar-color: rgba(0, 229, 255, 0.25) transparent;
+    scrollbar-color: rgba(148, 176, 194, 0.28) transparent;
     scrollbar-width: thin;
   }
 }
@@ -218,7 +245,10 @@
 }
 @utility label-mono {
   font-family: var(--font-mono);
-  font-size: 10px;
+  /* The token, not the literal it was written as — this utility is the single
+     largest consumer of micro, and leaving it hardcoded would mean the scale
+     moved everywhere except the place it is used most. */
+  font-size: var(--text-micro);
   letter-spacing: 1.5px;
   text-transform: uppercase;
   font-weight: 400;

@@ -171,9 +171,11 @@ export function CommandPalette({
             lastGroup = command.group;
             return (
               <div key={command.id}>
+                {/* The group name, not `// GroupName`: a comment marker is a
+                    costume, and it reads as one the second time you see it.
+                    label-mono already says "this is a label". */}
                 {header && (
                   <div className="label-mono px-3 pt-2 pb-1 text-muted-foreground/70">
-                    {"// "}
                     {header}
                   </div>
                 )}

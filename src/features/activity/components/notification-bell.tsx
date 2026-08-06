@@ -108,7 +108,7 @@ function NotificationRow({
     >
       <Avatar className="mt-0.5 size-5 shrink-0" aria-hidden="true">
         <AvatarImage src={entry.actorImage ?? undefined} alt="" />
-        <AvatarFallback className="text-[9px]">
+        <AvatarFallback className="text-micro">
           {actorLabel(entry).slice(0, 2).toUpperCase()}
         </AvatarFallback>
       </Avatar>
@@ -189,7 +189,7 @@ export function NotificationBell({ workspaceId }: { workspaceId: string }) {
           >
             <Bell />
             {unreadCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium tabular-nums text-primary-foreground">
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-micro font-medium tabular-nums text-primary-foreground">
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             )}

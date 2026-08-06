@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Link2, X } from "lucide-react";
 
@@ -158,7 +159,7 @@ export function ShareDialog({
                 : "can view, read-only"}
           </p>
           {links.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No public links yet.</p>
+            <EmptyState icon={Link2} dense title="No public links yet" hint="A public link lets someone without an account read this. Revoke it whenever you like." />
           ) : (
             <ul className="grid gap-1">
               {links.map((link) => (

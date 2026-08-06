@@ -1,7 +1,8 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useEffect, useMemo, useState } from "react";
-import { Bot } from "lucide-react";
+import { Bot, CalendarRange } from "lucide-react";
 
 import type { AgentSummary } from "@/features/agents/types";
 import type { Member } from "@/features/workspaces/types";
@@ -161,7 +162,7 @@ export function SprintsDialog({
         )}
 
         {sprints.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No sprints yet.</p>
+          <EmptyState icon={CalendarRange} title="No sprints yet" hint="A sprint is a dated window with a committed scope. Velocity and burndown are read from the ones you complete." />
         ) : (
           <ul className="grid gap-3">
             {sprints.map((sprint) => {

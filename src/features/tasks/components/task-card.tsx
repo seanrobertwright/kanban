@@ -275,7 +275,7 @@ export function TaskCard({
           {customFields.map(({ field, value }) => (
             <span
               key={field.id}
-              className="inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+              className="inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-micro text-muted-foreground"
               title={`${field.name}: ${formatCustomFieldValue(field, value)}`}
             >
               <span className="font-medium text-foreground/70">{field.name}</span>
@@ -430,7 +430,7 @@ export function TaskCard({
                 unestimated is the default state of most cards. */}
             {task.estimate != null && (
               <span
-                className="rounded-full border px-1.5 text-xs tabular-nums text-muted-foreground dark:rounded-sm dark:border-primary/25 dark:bg-primary/10 dark:font-mono dark:text-[11px] dark:text-primary"
+                className="rounded-full border px-1.5 text-xs tabular-nums text-muted-foreground dark:rounded-sm dark:border-primary/25 dark:bg-primary/10 dark:font-mono dark:text-meta dark:text-primary"
                 title={`Estimate: ${task.estimate} point${
                   task.estimate === 1 ? "" : "s"
                 }`}
@@ -457,7 +457,7 @@ export function TaskCard({
                 )}
                 <Avatar className="size-5" aria-hidden="true">
                   <AvatarImage src={assignee.image ?? undefined} alt="" />
-                  <AvatarFallback className="text-[9px]">
+                  <AvatarFallback className="text-micro">
                     {assignee.name.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>

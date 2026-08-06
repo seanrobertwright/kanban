@@ -1,5 +1,8 @@
 "use client";
 
+// Aliased: `Webhook` is this feature's own type, and the icon would shadow it.
+import { Webhook as WebhookIcon } from "lucide-react";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useEffect, useState } from "react";
 
 import type { WorkspaceMembership } from "@/features/workspaces/types";
@@ -185,7 +188,7 @@ export function WebhooksDialog({
         )}
 
         {webhooks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No webhooks yet.</p>
+          <EmptyState icon={WebhookIcon} title="No webhooks yet" hint="A webhook posts every board event to a URL you own, signed so your endpoint can prove it came from here." />
         ) : (
           <ul className="grid gap-2">
             {webhooks.map((hook) => (

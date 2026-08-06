@@ -46,7 +46,7 @@ export const dynamic = "force-dynamic";
  * updating it — and this one has nothing to close over anyway.
  */
 const NavLabel = ({ children }: { children: React.ReactNode }) => (
-  <div className="px-4 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+  <div className="px-4 pt-4 pb-1 text-meta font-semibold tracking-wider text-muted-foreground/70 uppercase">
     {children}
   </div>
 );
@@ -257,7 +257,7 @@ export default async function Home({
         <div className="flex items-center gap-2 border-t border-sidebar-border p-3">
           <UserMenu user={session.user} />
           <div className="min-w-0 flex-1 leading-tight">
-            <div className="truncate text-[13px] font-semibold text-foreground">
+            <div className="truncate text-body font-semibold text-foreground">
               {session.user.name}
             </div>
             <div className="label-mono truncate text-muted-foreground/80">
@@ -271,7 +271,7 @@ export default async function Home({
       {/* MAIN */}
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex flex-wrap items-center gap-3 border-b bg-background/60 px-5 py-3 backdrop-blur-sm">
-          <div className="flex min-w-0 items-center gap-2 font-mono text-[13px]">
+          <div className="flex min-w-0 items-center gap-2 font-mono text-body">
             <span
               className="size-2 shrink-0 rounded-xs bg-primary"
               aria-hidden
@@ -295,14 +295,14 @@ export default async function Home({
                 <div
                   key={member.userId}
                   title={member.name}
-                  className={`flex size-6.5 items-center justify-center rounded-md border-2 border-background text-[10px] font-bold text-background ${i > 0 ? "-ml-2" : ""}`}
+                  className={`flex size-6.5 items-center justify-center rounded-md border-2 border-background text-micro font-bold text-background ${i > 0 ? "-ml-2" : ""}`}
                   style={{ background: accentOf(member.userId) }}
                 >
                   {initialsOf(member.name)}
                 </div>
               ))}
               {members.length > 4 && (
-                <div className="-ml-2 flex size-6.5 items-center justify-center rounded-md border-2 border-background bg-secondary text-[10px] font-bold text-secondary-foreground">
+                <div className="-ml-2 flex size-6.5 items-center justify-center rounded-md border-2 border-background bg-secondary text-micro font-bold text-secondary-foreground">
                   +{members.length - 4}
                 </div>
               )}

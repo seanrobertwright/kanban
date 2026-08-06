@@ -1,7 +1,8 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useEffect, useMemo, useState } from "react";
-import { Network } from "lucide-react";
+import { LayoutGrid, Network, Users } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -132,7 +133,7 @@ export function ScaledAgileButton({
                 ARTs · Programs
               </h3>
               {data.arts.length === 0 && (
-                <p className="text-sm text-muted-foreground">No boards yet.</p>
+                <EmptyState icon={LayoutGrid} dense title="No programs yet" hint="Group boards under a program to see delivery across more than one team at a time." />
               )}
               {data.arts.map((group) => (
                 <ArtRow
@@ -159,7 +160,7 @@ export function ScaledAgileButton({
                 Teams
               </h3>
               {teams.length === 0 && (
-                <p className="text-sm text-muted-foreground">No teams yet.</p>
+                <EmptyState icon={Users} dense title="No teams yet" hint="A team groups people, so capacity and workload can be read per team rather than per person." />
               )}
               {teams.map((team) => (
                 <TeamRow

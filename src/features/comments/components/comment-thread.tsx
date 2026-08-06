@@ -1,6 +1,9 @@
 "use client";
 
+import { MessageSquare } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
+import { EmptyState } from "@/shared/ui/empty-state";
 
 import { relativeTime } from "@/shared/lib/relative-time";
 import { RichText } from "@/shared/ui/rich-text";
@@ -165,7 +168,7 @@ export function CommentThread({ taskId, onChanged }: CommentThreadProps) {
       <div className="flex items-start gap-2.5">
         <Avatar className="size-6">
           <AvatarImage src={comment.authorImage ?? undefined} alt="" />
-          <AvatarFallback className="text-[10px]">
+          <AvatarFallback className="text-micro">
             {authorLabel(comment).slice(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
@@ -351,7 +354,12 @@ export function CommentThread({ taskId, onChanged }: CommentThreadProps) {
       )}
 
       {!loading && comments.length === 0 && (
-        <p className="text-xs text-muted-foreground">No comments yet.</p>
+        <EmptyState
+          icon={MessageSquare}
+          dense
+          title="No comments yet"
+          hint="This is the discussion around the work. @mention someone to put it in their bell."
+        />
       )}
 
       {threads.length > 0 && (

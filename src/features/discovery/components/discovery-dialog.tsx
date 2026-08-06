@@ -1,8 +1,9 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useEffect, useState } from "react";
 
-import { Share2 } from "lucide-react";
+import { Inbox, Lightbulb, Share2 } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import { ShareDialog } from "@/features/sharing/components/share-dialog";
@@ -269,7 +270,7 @@ function IdeasPanel({
       )}
 
       {data.ideas.length === 0 && (
-        <p className="text-sm text-muted-foreground">No ideas yet.</p>
+        <EmptyState icon={Lightbulb} title="No ideas yet" hint="Ideas are the queue before the backlog: capture a thought here, promote it to a task once it earns a slot." />
       )}
 
       <div className="grid gap-2">
@@ -469,7 +470,7 @@ function FeedbackPanel({
       )}
 
       {data.feedback.length === 0 && (
-        <p className="text-sm text-muted-foreground">No feedback yet.</p>
+        <EmptyState icon={Inbox} title="No feedback yet" hint="Feedback arrives through the public portal, or you add it here. Promote a theme into an idea when it recurs." />
       )}
 
       <div className="grid gap-2">

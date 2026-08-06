@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useCallback, useEffect, useState } from "react";
 import { BarChart3, Loader2, Plus, Trash2 } from "lucide-react";
 
@@ -221,7 +222,7 @@ export function ReportsPanel({
           </Button>
         </div>
         {reports.length === 0 && (
-          <p className="text-xs text-muted-foreground">No reports yet.</p>
+          <EmptyState icon={BarChart3} dense title="No saved reports" hint="A report is a question about the board you can re-run — throughput by week, spend by person." />
         )}
         {reports.map((r) => (
           <button
@@ -234,7 +235,7 @@ export function ReportsPanel({
             <BarChart3 className="size-4 shrink-0 text-muted-foreground" />
             <span className="truncate">{r.name}</span>
             {r.visibility === "shared" && (
-              <span className="ml-auto text-[10px] uppercase text-muted-foreground">shared</span>
+              <span className="ml-auto text-micro uppercase text-muted-foreground">shared</span>
             )}
           </button>
         ))}

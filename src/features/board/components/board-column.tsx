@@ -161,7 +161,7 @@ export function BoardColumn({
         ) : (
           <>
             <h2
-              className="flex items-center gap-1.5 truncate text-[13px] font-bold tracking-[0.08em] uppercase"
+              className="flex items-center gap-1.5 truncate text-body font-bold tracking-[0.08em] uppercase"
               title={column.title}
             >
               <span

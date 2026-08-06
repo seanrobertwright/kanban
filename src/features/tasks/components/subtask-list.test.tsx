@@ -108,7 +108,8 @@ describe("SubtaskList display", () => {
 
   it("says so when there are no pieces yet", async () => {
     renderList();
-    expect(await screen.findByText("No subtasks yet.")).toBeDefined();
+    expect(await screen.findByText("No subtasks yet")).toBeDefined();
+    expect(screen.getByText(/break this task into pieces/i)).toBeDefined();
   });
 });
 

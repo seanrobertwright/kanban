@@ -1,7 +1,8 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useEffect, useState } from "react";
-import { ChevronRight, Trash2 } from "lucide-react";
+import { ChevronRight, ListTree, Trash2 } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -129,7 +130,7 @@ export function SubtaskList({
       )}
 
       {!loading && subtasks.length === 0 && (
-        <p className="text-xs text-muted-foreground">No subtasks yet.</p>
+        <EmptyState icon={ListTree} dense title="No subtasks yet" hint="Break this task into pieces. Each piece is a whole task with its own status." />
       )}
 
       {subtasks.length > 0 && (
@@ -149,7 +150,7 @@ export function SubtaskList({
                 {/* The piece's status, the way the board shows it — a piece flows
                     through the workflow independently of the thing it decomposes,
                     so "which column" is the fact worth surfacing here. */}
-                <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-micro text-muted-foreground">
                   {columnNames[subtask.columnId] ?? "—"}
                 </span>
                 <ChevronRight

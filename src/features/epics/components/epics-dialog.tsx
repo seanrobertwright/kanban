@@ -1,5 +1,7 @@
 "use client";
 
+import { Layers } from "lucide-react";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useState } from "react";
 
 import { formatDueDate } from "@/shared/lib/due-date";
@@ -120,7 +122,7 @@ export function EpicsDialog({
         )}
 
         {epics.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No epics yet.</p>
+          <EmptyState icon={Layers} title="No epics yet" hint="An epic groups a body of work one level above a milestone. Tasks and milestones file under it, and its window is read from the work inside." />
         ) : (
           <ul className="grid gap-2">
             {epics.map((epic) => {

@@ -54,7 +54,8 @@ describe("CommentThread", () => {
 
   it("says so when a task has no comments", async () => {
     await renderThread([]);
-    expect(screen.getByText("No comments yet.")).toBeDefined();
+    expect(screen.getByText("No comments yet")).toBeDefined();
+    expect(screen.getByText(/@mention someone/i)).toBeDefined();
   });
 
   it("keeps a comment whose author has been deleted", async () => {

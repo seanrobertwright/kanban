@@ -1,6 +1,9 @@
 "use client";
 
+import { Users } from "lucide-react";
 import { useEffect, useState } from "react";
+
+import { EmptyState } from "@/shared/ui/empty-state";
 
 import type { AgentSummary } from "@/features/agents/types";
 import type { Member } from "@/features/workspaces/types";
@@ -422,7 +425,12 @@ export function InsightsDialog({
                 Workload — open tasks by assignee
               </p>
               {data.workload.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No tasks yet.</p>
+                <EmptyState
+                  icon={Users}
+                  dense
+                  title="No workload to show"
+                  hint="Assign a task to someone and their share of the board appears here."
+                />
               ) : (
                 <table className="w-full text-sm">
                   <tbody>

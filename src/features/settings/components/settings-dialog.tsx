@@ -119,7 +119,7 @@ export function SettingsDialog({
           >
             {groups.map((group) => (
               <div key={group.name} className="contents md:block">
-                <div className="hidden px-2 pt-3 pb-1 text-[11px] font-semibold tracking-wider text-muted-foreground/70 uppercase md:block">
+                <div className="hidden px-2 pt-3 pb-1 text-meta font-semibold tracking-wider text-muted-foreground/70 uppercase md:block">
                   {group.name}
                 </div>
                 {group.items.map((item) => (

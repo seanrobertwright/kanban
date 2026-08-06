@@ -1,5 +1,7 @@
 "use client";
 
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Package } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/shared/ui/button";
@@ -117,7 +119,7 @@ export function ReleasesDialog({
         {!releases ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : releases.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No releases yet.</p>
+          <EmptyState icon={Package} title="No releases yet" hint="A release groups delivered work under a version, so you can say what shipped and when." />
         ) : (
           <ul className="grid gap-2">
             {releases.map((release) => (
@@ -214,7 +216,7 @@ function ReleaseRow({
         >
           <span className="min-w-0 truncate font-medium">{release.name}</span>
           <span
-            className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium capitalize ${
+            className={`shrink-0 rounded px-1.5 py-0.5 text-micro font-medium capitalize ${
               release.state === "released"
                 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                 : "bg-muted text-muted-foreground"

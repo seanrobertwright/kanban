@@ -1,6 +1,9 @@
 "use client";
 
+import { History } from "lucide-react";
 import { useEffect, useState } from "react";
+
+import { EmptyState } from "@/shared/ui/empty-state";
 
 import { PRIORITY_LABELS, PRIORITY_ORDER } from "@/features/tasks/types";
 import { formatDueDate } from "@/shared/lib/due-date";
@@ -341,7 +344,14 @@ export function ActivityFeed({
     );
   }
   if (entries.length === 0) {
-    return <p className="text-xs text-muted-foreground">No history yet.</p>;
+    return (
+      <EmptyState
+        icon={History}
+        dense
+        title="No history yet"
+        hint="Every change to this task is listed here, with who made it and when."
+      />
+    );
   }
 
   return (
@@ -350,7 +360,7 @@ export function ActivityFeed({
         <li key={entry.id} className="flex items-start gap-2.5">
           <Avatar className="size-6">
             <AvatarImage src={entry.actorImage ?? undefined} alt="" />
-            <AvatarFallback className="text-[10px]">
+            <AvatarFallback className="text-micro">
               {actorLabel(entry).slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>

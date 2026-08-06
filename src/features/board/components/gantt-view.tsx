@@ -229,7 +229,7 @@ export function GanttView({
             {ticks.map((t) => (
               <span
                 key={t.offset}
-                className="absolute -translate-x-1/2 text-[10px] tabular-nums text-muted-foreground"
+                className="absolute -translate-x-1/2 text-micro tabular-nums text-muted-foreground"
                 style={{ left: pct(t.offset / w.total) }}
               >
                 {t.label}

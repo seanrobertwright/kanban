@@ -1746,3 +1746,72 @@ PATCH that moved and renamed reported `move_task`/would_hold and
 the search could find; a claim answered 501; `Dry-Run: maybe` answered 400; and
 `set_priority` with `dryRun: true` through the MCP server itself reported
 `urgent` in `after` while `get_task` still read `low`.
+
+## Code-review roadmap item 10 — cyan stops being wallpaper (2026-08-05)
+
+The last roadmap item, and two thirds of it turned out to be already done by
+earlier sessions: the grid floor stopped animating, three display faces
+collapsed to Geist plus Orbitron-for-the-brand-mark, `C` / `G B` / `G L` / `G S`
+chords and their palette hints shipped with the ⌘K work, and the density toggle
+landed with compact mode. What was left was the part the review named first —
+"the theme fights the enterprise goal" — plus the empty states.
+
+- [x] **Borders are neutral, and that is the whole argument.** Cyan was doing
+      two jobs: the edge of every box, and "this element has focus". A signal
+      cannot be read inside its own wallpaper. `--border`, `--input`,
+      `--sidebar-border` and the scrollbar thumbs are now a cool grey alpha in
+      dark and a neutral hairline in light; `--ring` stays cyan. Surfaces and
+      primary are untouched, so it is the same product with the shouting turned
+      down. Cyan now means exactly four things: focus, selection, the primary
+      action, the brand mark.
+- [x] **The primary button lost its permanent halo.** `dark:shadow-[0_0_14px_
+      rgba(0,229,255,0.35)]` sat on every primary button in the app, competing
+      with the focus ring — the one cyan halo that carries information — and it
+      hardcoded an rgba of a colour that has a token. The button is still the
+      only filled cyan control on any screen, which is what made the glow
+      redundant rather than load-bearing.
+- [x] **33 ad-hoc `text-[Npx]` became three named tokens.** `micro` (10px),
+      `meta` (11px), `body` (13px), by role rather than by pixel, with the
+      fourth rung being Tailwind's own `text-sm` — naming 14px twice would have
+      invited half the codebase to say `text-ui` and the other half `text-sm`,
+      which is the ad-hoc habit wearing a token's clothes. Deliberately *not* a
+      resize: every token is the value its call sites already used, so the diff
+      changes what the code says and not what it renders. The three 9px sites
+      folded into micro. `label-mono`, the scale's largest consumer, now reads
+      the token instead of a literal.
+- [x] **21 designed empty states, up from 2.** The primitive existed and almost
+      nothing used it; nineteen files answered "nothing here" with a grey line
+      that cannot say whether a view is empty because nothing exists yet or
+      because a filter excluded everything — opposite next actions. Each one now
+      says which situation it is and what fills it. `EmptyState` grew a `dense`
+      variant for the sections (subtasks, comments, workload, chat) where the
+      full-size block would dwarf its container, because the alternative was
+      every call site inventing a padding override.
+- [x] **Left alone on purpose:** the "No members found" line inside a Select,
+      and the two result boxes in Docs ("No saved revisions yet", "No unchecked
+      Markdown actions found"). Those are transient answers to an action, not
+      empty collections a reader could fill, and a bordered block with an icon
+      would be louder than the thing it reports.
+- [x] **The `// Group` costume is gone from the palette.** A comment marker is a
+      costume, and it reads as one the second time you see it; `label-mono`
+      already says "this is a label".
+- [x] **Three component tests updated, not deleted.** They asserted the old copy
+      down to its full stop; they now assert the new title *and* the hint, which
+      is the part that makes an empty state designed rather than decorated.
+
+**Suite: 1277 passing** (1 expected fail), 146 files — unchanged count, three
+assertions rewritten. tsc, build and eslint clean bar the pre-existing component
+errors. Verified live at the sign-in page in both states: the card and the SSO
+button now carry neutral hairlines while the primary keeps its cyan, and the
+halo is gone.
+
+**Environment note, because it cost an hour and will again.** This working tree
+is inside OneDrive, and a second machine syncs the same folder. Mid-pass it
+began renaming edited files to `*-Living-Room.tsx` while reverting the
+originals, and it *deleted five tracked source files* outright after they were
+edited. Everything was recovered from git and the conflict copies, but the work
+in those five had to be redone. Whole-file writes and rapid bulk scripts
+provoked it; single small edits survived. Pause OneDrive before any pass that
+touches many files at once — or move the repo off OneDrive.
+`scripts/create-agent-Living-Room.mjs` is an older conflict copy of the same
+kind, still unresolved and left alone.

@@ -1,5 +1,7 @@
 "use client";
 
+import { ClipboardList } from "lucide-react";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/shared/ui/button";
@@ -123,7 +125,7 @@ export function FormsDialog({
         )}
 
         {forms.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No forms yet.</p>
+          <EmptyState icon={ClipboardList} title="No forms yet" hint="A form is a public intake page: someone outside the workspace submits it, and the answers land in the column you choose." />
         ) : (
           <ul className="grid gap-3">
             {forms.map((form) => (

@@ -1,6 +1,9 @@
 "use client";
 
+import { Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
+
+import { EmptyState } from "@/shared/ui/empty-state";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -137,7 +140,11 @@ export function AutomationsDialog({
         )}
 
         {rules.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No automations yet.</p>
+          <EmptyState
+            icon={Workflow}
+            title="No automations yet"
+            hint="A rule watches for something happening on this board and does the next step for you — move a card when it is assigned, notify when one turns urgent."
+          />
         ) : (
           <ul className="grid gap-3">
             {rules.map((rule) => (
@@ -928,13 +935,13 @@ function WorkflowTemplates({
               <p className="truncate text-xs font-medium">
                 {t.name}
                 {t.isBuiltin && (
-                  <span className="ml-2 rounded bg-muted px-1 text-[10px] text-muted-foreground">
+                  <span className="ml-2 rounded bg-muted px-1 text-micro text-muted-foreground">
                     built-in
                   </span>
                 )}
               </p>
               {t.description && (
-                <p className="truncate text-[11px] text-muted-foreground">{t.description}</p>
+                <p className="truncate text-meta text-muted-foreground">{t.description}</p>
               )}
             </div>
             <Button

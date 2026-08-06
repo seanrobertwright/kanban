@@ -8,8 +8,13 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // No ambient glow. The primary action is already the only filled cyan
+        // control on any screen; a permanent 14px halo on top of that was
+        // competing with the focus ring, which is the one cyan halo that means
+        // something. (It was also a hardcoded rgba of a colour that has a
+        // token — the same ad-hoc habit the type scale just retired.)
         default:
-          "bg-primary text-primary-foreground font-bold tracking-wide uppercase hover:bg-primary/80 dark:border-primary dark:bg-primary/12 dark:text-primary dark:shadow-[0_0_14px_rgba(0,229,255,0.35)] dark:hover:bg-primary/20",
+          "bg-primary text-primary-foreground font-bold tracking-wide uppercase hover:bg-primary/80 dark:border-primary dark:bg-primary/12 dark:text-primary dark:hover:bg-primary/20",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:

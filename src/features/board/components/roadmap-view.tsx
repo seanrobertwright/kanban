@@ -82,7 +82,7 @@ export function RoadmapView({
                 {ticks.map((t) => (
                   <span
                     key={t.offset}
-                    className="absolute -translate-x-1/2 text-[10px] tabular-nums text-muted-foreground"
+                    className="absolute -translate-x-1/2 text-micro tabular-nums text-muted-foreground"
                     style={{ left: pct(t.offset) }}
                   >
                     {t.label}
@@ -108,7 +108,7 @@ export function RoadmapView({
                   >
                     {lane.epicName}
                   </span>
-                  <span className="text-[11px] tabular-nums text-muted-foreground">
+                  <span className="text-meta tabular-nums text-muted-foreground">
                     {lane.done}/{lane.total} tasks done
                   </span>
                   {lane.undated.length > 0 && (
@@ -119,7 +119,7 @@ export function RoadmapView({
                           type="button"
                           onClick={onOpenMilestones}
                           title={`${m.name} · no due date`}
-                          className="max-w-40 truncate rounded border border-dashed px-1 py-0.5 text-[10px] hover:bg-muted/50"
+                          className="max-w-40 truncate rounded border border-dashed px-1 py-0.5 text-micro hover:bg-muted/50"
                         >
                           {m.name}
                         </button>

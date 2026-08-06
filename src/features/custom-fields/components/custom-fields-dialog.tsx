@@ -1,5 +1,7 @@
 "use client";
 
+import { SlidersHorizontal } from "lucide-react";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/shared/ui/button";
@@ -169,7 +171,7 @@ export function CustomFieldsDialog({
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground">No custom fields yet.</p>
+          <EmptyState icon={SlidersHorizontal} title="No custom fields yet" hint="A custom field adds one board-specific answer to every task — a client, an environment, a size." />
         )}
 
         {canEdit && (

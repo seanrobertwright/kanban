@@ -345,7 +345,7 @@ export function ListView({
                   title="Rank by prioritisation score"
                 >
                   Score
-                  <span aria-hidden className="text-[10px]">
+                  <span aria-hidden className="text-micro">
                     {scoreSort === "desc" ? "▼" : scoreSort === "asc" ? "▲" : "↕"}
                   </span>
                 </button>
@@ -433,7 +433,7 @@ export function ListView({
                             src={assignee.image ?? undefined}
                             alt=""
                           />
-                          <AvatarFallback className="text-[9px]">
+                          <AvatarFallback className="text-micro">
                             {assignee.name.slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>

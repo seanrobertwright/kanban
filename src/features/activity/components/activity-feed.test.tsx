@@ -209,7 +209,13 @@ describe("ActivityFeed", () => {
         memberNames={MEMBER_NAMES}
       />
     );
-    expect(await screen.findByText("No history yet.")).toBeDefined();
+    // The designed empty state, not a grey line: it has to say which situation
+    // this is *and* what fills it, or a reader cannot tell "nothing happened
+    // yet" from "this failed to load".
+    expect(await screen.findByText("No history yet")).toBeDefined();
+    expect(
+      screen.getByText(/every change to this task is listed here/i)
+    ).toBeDefined();
   });
 
   describe("assignment", () => {
