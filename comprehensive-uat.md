@@ -485,16 +485,16 @@ All inside the **Edit task** dialog for `UAT-Task-01` (open it, scroll below the
 
 ## Suite 8 — Views (each lens)
 
-Prepare: ensure `UAT-Task-01` has start+due dates (UAT-025) and `UAT-Task-02` is blocked by `UAT-Task-01` (UAT-031).
+Prepare: ensure **both** `UAT-Task-01` and `UAT-Task-02` have start+due dates (UAT-025), the second pair falling after the first, and that `UAT-Task-02` is blocked by `UAT-Task-01` (UAT-031). Dates on both matter: an undated task has no bar, so UAT-044's arrow would have no second endpoint to reach.
 
 ### UAT-041 — List view and bulk edit
 1. In the view switcher click **List**.
-   - **Expected:** a table with header columns **Task, Status, Assignee, Priority, Due, Labels** (plus custom-field columns when defined), one row per task. Each row has a checkbox; the header has a **Select all tasks** checkbox.
+   - **Expected:** a table with header columns **Task, Status, Assignee, Priority, Score, Due, Labels** (plus custom-field columns when defined), one row per task. Each row has a checkbox; the header has a **Select all tasks** checkbox.
 2. Tick `UAT-Task-02` and `UAT-Task-03`; in the bulk controls choose **Move to…** (**Move selected to column**) → `UAT-Col-Doing`.
-   - **Expected:** both rows show Status `UAT-Col-Doing`.
-3. With both selected, choose **Set priority…** → **High**.
+   - **Expected:** both rows show Status `UAT-Col-Doing`. A WIP limit does not refuse the move — limits are advisory and render as `n/limit` when exceeded.
+3. Re-tick both rows — the selection clears after each bulk action — then choose **Set priority…** → **High**.
    - **Expected:** both rows show High.
-4. Choose **Assign to…** → your name.
+4. Re-tick both rows and choose **Assign to…** → your name.
    - **Expected:** both rows show you. Move both back to `UAT-Col-Todo` with **Move to…**.
 5. Click a row's task title.
    - **Expected:** the Edit task dialog opens. **Cancel**.
@@ -523,7 +523,7 @@ Prepare: ensure `UAT-Task-01` has start+due dates (UAT-025) and `UAT-Task-02` is
 
 ### UAT-045 — Backlog view
 1. Click **Backlog**.
-   - **Expected:** tasks listed flat, grouped by sprint — all currently under a Backlog group (no sprints yet). Each row offers a sprint control (re-verified in UAT-055 once sprints exist).
+   - **Expected:** tasks listed flat, grouped by sprint — all currently under a **Backlog** bucket (no sprints yet), which carries a count and points rollup. Scheduling is by dragging a card into a sprint bucket, not by a per-row control, so with no sprints the Backlog bucket is the only one (re-verified in UAT-055 once sprints exist). A blocked task shows its blocked-by count here.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
 
