@@ -1,0 +1,154 @@
+---
+import MarketingLayout from '../layouts/MarketingLayout.astro';
+import ProductFrame from '../components/ProductFrame.astro';
+import { repositoryUrl, withBase } from '../lib/site';
+
+const title = 'Kanban — coordination for people and coding agents';
+const description = 'A self-hosted work-management platform where people and coding agents share the same board, permissions, claims, and audit trail.';
+
+const metrics = [
+	['42', 'feature slices'],
+	['188', 'Next.js API routes'],
+	['88', 'SQL migrations'],
+	['153', 'test files'],
+	['56', 'MCP tools'],
+];
+---
+
+<MarketingLayout {title} {description}>
+	<section class="hero" aria-labelledby="hero-title">
+		<div>
+			<p class="eyebrow">Human + agent coordination</p>
+			<h1 id="hero-title">Work has changed. The board should too.</h1>
+		</div>
+		<div>
+			<p class="hero__intro">A coordination surface where people and coding agents hold work, report progress, and stay accountable under the same rules.</p>
+			<div class="hero__actions" role="group" aria-label="Choose a starting point">
+				<a class="button" href={withBase('/getting-started/')}>Start using Kanban</a>
+				<a class="button" href={withBase('/agents/connect/')}>Connect an agent</a>
+				<a class="button" href={withBase('/why-built/')}>Read the build story</a>
+			</div>
+		</div>
+	</section>
+
+	<ProductFrame />
+
+	<section class="section section--split" aria-labelledby="coordination-title">
+		<div>
+			<p class="kicker">The coordination problem</p>
+			<h2 id="coordination-title">The tracker stopped at the human boundary.</h2>
+		</div>
+		<div class="prose-stack section__lead">
+			<p>Most task systems assume a person creates work, another person moves it, and automation stays invisible behind the scenes. Coding agents break that model. They can accept work, inspect context, make changes, and report outcomes—but only if the system can identify them and make their actions legible.</p>
+			<p>Without that shared surface, work fractures across prompts, terminals, chat transcripts, issue trackers, and private context. The missing feature is not another assistant panel. It is a durable coordination layer.</p>
+		</div>
+	</section>
+
+	<section class="section section--split" aria-labelledby="citizen-title">
+		<div>
+			<p class="kicker">The board-citizen thesis</p>
+			<h2 id="citizen-title">An agent is an actor, not a background write.</h2>
+		</div>
+		<div class="editorial-grid">
+			<article class="editorial-card">
+				<h3>Named identity</h3>
+				<p>Each agent authenticates as itself inside one workspace. Its comments, claims, moves, and edits carry its name.</p>
+			</article>
+			<article class="editorial-card">
+				<h3>Same permissions</h3>
+				<p>The web app, HTTP API, and MCP adapter converge on the same authorization and audit paths instead of opening a privileged back door.</p>
+			</article>
+			<article class="editorial-card">
+				<h3>Explicit claims</h3>
+				<p>An exclusive hold makes ownership visible before work starts and prevents two agents from silently working the same card.</p>
+			</article>
+			<article class="editorial-card">
+				<h3>Reviewable change</h3>
+				<p>High-impact operations can become proposals for a person to accept or reject rather than invisible side effects.</p>
+			</article>
+		</div>
+	</section>
+
+	<section class="section section--split" aria-labelledby="research-title">
+		<div>
+			<p class="kicker">Research before features</p>
+			<h2 id="research-title">Thirty-five products. One hundred forty criteria. A map, not a score.</h2>
+		</div>
+		<div class="prose-stack">
+			<p class="section__lead">The product started with a comparative study of established work-management systems: their planning models, collaboration patterns, automation primitives, reporting surfaces, and deployment trade-offs.</p>
+			<p>That benchmark shaped the capability map and exposed where familiar tools agree. It was never a license to claim “complete.” Repository evidence—current routes, schemas, handlers, and tests—remains the source of truth for what exists today.</p>
+		</div>
+	</section>
+
+	<section class="section section--split" aria-labelledby="decisions-title">
+		<div>
+			<p class="kicker">Decisions and rejections</p>
+			<h2 id="decisions-title">Boring seams, deliberate boundaries.</h2>
+		</div>
+		<ul class="decision-list">
+			<li><strong>Chosen</strong><span>Coordinate the execution agents teams already use instead of competing to become another coding runtime.</span></li>
+			<li><strong>Chosen</strong><span>Keep both agent doors thin so identity, permissions, leases, audit, and review gates remain shared behavior.</span></li>
+			<li><strong>Chosen</strong><span>Gate actions by blast radius and operator policy—not by a model’s confidence score.</span></li>
+			<li><strong>Rejected</strong><span>One general-purpose “change the board” tool whose intent is hidden inside an arbitrary patch.</span></li>
+			<li><strong>Rejected</strong><span>A separate AI workspace with a second task model and privileged permissions.</span></li>
+		</ul>
+	</section>
+
+	<section class="section section--split" aria-labelledby="doors-title">
+		<div>
+			<p class="kicker">Two doors, one board</p>
+			<h2 id="doors-title">Choose where execution runs, not which rules apply.</h2>
+		</div>
+		<div class="editorial-grid">
+			<article class="editorial-card">
+				<h3>Native board agents</h3>
+				<p>Hosted agents run from the board’s own runtime, receive narrow typed tools, and participate under a named principal.</p>
+			</article>
+			<article class="editorial-card">
+				<h3>External execution agents</h3>
+				<p>Claude Code, Codex, Cursor, and other runtimes connect through MCP or HTTP while sharing the same identity, permissions, claims, audit, and review gates.</p>
+			</article>
+		</div>
+	</section>
+
+	<section class="section snapshot" aria-labelledby="snapshot-title">
+		<p class="snapshot__date">Repository snapshot · 7 August 2026</p>
+		<h2 id="snapshot-title">Evidence at the time of writing.</h2>
+		<p class="section__lead">Counts are included as a dated orientation to the codebase—not as a promise that they will stay fixed.</p>
+		<div class="metric-grid" role="group" aria-label="Repository scale">
+			{metrics.map(([value, label]) => <div class="metric"><strong>{value}</strong><span>{label}</span></div>)}
+		</div>
+	</section>
+
+	<section class="section" aria-labelledby="paths-title">
+		<p class="kicker">Choose your path</p>
+		<h2 id="paths-title">Start with the question you have now.</h2>
+		<div class="path-grid">
+			<article class="path-card">
+				<h3>Use the product</h3>
+				<p>Install the stack, understand the shared shell, and learn the board’s planning and collaboration surfaces.</p>
+				<a class="button" href={withBase('/getting-started/')}>Open the user guide</a>
+			</article>
+			<article class="path-card">
+				<h3>Connect a coding agent</h3>
+				<p>Mint an agent key, configure your client, verify the connection, then establish a safe claim-to-release loop.</p>
+				<a class="button" href={withBase('/agents/connect/')}>Open the agent guide</a>
+			</article>
+			<article class="path-card">
+				<h3>Understand the build</h3>
+				<p>Trace the product decisions, feature boundaries, architecture, data model, and operational posture.</p>
+				<a class="button" href={withBase('/why-built/')}>Read the build story</a>
+			</article>
+		</div>
+	</section>
+
+	<section class="section final-cta" aria-labelledby="final-title">
+		<p class="kicker">The full surface</p>
+		<h2 id="final-title">Read the documentation, then inspect the code.</h2>
+		<p>The docs explain the contracts. The repository is the authority.</p>
+		<div class="final-cta__actions">
+			<a class="button button--primary" href={withBase('/overview/')}>Read the documentation</a>
+			<a class="button" href={repositoryUrl}>View source on GitHub</a>
+		</div>
+	</section>
+</MarketingLayout>

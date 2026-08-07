@@ -1,0 +1,40 @@
+---
+import SiteHeader from '../components/SiteHeader.astro';
+import '../styles/theme.css';
+import '../styles/marketing.css';
+
+interface Props {
+	title: string;
+	description: string;
+	noIndex?: boolean;
+}
+
+const { title, description, noIndex = false } = Astro.props;
+const canonical = noIndex ? undefined : Astro.site ? new URL(Astro.url.pathname, Astro.site) : Astro.url;
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="description" content={description} />
+		<meta name="theme-color" content="#080b12" />
+		{canonical && <link rel="canonical" href={canonical} />}
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		{canonical && <meta property="og:url" content={canonical} />}
+		<meta name="twitter:card" content="summary_large_image" />
+		{noIndex && <meta name="robots" content="noindex" />}
+		<title>{title}</title>
+	</head>
+	<body class="marketing-page">
+		<a class="skip-link" href="#main">Skip to content</a>
+		<SiteHeader />
+		<main id="main"><slot /></main>
+		<footer class="site-footer">
+			<p>Built in the open for people and agents who share responsibility for work.</p>
+		</footer>
+	</body>
+</html>

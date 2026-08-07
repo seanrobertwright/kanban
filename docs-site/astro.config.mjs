@@ -2,17 +2,18 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
-// Deployed to GitHub Pages at https://seanrobertwright.github.io/kanban/
-// by .github/workflows/deploy-docs.yml — `site` + `base` must match that
-// origin/path pair or every asset link 404s.
+// GitHub Pages publishes this project at the repository subpath below.
 export default defineConfig({
 	site: 'https://seanrobertwright.github.io',
 	base: '/kanban',
 	integrations: [
 		starlight({
 			title: 'Kanban',
-			description:
-				'A self-hosted, agent-native kanban and work-management platform.',
+			description: 'A self-hosted coordination surface for people and coding agents.',
+			disable404Route: true,
+			components: {
+				Search: './src/components/Search.astro',
+			},
 			social: [
 				{
 					icon: 'github',
@@ -20,38 +21,46 @@ export default defineConfig({
 					href: 'https://github.com/seanrobertwright/kanban',
 				},
 			],
-			customCss: ['./src/styles/neon.css'],
+			customCss: ['./src/styles/theme.css'],
 			sidebar: [
 				{
 					label: 'Start',
 					items: [
-						{ label: 'Introduction', slug: 'index' },
-						{ label: 'Getting started', slug: 'getting-started' },
-					],
-				},
-				{
-					label: 'Product',
-					items: [
+						{ label: 'Overview', slug: 'overview' },
 						{ label: 'Feature overview', slug: 'features' },
+						{ label: 'Getting started', slug: 'getting-started' },
 						{ label: 'Using the app', slug: 'using-the-app' },
 					],
 				},
 				{
-					label: 'Guide',
-					// Ten capability-area pages, ordered by their frontmatter
-					// `sidebar.order` (work items → planning → agile → … → AI).
-					items: [{ autogenerate: { directory: 'guide' } }],
+					label: 'Use',
+					items: [
+						{ label: 'Work items', slug: 'guide/work-items' },
+						{ label: 'Planning views', slug: 'guide/planning-views' },
+						{ label: 'Agile delivery', slug: 'guide/agile' },
+						{ label: 'Automations', slug: 'guide/automations' },
+						{ label: 'Automation cookbook', slug: 'guide/automations-cookbook' },
+						{ label: 'Collaboration & knowledge', slug: 'guide/collaboration' },
+						{ label: 'Integrations', slug: 'guide/integrations' },
+						{ label: 'Git & development', slug: 'guide/git-devops' },
+						{ label: 'Reporting', slug: 'guide/reporting' },
+						{ label: 'Security & administration', slug: 'guide/security-admin' },
+					],
 				},
 				{
 					label: 'Agents',
 					items: [
-						{ label: 'Agent HTTP API', slug: 'agents/http-api' },
-						{ label: 'MCP server', slug: 'agents/mcp' },
+						{ label: 'AI agents', slug: 'guide/ai-agents' },
+						{ label: 'Connect an agent', slug: 'agents/connect' },
+						{ label: 'MCP reference', slug: 'agents/mcp' },
+						{ label: 'Agent workflows', slug: 'agents/workflows' },
+						{ label: 'HTTP API', slug: 'agents/http-api' },
 					],
 				},
 				{
-					label: 'Operate',
+					label: 'Build & operate',
 					items: [
+						{ label: 'Why I built Kanban', slug: 'why-built' },
 						{ label: 'Architecture', slug: 'architecture' },
 						{ label: 'Enterprise deployment', slug: 'enterprise' },
 					],

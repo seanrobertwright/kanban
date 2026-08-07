@@ -11,7 +11,7 @@
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down",
     "db:auth": "better-auth migrate --yes --config src/features/auth/server/auth.ts",
-    "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
+    "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
     "db:setup": "npm run db:auth && npm run db:migrate",
     "create-agent": "node --env-file=.env.local scripts/create-agent.mjs",
     "mcp": "node mcp/server.mjs",

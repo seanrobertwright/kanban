@@ -1,0 +1,24 @@
+---
+import { repositoryUrl, withBase } from '../lib/site';
+
+const links = [
+	{ label: 'Overview', href: withBase('/overview/') },
+	{ label: 'Documentation', href: withBase('/getting-started/') },
+	{ label: 'Connect an agent', href: withBase('/agents/connect/') },
+];
+---
+
+<header class="site-header">
+	<div class="site-header__inner">
+		<a class="site-header__brand" href={withBase('/')} aria-label="Kanban home">
+			<span class="site-header__mark" aria-hidden="true">K</span>
+			<span>Kanban</span>
+		</a>
+		<nav aria-label="Primary navigation">
+			<ul class="site-header__nav">
+				{links.map((link) => <li><a href={link.href}>{link.label}</a></li>)}
+			</ul>
+		</nav>
+		<a class="button button--quiet site-header__source" href={repositoryUrl}>View source</a>
+	</div>
+</header>

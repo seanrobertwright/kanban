@@ -1,0 +1,24 @@
+---
+import { Image } from 'astro:assets';
+import board from '../assets/guide-board.jpg';
+---
+
+<figure class="product-frame">
+	<div class="product-frame__shell">
+		<div class="product-frame__bar" aria-hidden="true">
+			<span class="product-frame__dot"></span>
+			<span class="product-frame__dot"></span>
+			<span class="product-frame__dot"></span>
+		</div>
+		<Image
+			src={board}
+			alt="Kanban board with Backlog, In progress, Review, and Done columns, task cards, a workspace sidebar, and shared board controls"
+			width={2880}
+			height={1800}
+			loading="eager"
+			fetchpriority="high"
+			quality={88}
+		/>
+	</div>
+	<figcaption>A real board view: one shared surface for planning, progress, review, and accountable hand-offs.</figcaption>
+</figure>

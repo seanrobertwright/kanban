@@ -179,8 +179,11 @@ Agents are first-class assignees that live beside humans. There are two kinds
 6. **Release** — the hold is dropped when the agent stops or finishes.
 
 An agent's role works like a human's: a viewer agent can hold a task it cannot
-move, exactly as a viewer human can. Destructive operations (delete, archive)
-are simply not in any agent's toolset.
+move, exactly as a viewer human can. Task deletion and archiving are absent
+from the named MCP toolset. The direct HTTP API does expose task deletion to
+member-role agent principals, so operators must treat agent-key distribution
+and role assignment as the destructive-operation boundary; the approval policy
+does not mediate this direct route.
 
 ### Review a run: the changeset
 

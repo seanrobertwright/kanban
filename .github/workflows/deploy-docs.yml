@@ -21,13 +21,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Build Astro site
-        uses: withastro/action@v3
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install, build, validate, and upload documentation
+        uses: withastro/action@v6
         with:
           path: ./docs-site
-          # Astro 7 requires Node >=22.12; the action defaults to 20.
-          node-version: 22
+          node-version: 24
+          build-cmd: npm run check
 
   deploy:
     needs: build
@@ -38,4 +40,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

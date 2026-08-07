@@ -1,0 +1,18 @@
+---
+import MarketingLayout from '../layouts/MarketingLayout.astro';
+import { withBase } from '../lib/site';
+---
+
+<MarketingLayout title="Page not found — Kanban" description="The requested Kanban documentation page could not be found." noIndex>
+	<section class="error-page" aria-labelledby="error-title">
+		<div>
+			<p class="error-page__code">404 · UNASSIGNED ROUTE</p>
+			<h1 id="error-title">This card left the board.</h1>
+			<p>The route may have moved, or the link may no longer describe the current documentation.</p>
+			<div class="final-cta__actions">
+				<a class="button button--primary" href={withBase('/')}>Return home</a>
+				<a class="button" href={withBase('/overview/')}>Browse the overview</a>
+			</div>
+		</div>
+	</section>
+</MarketingLayout>
