@@ -206,6 +206,18 @@ describe("workspace knowledge Q&A", () => {
       expect(taskIds(citations)).toContain(denseId);
     });
 
+    it("answers a sentence question whose connective words match nothing (OBS-12)", async () => {
+      // websearch_to_tsquery ANDs every word, so "…exist?" used to demand a
+      // source containing "exist" and the dialog's own placeholder phrasing
+      // returned zero sources. The any-word arm retries the same words OR'd.
+      const { citations } = await askWorkspaceKnowledge(
+        alice,
+        workspaceId,
+        `What ${RANK} migrations exist?`
+      );
+      expect(taskIds(citations)).toContain(denseId);
+    });
+
     it("falls back to fuzzy title matching for a typo", async () => {
       // No full-text match: 'migratoin' is not a word the workspace contains.
       const { citations } = await askWorkspaceKnowledge(

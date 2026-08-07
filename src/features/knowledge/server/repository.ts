@@ -114,6 +114,26 @@ export async function askWorkspaceKnowledge(
     params
   );
 
+  // Any-word arm (OBS-12): websearch_to_tsquery ANDs every word, so a sentence
+  // question fails on its own connective ("What UAT tasks exist?" demands a
+  // source containing "exist") — including the dialog's own placeholder. When
+  // AND finds nothing, retry the same words OR'd; stemming already dropped the
+  // stopwords, and ts_rank still puts the rows matching MORE of the words first.
+  if (!citations.length) {
+    const anyWord = term.split(/\s+/).filter(Boolean).join(" OR ");
+    if (anyWord !== term) {
+      citations = await query<KnowledgeCitation>(
+        `WITH matches AS (${sources})
+         ${select}
+           FROM matches, websearch_to_tsquery('english', $2) AS q
+          WHERE tsv @@ q
+          ORDER BY ts_rank(tsv, q) DESC, id DESC
+          LIMIT 12`,
+        [workspaceId, anyWord, EXCERPT_LENGTH, boardIds, fullReader, actor]
+      );
+    }
+  }
+
   if (!citations.length) {
     citations = await query<KnowledgeCitation>(
       `WITH matches AS (${sources})
