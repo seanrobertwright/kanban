@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-Tasks are the unit of work. Every task lives in a column on a board, opens in a slide-over panel, and carries the metadata described on this page. Viewers can read everything here; changing anything requires the member role or above, and a few actions are called out below as admin-only.
+Tasks are the unit of work. Every task lives in a column on a board, and its `⋯` menu opens a slide-over editor with the metadata described on this page. Viewers can read everything here; changing anything requires the member role or above, and a few actions are called out below as admin-only.
 
 ![The board lens: four columns of task cards, each showing its priority dot, type mark, labels, and story-point estimate](../../../assets/guide-board.jpg)
 
@@ -17,7 +17,7 @@ Every task has a type — `Task`, `Bug`, or `Story` — set in the panel's `Type
 
 ## The task panel
 
-Clicking a card (or choosing `Edit` from its `⋯` menu) opens the task in a slide-over panel on the right, with the board still visible behind it. Content fields save when you press `Save changes`; the panel's sections below the fields (subtasks, checklist, attachments, comments, and so on) write immediately.
+Choose `Edit` from a card's `⋯` menu to open the task in a slide-over panel on the right, with the board still visible behind it. Content fields save when you press `Save changes`; the panel's sections below the fields (subtasks, checklist, attachments, comments, and so on) write immediately.
 
 ![The task panel open as a right slide-over, showing title, description, assignee, priority, dates, type, estimate, value/risk, sprint, and labels](../../../assets/guide-task-detail.jpg)
 
@@ -71,7 +71,7 @@ The done column is a per-board designation: open a column's `⋯` menu and choos
 
 ## Custom fields
 
-Custom fields are board-scoped metadata definitions — extra columns every task on the board can answer. Click the `Fields` button in the board toolbar to open the **Custom fields** dialog:
+Custom fields are board-scoped metadata definitions — extra columns every task on the board can answer. Open **Settings** in the sidebar, then choose **Custom fields**:
 
 1. Under `New field`, name the field and pick a type: `Text`, `Number`, `Date`, `Select`, or `Checkbox`.
 2. For a `Select`, list its options comma-separated (e.g. `Low, Medium, High`).
@@ -85,13 +85,13 @@ Deleting a field deletes its values on every task, which is why the dialog's `De
 
 ## Task templates
 
-Templates are saved task shapes — title, description, priority, and labels — shared across the workspace. Click `Templates` in the board toolbar to manage them: the form at the bottom creates a template, and each row's pencil/trash icons edit or delete one. Viewers can read the list but not change it.
+Templates are saved task shapes — title, description, priority, and labels — shared across the workspace. Open **Settings** in the sidebar, then choose **Templates**: the form at the bottom creates a template, and each row's pencil/trash icons edit or delete one. Viewers can read the list but not change it.
 
 To use one, open a `New task` dialog and pick from the `Start from a template` select at the top. Choosing a template pre-fills the form — it is a starting point, not a lock, so adjust anything before clicking `Create task`. `Blank task` resets nothing and is safe to leave selected.
 
 ## Bulk edit
 
-Bulk edit lives in the **List** view (switch views with the toolbar's toggle). Members see a checkbox on every row plus a select-all box in the header; tick some rows and a bulk bar appears above the table showing `N selected` with:
+Bulk edit lives in the **List** view (choose `List` in the board's view switcher). Members see a checkbox on every row plus a select-all box in the header; tick some rows and a bulk bar appears above the table showing `N selected` with:
 
 - `Move to…` — send all selected tasks to a column.
 - `Set priority…` — apply one priority to all.
@@ -111,7 +111,7 @@ Priority renders on cards as a colored dot before the title: gray for `Low`, blu
 
 ## Labels
 
-Labels are a workspace-scoped vocabulary: every board in the workspace shares one list, and tasks pick from it. Click `Labels` in the board toolbar to open the manager:
+Labels are a workspace-scoped vocabulary: every board in the workspace shares one list, and tasks pick from it. Open **Settings** in the sidebar, then choose **Labels**:
 
 - `New label` names a label (32 characters max) and picks one of seven colors from the swatch row. Creating is member+.
 - Deleting a label is **admin-only**, because it strips the label from every task wearing it.
@@ -125,6 +125,7 @@ Due dates show on the trailing edge of the card. Once the date is in the past, i
 ## Activity history
 
 Every existing task ends with a **History** feed: creations, moves between columns (named), field changes (priority reads as "raised"/"lowered"), label changes, comments, time entries, and agent actions, each attributed to the person or agent that did it. The feed refreshes as you comment, so the receipt below always matches the conversation above.
+
 
 ## Comments and @mentions
 

@@ -1,15 +1,15 @@
 ---
 title: Using the app
-description: The shell, the eight board lenses, and the command palette.
+description: The shell, the nine board lenses, and the command palette.
 ---
 
 ## The shell
 
 The app is one screen with a sidebar and a board:
 
-- **Sidebar** — brand, the workspace/board switcher, and the tool panels
-  (Docs, Chat, Whiteboards, Programs, Scaled Agile, Portfolio, Reports, Admin
-  console). Your identity and role sit in the footer.
+- **Sidebar** — brand, workspace / board switcher, tool links (Docs, Chat,
+  Whiteboards, Programs, Scaled Agile, Portfolio, Reports), and **Settings**.
+  Your identity and role sit in the footer.
 - **Header** — workspace / board breadcrumb, the member avatar stack, and
   notifications.
 - **Board area** — the current lens over the board's tasks.
@@ -19,9 +19,9 @@ toggle away in the sidebar footer.
 
 ![The app shell: sidebar with brand, workspace switcher and tools, header with breadcrumb, and the board lens](../../assets/board.jpg)
 
-## Eight lenses, one board
+## Nine lenses, one board
 
-The same tasks, cut eight ways — switch with the tab row or the palette:
+The same tasks, cut nine ways — switch with the primary tabs, **More views**, or the palette:
 
 | Lens | What it shows |
 |---|---|
@@ -33,6 +33,7 @@ The same tasks, cut eight ways — switch with the tab row or the palette:
 | **Backlog** | The sprint-planning queue (drag to a sprint). |
 | **Roadmap** | Epic swimlanes over milestone dates. |
 | **Dashboard** | Stat tiles, per-column rollups, and an at-risk list — all derived live from the board. |
+| **Requests** | Form-submitted work grouped by current status and SLA. |
 
 Any lens + filter combination can be saved as a named view.
 
@@ -43,7 +44,7 @@ Any lens + filter combination can be saved as a named view.
 `Ctrl`/`⌘` + `K` anywhere (or the sidebar search pill):
 
 - **Create** — new task in the first column.
-- **Views** — jump between the eight lenses.
+- **Views** — jump between the nine lenses.
 - **Panels** — open any board panel (Templates, Labels, Sprints, Milestones,
   Releases, Epics, Objectives, Fields, Insights, Schedule, Timesheet, Forms,
   Automations, Requests, Capacity, Budget, Discovery).
@@ -56,11 +57,11 @@ Arrow keys move, `Enter` runs, `Esc` closes.
 
 ## Tasks
 
-A task opens as a right slide-over panel, so the board stays in sight. Beyond
-title/description/assignee/priority/dates, tasks carry estimates, value/risk
-scores, objectives, recurrence, labels, custom fields, subtasks, checklists,
-dependencies, attachments, comments with mentions, time entries, linked
-branches/PRs/commits/CI, and a full activity history.
+A task's `⋯` menu opens its right slide-over editor, so the board stays in
+sight. Beyond title/description/assignee/priority/dates, tasks carry estimates,
+value/risk scores, objectives, recurrence, labels, custom fields, subtasks,
+checklists, dependencies, attachments, comments with mentions, time entries,
+linked branches/PRs/commits/CI, and a full activity history.
 
 An assignee can be a **person or an agent** — both count in capacity planning,
 and an agent working a task holds an exclusive claim the card shows.

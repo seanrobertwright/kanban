@@ -5,7 +5,7 @@ sidebar:
   order: 9
 ---
 
-Integrations connect your workspace to the tools you already live in — chat, email, calendars, file storage, and automation platforms. Everything here is configured in-app from the admin console (the shield icon in the toolbar, visible to workspace owners and admins). The credentials that make each provider work (OAuth client IDs, SMTP, signing secrets) are deployment-level and set up by your operator — see [Enterprise deployment](/kanban/enterprise/) for that side.
+Integrations connect your workspace to the tools you already live in — chat, email, calendars, file storage, and automation platforms. Workspace owners and admins configure them under **Settings** → **Security & compliance**. The credentials that make each provider work (OAuth client IDs, SMTP, signing secrets) are deployment-level and set up by your operator — see [Enterprise deployment](/kanban/enterprise/) for that side.
 
 Most integrations are workspace-scoped: connect once, and every board in the workspace can use them.
 
@@ -13,7 +13,7 @@ Most integrations are workspace-scoped: connect once, and every board in the wor
 
 **What you get:** task notifications delivered to Slack channels, a `/task` slash command, and automatic link unfurls when someone pastes a task URL into a channel.
 
-**Connect:** open the admin console, scroll to **Work integrations**, and click **Connect Slack**. You are sent through Slack's OAuth consent screen (scopes: `chat:write`, `commands`, `links:read`, `links:write`) and land back in the app with the connection listed. Anyone with access to the admin console can start the install; remove it later with the trash icon next to the connection.
+**Connect:** open **Settings** → **Security & compliance**, find **Work integrations**, and click **Connect Slack**. You are sent through Slack's OAuth consent screen (scopes: `chat:write`, `commands`, `links:read`, `links:write`) and land back in the app with the connection listed. Workspace admins can start the install; remove it later with the trash icon next to the connection.
 
 **Daily use:**
 
@@ -25,7 +25,7 @@ Most integrations are workspace-scoped: connect once, and every board in the wor
 
 **What you get:** notification delivery into Teams channels via incoming webhooks, and task creation from a Teams bot.
 
-**Connect:** in the admin console under **Work integrations**, fill in the Teams row — the **channel / conversation ID**, the channel's **incoming webhook URL** (the `https://…webhook.office.com/…` address Teams gives you when you add an Incoming Webhook connector), and an optional name — then click **Connect Teams**. Webhook URLs are encrypted at rest. Each channel you want to deliver to is its own connection.
+**Connect:** open **Settings** → **Security & compliance** → **Work integrations**. In the Teams row, enter the **channel / conversation ID**, the channel's **incoming webhook URL** (the `https://…webhook.office.com/…` address Teams gives you when you add an Incoming Webhook connector), and an optional name, then click **Connect Teams**. Webhook URLs are encrypted at rest. Each channel you want to deliver to is its own connection.
 
 **Daily use:**
 
@@ -49,7 +49,7 @@ The sender address must match a workspace member's account email; mail from anyo
 
 **What you get:** Drive file links on tasks and Google Calendar sync of task dates.
 
-**Connect:** admin console → **Work integrations** → **Connect Google Workspace**. You go through Google's consent screen (Drive metadata read-only plus Calendar) and return connected. The connection is workspace-wide; refresh tokens are stored encrypted.
+**Connect:** open **Settings** → **Security & compliance** → **Work integrations**, then click **Connect Google Workspace**. You go through Google's consent screen (Drive metadata read-only plus Calendar) and return connected. The connection is workspace-wide; refresh tokens are stored encrypted.
 
 **Daily use:** open any task and find the **Connected work** section:
 
@@ -60,7 +60,7 @@ The sender address must match a workspace member's account email; mail from anyo
 
 The Microsoft 365 integration mirrors Google, provider for provider.
 
-**Connect:** admin console → **Work integrations** → **Connect Microsoft 365** (Microsoft consent screen: profile, Files read, Calendars read/write).
+**Connect:** open **Settings** → **Security & compliance** → **Work integrations**, then click **Connect Microsoft 365** (Microsoft consent screen: profile, Files read, Calendars read/write).
 
 **Daily use:** in the same **Connected work** section on a task:
 
@@ -73,14 +73,14 @@ Every linked file — Google or Microsoft — stays a remote reference. Links op
 
 Two doors connect the board to n8n, Make, Zapier-style tools, CI, or your own scripts:
 
-- **Outbound webhooks** — admin console → **Webhooks**. Register an endpoint URL (optionally filtered to specific events) and every board event POSTs to it, signed with an `x-kanban-signature-256` HMAC header. The signing secret is shown exactly once when the webhook is created — copy it then.
-- **Inbound trigger tokens** — open a board's **Automations** dialog and scroll to **Inbound triggers** (admins only). Mint a named token and the row shows a full URL to copy: `POST /api/board/<id>/triggers/<token>`. Any external tool that POSTs to it fires the board's rules whose trigger is "an external tool fires it". Revoke, reactivate, or delete tokens from the same list.
+- **Outbound webhooks** — **Settings** → **Webhooks**. Register an endpoint URL (optionally filtered to specific events) and every board event POSTs to it, signed with an `x-kanban-signature-256` HMAC header. The signing secret is shown exactly once when the webhook is created — copy it then.
+- **Inbound trigger tokens** — **Settings** → **Automations**, then scroll to **Inbound triggers** (admins only). Mint a named token and the row shows a full URL to copy: `POST /api/board/<id>/triggers/<token>`. Any external tool that POSTs to it fires the board's rules whose trigger is "an external tool fires it". Revoke, reactivate, or delete tokens from the same list.
 
 Together these make the board a full n8n citizen: webhooks out, trigger URLs in, with [automation rules](/kanban/guide/automations/) deciding what happens on each side.
 
 ## BI and data export
 
-Every board exports its tasks as a file. In the board toolbar, open the **Export** menu and pick:
+Every board exports its tasks as a file. Open **Board tools** and choose:
 
 - **CSV** — RFC-4180 spreadsheet-safe, one row per task.
 - **JSON** — the same rows for programmatic use.
@@ -93,7 +93,7 @@ Extensions are third-party UI panels installed into a workspace by its owner. Ea
 
 ### Installing
 
-Admin console → **Extensions**. Paste the extension's manifest JSON into the text area and click **Install extension**. Only workspace **owners** can install or remove; installing again under the same name updates it in place.
+Open **Settings** → **Security & compliance**, then find **Extensions**. Paste the extension's manifest JSON into the text area and click **Install extension**. Only workspace **owners** can install or remove; installing again under the same name updates it in place.
 
 A manifest looks like this:
 
@@ -113,10 +113,10 @@ Rules the app enforces on install: the `url` must be **HTTPS**, the `name` must 
 
 | Slot | Where it renders |
 |---|---|
-| `task_panel` | The **Extensions** section of the task dialog — a full-width panel per extension. |
+| `task_panel` | The **Extensions** section of the task panel — a full-width panel per extension. |
 | `board_action` | A compact frame in the board toolbar, next to the board's own actions. |
 | `card_badge` | A small inline badge on each task card. |
-| `custom_field_renderer` | Inside the task dialog alongside the task's custom fields. |
+| `custom_field_renderer` | Inside the task panel alongside the task's custom fields. |
 
 One extension can claim several slots; it renders in each.
 
@@ -132,4 +132,4 @@ Extensions run in iframes with `sandbox="allow-scripts"` — no same-origin priv
 An extension sees at most what you can see, and only what its manifest declared at install time. Widening access means the owner installing an updated manifest — extensions cannot escalate themselves.
 :::
 
-Remove an extension any time from the same admin-console list; its panels disappear from every task and board immediately.
+Remove an extension any time from **Settings** → **Security & compliance**; its panels disappear from every task and board immediately.

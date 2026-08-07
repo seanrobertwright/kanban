@@ -1,6 +1,7 @@
 ---
+import { Image } from 'astro:assets';
 import MarketingLayout from '../layouts/MarketingLayout.astro';
-import ProductFrame from '../components/ProductFrame.astro';
+import landingScene from '../assets/landing-scene.webp';
 import { repositoryUrl, withBase } from '../lib/site';
 
 const title = 'Kanban — coordination for people and coding agents';
@@ -17,21 +18,35 @@ const metrics = [
 
 <MarketingLayout {title} {description}>
 	<section class="hero" aria-labelledby="hero-title">
-		<div>
-			<p class="eyebrow">Human + agent coordination</p>
-			<h1 id="hero-title">Work has changed. The board should too.</h1>
-		</div>
-		<div>
-			<p class="hero__intro">A coordination surface where people and coding agents hold work, report progress, and stay accountable under the same rules.</p>
-			<div class="hero__actions" role="group" aria-label="Choose a starting point">
-				<a class="button" href={withBase('/getting-started/')}>Start using Kanban</a>
-				<a class="button" href={withBase('/agents/connect/')}>Connect an agent</a>
-				<a class="button" href={withBase('/why-built/')}>Read the build story</a>
+		<Image
+			class="hero__scene"
+			src={landingScene}
+			alt=""
+			loading="eager"
+			fetchpriority="high"
+			widths={[1280, 1920, 2560, 3076]}
+			sizes="100vw"
+		/>
+		<div class="hero__veil" aria-hidden="true"></div>
+		<div class="hero__content">
+			<h1 id="hero-title">Kanban</h1>
+			<p class="hero__intro">A self-hosted work-management platform where AI agents are first-class teammates — same board, same permissions, same audit trail as the humans.</p>
+			<div class="hero__actions" aria-label="Choose a starting point">
+				<a class="button button--primary hero__primary" href={withBase('/getting-started/')}>
+					Get started
+					<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+				</a>
+				<a class="hero__text-link" href={withBase('/agents/http-api/')}>
+					Agent API
+					<span aria-hidden="true">{'{}'}</span>
+				</a>
+				<a class="hero__text-link" href={repositoryUrl}>
+					GitHub
+					<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"></path></svg>
+				</a>
 			</div>
 		</div>
 	</section>
-
-	<ProductFrame />
 
 	<section class="section section--split" aria-labelledby="coordination-title">
 		<div>

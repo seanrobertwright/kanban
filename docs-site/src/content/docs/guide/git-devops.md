@@ -110,8 +110,8 @@ has not changed upserts nothing and fires no rule.
 ## The Development section
 
 Open a task and, once any repo artifact references it, a read-only **Development**
-section appears in the task dialog. It renders nothing on a task no repo touches, and it
-has no write controls — a link's lifecycle is owned by the git host and arrives only
+section appears in the task panel. It renders nothing on a task no repo touches,
+and it has no write controls — a link's lifecycle is owned by the git host and arrives only
 through the webhook ingress. Each row links out to the artifact on the provider.
 
 | Link kind | Shown as | State chip |
@@ -152,7 +152,7 @@ Automation triggers fire only on the transition into a terminal pass or fail —
 going `in_progress` updates the chip silently, a redelivered completed run is a no-op,
 and a `neutral` conclusion fires nothing. So `git.ci_passed` and `git.ci_failed` each
 fire exactly once per finished build, making "when CI fails, notify the assignee" a rule
-you build in the [Automations dialog](/kanban/guide/automations/) like any other.
+you build under [**Settings** → **Automations**](/kanban/guide/automations/) like any other.
 
 ## Releases from git tags
 
@@ -167,7 +167,7 @@ themselves is covered in [Agile and product](/kanban/guide/agile/).
 ## Automation triggers from git events
 
 Every git event a connection ingests is logged as activity on the linked task, which
-makes each one a first-class trigger in the Automations dialog — the trigger picker
+makes each one a first-class trigger in **Settings** → **Automations** — the trigger picker
 phrases them as plain English:
 
 | Trigger event | Fires when |

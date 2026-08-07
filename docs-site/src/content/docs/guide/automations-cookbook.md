@@ -74,7 +74,7 @@ column.
 ## Auto-label by content or field
 
 Tag work so a saved view or a downstream rule can find it. `add_label` takes a
-label id from the workspace vocabulary (**Labels** on the board toolbar).
+label id from the workspace vocabulary (**Settings** → **Labels**).
 
 - **When** a task is created · **If** title contains `hotfix` · **Then** add the
   `incident` label and set priority to high.
@@ -164,10 +164,10 @@ row now has a target picker — pick **assignee**, **member**, **Slack channel**
 | Teams | `{ "type": "teams", "connectionId": 7 }` | A connected Teams webhook (its integration id). |
 | Email | `{ "type": "email", "to": "oncall@acme.com" }` | A one-off email via the workspace mailer. |
 
-Slack and Teams connections are set up in the admin console; see
-[Integrations](/kanban/guide/integrations/). A person target posts an
-@-mention that surfaces in their bell; Slack, Teams, and email deliver
-externally.
+Slack and Teams connections are set up under **Settings** → **Security &
+compliance** → **Work integrations**; see
+[Integrations](/kanban/guide/integrations/). A person target posts an @-mention
+that surfaces in their bell; Slack, Teams, and email deliver externally.
 
 - **When** a task is labeled · **If** labels contain the `release-blocker` id ·
   **Then** post to the release Slack channel.
@@ -212,7 +212,7 @@ dialog builder edits the rule-level tree.
 
 ## Fire the board from an outside tool
 
-Mint an inbound token in the Automations dialog's **Inbound triggers** section,
+Mint an inbound token under **Settings** → **Automations** → **Inbound triggers**,
 then have n8n, Make, a cron job, or any script `POST` it:
 
 ```http

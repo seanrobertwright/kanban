@@ -86,6 +86,8 @@ The `Chat` button opens native workspace chat. The left rail lists channels (`# 
 
 Reading a channel requires `viewer`; posting requires `member`. There are no direct messages yet — a private channel with two members is the working equivalent. Notification-generating `@mentions` live in [task comments](#comments-on-tasks), not chat.
 
+![Native workspace chat with channels on the left and a chronological team conversation on the right](../../../assets/guide-collaboration.jpg)
+
 ## Whiteboards
 
 The `Whiteboards` button opens a visual canvas scoped to the current board — a self-hosted [Excalidraw](https://excalidraw.com/) editor, no third-party service involved.

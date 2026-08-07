@@ -15,10 +15,10 @@ member could not.
 
 ## The rule engine
 
-Open **Automations** from the board toolbar. Board admins author rules; anyone
-who can see the board can read the rules and their run log.
+Open **Settings** in the sidebar, then choose **Automations**. Board admins
+author rules; anyone who can see the board can read the rules and their run log.
 
-![The Automations dialog: a When trigger, an If condition builder, and a Then action row with the notify action's target picker set to a Slack channel](../../../assets/guide-automations.jpg)
+![The Automations section: a When trigger, an If condition builder, and a Then action row with the notify action's target picker set to a Slack channel](../../../assets/guide-automations.jpg)
 
 A rule has three parts:
 
@@ -100,7 +100,7 @@ rule-level tree.
 
 ## The run log
 
-Every fire is logged. Expand a rule in the Automations dialog to see its runs,
+Every fire is logged. Expand a rule in the **Automations** section to see its runs,
 each with a status:
 
 - `matched` — conditions held and the actions were applied.
@@ -117,7 +117,7 @@ outright, so "when moved, move to Done" cannot loop forever.
 
 ## State transition rules
 
-The **Workflow** section of the Automations dialog is a columns-by-columns
+The **Workflow** area of the **Automations** section is a columns-by-columns
 matrix of allowed moves. Enforcing is opt-in — off means any column can move to
 any column. When on, ticking a box allows that from→to edge; a from-column with
 no row configured stays unconstrained, and reorders within a column are never
@@ -160,7 +160,7 @@ targets deliver externally instead.
 
 ## SLA management
 
-SLA policies live in the Automations dialog (admin to edit, viewer to read). A
+SLA policies live in **Settings** → **Automations** (admin to edit, viewer to read). A
 policy has:
 
 - **applies when** — a condition selecting the tasks it times, e.g. `priority`
@@ -177,12 +177,12 @@ task's live timers with `remainingMins` (negative once overdue) and `breached`.
 
 ## Forms intake and routing
 
-**Forms** (on the board toolbar) define reusable intake: a name, ordered
-questions (`text`, `textarea`, or `number`, each optionally required, up to
-20), and a target column. Submitting a form creates a task — the first answer
-becomes the title, and every answered question becomes a `**Label:** value`
-line in the description. A closed form refuses submissions. Members create,
-edit, and submit forms; viewers can read them.
+**Forms** live under **Settings** → **Forms** and define reusable intake: a
+name, ordered questions (`text`, `textarea`, or `number`, each optionally
+required, up to 20), and a target column. Submitting a form creates a task —
+the first answer becomes the title, and every answered question becomes a
+`**Label:** value` line in the description. A closed form refuses submissions.
+Members create, edit, and submit forms; viewers can read them.
 
 **Routing** sends a submission to the right place by its answers. Each form
 holds an ordered list of routes — a condition over the answers (keyed by
@@ -197,16 +197,17 @@ fire on:
 ## Request management
 
 A **request** is a form submission wearing its intake identity: the created
-task carries `request_meta` (source form + requester). The **Requests** dialog
-on the toolbar is a queue over those tasks, grouped by status (their current
-column), each showing the form it came through, who filed it, and its nearest
-open SLA due time. Any board viewer can read the queue — the requests lens adds
-no new object, so working a request is just working its task.
+task carries `request_meta` (source form + requester). Open **Board tools**
+(`⋯` at the end of the board toolbar) and choose **Requests** for a queue over
+those tasks, grouped by status (their current column), each showing the form it
+came through, who filed it, and its nearest open SLA due time. Any board viewer
+can read the queue — the requests lens adds no new object, so working a request
+is just working its task.
 
 ## Workflow templates
 
 A workflow template bundles **columns + rules + SLA policies** and applies to a
-board in one move from the Templates section of the Automations dialog. Three
+board in one move from **Settings** → **Templates**. Three
 built-in presets ship in code:
 
 | Preset | What it sets up |
@@ -262,8 +263,8 @@ The list shows each hook's last delivery status. See
 [Integrations](/kanban/guide/integrations/) for Slack, Teams, and email
 delivery targets.
 
-**Inbound — trigger tokens.** The Automations dialog's "Inbound triggers"
-section mints per-board tokens (admin only; the full fire URL is shown to copy
+**Inbound — trigger tokens.** The **Inbound triggers** area under **Settings**
+→ **Automations** mints per-board tokens (admin only; the full fire URL is shown to copy
 once, then masked). An external tool fires the board with
 `POST /api/board/[id]/triggers/[token]` — no session, the token is the
 credential. That raises the synthetic `external.trigger` event: every enabled
@@ -274,7 +275,7 @@ deleting a token disables it; a bad, revoked, or wrong-board token is a flat
 
 ## Draft a rule in plain language
 
-The Automations dialog starts with a draft box: describe a rule in constrained
+The **Automations** section starts with a draft box: describe a rule in constrained
 natural language — "When a PR merges, move it to Done", "When CI fails,
 comment: investigate" — and it is parsed into a real rule. Unrecognized intent
 is refused rather than guessed, and a draft is always created **disabled**, so

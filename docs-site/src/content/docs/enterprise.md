@@ -44,7 +44,7 @@ GITHUB_CLIENT_SECRET=<github-oauth-app-client-secret>
 ENCRYPTION_KEY=<dedicated-high-entropy-encryption-key>
 ```
 
-Register `${BETTER_AUTH_URL}/api/auth/callback/github` as the GitHub OAuth application's authorization callback URL. GitHub sign-in is the bootstrap authentication path; SAML/OIDC providers are configured later by an authenticated workspace owner in the admin console.
+Register `${BETTER_AUTH_URL}/api/auth/callback/github` as the GitHub OAuth application's authorization callback URL. GitHub sign-in is the bootstrap authentication path; SAML/OIDC providers are configured later by an authenticated workspace owner under **Settings** → **Security & compliance**.
 
 `BETTER_AUTH_SECRET` signs authentication and realtime credentials. Store it in a secret manager, keep it distinct from `ENCRYPTION_KEY`, and treat rotation as a coordinated session-invalidating change.
 

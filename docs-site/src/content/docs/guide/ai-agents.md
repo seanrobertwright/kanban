@@ -12,6 +12,8 @@ board until a human explicitly accepts it. Signals like risk are deterministic
 and explainable: every score comes with the reasons behind it, never an
 untraceable guess.
 
+![Agent settings with the workspace's agent roster, monthly budget, and new external-agent form](../../../assets/guide-agents.jpg)
+
 ## AI writing and status updates
 
 When a native agent works a task, it writes as it goes. Its instructions tell
@@ -162,8 +164,8 @@ Agents are first-class assignees that live beside humans. There are two kinds
 
 ### Lifecycle
 
-1. **Create** — in the Agents dialog (name, kind, workspace role; model and
-   system prompt for a native agent), or from the CLI:
+1. **Create** — under **Settings** → **Agents** (name, kind, workspace role;
+   model and system prompt for a native agent), or from the CLI:
    `npm run create-agent -- --workspace <slug|id> --name "My Bot"`. An
    external agent's key is minted and shown **once** — only its hash is
    stored, so it can never be fetched again.
@@ -189,7 +191,7 @@ does not mediate this direct route.
 
 A native agent's consequential actions are not applied — they are collected
 into the run's **changeset**, "a pull request for the board", shown in the
-task dialog when the run finishes (`awaiting your review`). You see everything
+task panel when the run finishes (`awaiting your review`). You see everything
 the run did: the auto-tier actions it already took (field edits show an Undo
 button for a window) and the held proposals, which you accept **all, some, or
 none** of in one pass. Twenty proposals are one review, not twenty interrupts.
@@ -215,7 +217,7 @@ blocked — is written to the run's action trail, and auto-tier actions link to
 the activity-log entry they produced.
 
 :::note
-Spending is governed too. The Agents dialog sets a monthly dollar budget cap
+Spending is governed too. **Settings** → **Agents** sets a monthly dollar budget cap
 for the workspace; every native run meters its token spend (including prompt
 cache usage) as it goes. A run is refused before it starts if the cap is
 blown, and halted mid-run the moment it crosses it.
@@ -223,14 +225,14 @@ blown, and halted mid-run the moment it crosses it.
 
 ## Humans and agents in capacity planning
 
-The Sprints dialog's capacity view counts agents beside humans: sprint work
+The **Sprints** section's capacity view counts agents beside humans: sprint work
 assigned to an agent appears in the per-assignee breakdown with a bot mark, so
 a plan that leans on agents says so.
 
 The board Capacity dialog (weekly point budgets vs. committed demand) is
 deliberately human-only: an agent's cost is metered in dollars against the
 workspace budget cap, not in story points, so the points view stays an honest
-picture of human capacity while the Agents dialog shows agent spend.
+picture of human capacity while **Settings** → **Agents** shows agent spend.
 
 ## The two doors
 

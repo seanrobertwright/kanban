@@ -1,16 +1,16 @@
 ---
 title: Planning and views
-description: Eight lenses over one board, saved views, dependencies, capacity, portfolio, OKRs, and budgets.
+description: Nine lenses over one board, saved views, dependencies, capacity, portfolio, OKRs, and budgets.
 sidebar:
   order: 2
 ---
 
-Every board is one set of tasks seen through eight interchangeable lenses. The
-lens switcher sits above the board area (see
-[Using the app](/kanban/using-the-app/)): `Board`, `List`, `Calendar`,
-`Timeline`, `Gantt`, `Backlog`, `Roadmap`, `Dashboard`. The command palette
-(`⌘K`) offers the same jumps as `Go to Board`, `Go to List`, and so on, plus
-`Open Milestones`, `Open Capacity`, `Open Budget`, and the other panels.
+Every board is one set of tasks seen through nine interchangeable lenses. Four
+primary tabs sit above the board; **More views** contains the other five (see
+[Using the app](/kanban/using-the-app/)): `Board`, `List`, `Timeline`,
+`Dashboard`, `Calendar`, `Gantt`, `Backlog`, `Roadmap`, and `Requests`. The
+command palette (`⌘K`) offers the same jumps, plus `Open Milestones`, `Open
+Capacity`, `Open Budget`, and the other panels.
 
 ![The Dashboard lens: stat tiles for tasks, completion, points, and at-risk, a per-column rollup, and an at-risk list](../../../assets/guide-dashboard.jpg)
 
@@ -24,8 +24,9 @@ lens switcher sits above the board area (see
 | `Backlog` | Sprint bucket | Sprint planning by drag |
 | `Roadmap` | Milestone marker per epic lane | The plan above the tasks |
 | `Dashboard` | Stat tile / rollup | Health at a glance |
+| `Requests` | Intake task grouped by status | Triage form submissions and SLA pressure |
 
-All eight read the same filtered task set: what the filter bar hides is hidden
+All nine read the same filtered task set: what the filter bar hides is hidden
 everywhere.
 
 ## Filter bar
@@ -98,13 +99,15 @@ The board as a sortable table — the same rows, top-to-bottom in board order,
 with each task's column shown as a `Status` cell. Columns: `Task`, `Status`,
 `Assignee`, `Priority`, `Score` (click the header to cycle ranking by
 prioritization score: off → highest-first → lowest-first), `Due`, `Labels`,
-plus one column per custom field. Clicking a row opens the task dialog.
+plus one column per custom field. Clicking a row opens the task panel.
 
 List is also the bulk-edit surface: tick rows (member and up) and a bar
 appears with `Move to…`, `Set priority…`, `Assign to…` (people and agents),
 `Delete`, and `Clear`. Each action applies immediately to every ticked task,
 with per-task permission checks and history server-side. See
-[Core work items](/kanban/guide/work-items/) for the task dialog itself.
+[Core work items](/kanban/guide/work-items/) for the task panel itself.
+
+![The List lens: every task in a sortable table with status, assignee, priority, score, due date, and labels](../../../assets/guide-list.jpg)
 
 ## Calendar
 
@@ -112,6 +115,8 @@ A month grid keyed on due dates. Use the `‹` / `›` arrows to page months and
 `Today` to jump back. Each dated task appears as a chip in its day's cell;
 click it to open the task. Tasks with no due date are listed under
 `No due date (N)` below the grid rather than dropped.
+
+![The Calendar lens: due tasks arranged in a month grid with an undated-work section below](../../../assets/guide-calendar.jpg)
 
 ## Timeline
 
@@ -121,7 +126,7 @@ ticks, gridlines, and a today line. A task with only one of the two dates
 renders as a small fixed-width marker. The window is the tasks' own extent
 (earliest start to latest end, padded two days each side). Tasks with neither
 date are listed under `Unscheduled (N)` below. Click any bar to open the task;
-set `Start date` and `Due date` in the task dialog to place it.
+set `Start date` and `Due date` in the task panel to place it.
 
 ![The Timeline lens: scheduled tasks as horizontal bars across weekly date ticks, with an Unscheduled row of undated tasks below](../../../assets/guide-timeline.jpg)
 
@@ -141,6 +146,8 @@ The Timeline's bars with the dependency graph drawn over them:
 Arrows only draw when both endpoints have bars on screen: a blocker that is
 undated, filtered out, or a subtask has no row to point from.
 
+![The Gantt lens: scheduled task bars joined by dependency arrows with the critical path highlighted](../../../assets/guide-gantt.jpg)
+
 ## Backlog
 
 The sprint-planning lens: a `Backlog` bucket (tasks with no sprint) beside a
@@ -149,7 +156,15 @@ story points. Drag a card into a sprint to schedule it, or back into `Backlog`
 to unschedule — this sets only the task's sprint, never its board column.
 Cards sort by priority, then age. Completed sprints are not drop targets and
 their tasks do not appear here; see [Agile & product](/kanban/guide/agile/)
-for the sprint lifecycle and the `Sprints` dialog.
+for the sprint lifecycle and the `Sprints` section.
+
+## Requests
+
+The intake queue over tasks created from forms. Cards are grouped by current
+status and show their source form, requester, and nearest open SLA due time.
+The queue is readable to viewers; editing a request opens the same task panel
+as every other lens. See [Request management](/kanban/guide/automations/#request-management)
+for forms, routing, and SLAs.
 
 ## Roadmap
 
@@ -157,8 +172,10 @@ The level above the task board: each epic is a swimlane, and the milestones
 filed under it appear as flag markers positioned by due date on a shared time
 track, each showing its `done/total` rollup as a fill. Milestones with no epic
 gather in an `Unfiled` lane; undated milestones sit in the lane's label gutter.
-Clicking any marker opens the Milestones dialog — the roadmap reads the plan;
-editing stays where milestone CRUD lives.
+Clicking any marker opens **Settings** → **Milestones** — the roadmap reads the
+plan; editing stays where milestone CRUD lives.
+
+![The Roadmap lens: epic swimlanes with milestone markers positioned on a shared date track](../../../assets/guide-roadmap.jpg)
 
 ## Dashboard
 
@@ -175,14 +192,14 @@ too):
   with how many). Click a row to open the task.
 
 For lead/cycle time, throughput, cumulative flow, and the workload table, open
-the `Insights` dialog instead — analytics is a glance-and-close panel, not a
-ninth lens.
+the `Insights` dialog instead — analytics is a glance-and-close panel, not
+another lens.
 
 ## Milestones
 
-Named checkpoints the board's tasks aim at. Open with the `Milestones` toolbar
-button (or `⌘K` → `Open Milestones`). The dialog lists each milestone with its
-due date and a progress bar counting linked tasks in the board's done column.
+Named checkpoints the board's tasks aim at. Open **Settings** in the sidebar,
+then choose **Milestones** (or `⌘K` → `Open Milestones`). The section lists each
+milestone with its due date and a progress bar counting linked tasks in the board's done column.
 
 To create one (member and up): type a name under `New milestone`, optionally
 pick a due date, an epic to file it under, and an objective to aim it at, then
@@ -208,9 +225,9 @@ Dashboard's at-risk list tags blocked tasks.
 
 ## Capacity
 
-Open with the `Capacity` toolbar button. The dialog weighs the board's open
-work (story points on tasks outside the done column) against each member's
-weekly point budget:
+Open **Board tools** (`⋯` at the end of the board toolbar) and choose
+**Capacity**. The dialog weighs the board's open work (story points on tasks
+outside the done column) against each member's weekly point budget:
 
 - Per member: role, `committed/budget pts`, utilization percent, an open-task
   count, and a utilization bar that turns red with an `over` flag when demand
@@ -223,6 +240,8 @@ Anyone (viewer and up) sees the plan; admins edit each member's `Role` and
 agent spend is metered in money, not points. Agents do appear in the sprint
 capacity breakdown (the `Sprints` dialog counts committed load per assignee,
 agents beside humans) and in the workload table below.
+
+![The Capacity dialog: open story points compared with each member's weekly budget and an unassigned-work rollup](../../../assets/guide-capacity.jpg)
 
 ## Workload
 
@@ -255,11 +274,11 @@ sidebar tools. Each program groups boards and rolls up their numbers
 
 ## Objectives (OKRs)
 
-Open with the `Objectives` toolbar button. An objective is a qualitative
-outcome; its key results are measurable targets, and the objective's progress
-is the mean of its key results' progress. Each objective card shows its
-progress bar, due date, and a `done/total tasks done` rollup of linked tasks
-in the done column.
+Open **Settings** in the sidebar, then choose **Objectives**. An objective is a
+qualitative outcome; its key results are measurable targets, and the
+objective's progress is the mean of its key results' progress. Each objective
+card shows its progress bar, due date, and a `done/total tasks done` rollup of
+linked tasks in the done column.
 
 Member and up:
 
@@ -269,18 +288,18 @@ Member and up:
   `Add KR` (e.g. NPS 30 → 60).
 - **Update progress** — edit a KR's current value and `Save`.
 - **Link work** — pick the objective in a task's `Objective` dropdown, or aim
-  a milestone at it from the Milestones dialog.
+  a milestone at it from **Settings** → **Milestones**.
 
 Deleting an objective un-aims its tasks and milestones and removes only its
 own key results.
 
 ## Budget
 
-Open with the `Budget` toolbar button. The dialog shows three figures —
-`Budget`, `Spent`, `Remaining` — with a utilization bar that turns red and
-flags `over budget` past 100%. Spend is not typed in: it is the board's logged
-time (from the timesheet ledger) costed at the hourly rate, with a
-per-contributor breakdown of hours and cost.
+Open **Board tools** (`⋯` at the end of the board toolbar) and choose
+**Budget**. The dialog shows three figures — `Budget`, `Spent`, `Remaining` —
+with a utilization bar that turns red and flags `over budget` past 100%. Spend
+is not typed in: it is the board's logged time (from the timesheet ledger)
+costed at the hourly rate, with a per-contributor breakdown of hours and cost.
 
 Everyone sees the figures; admins set the numbers in the editor at the bottom:
 `Budget` (empty for none), `Rate /h`, and `Currency`, then `Save`.

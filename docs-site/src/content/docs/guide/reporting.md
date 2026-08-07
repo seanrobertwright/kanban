@@ -9,7 +9,7 @@ Every number in the app is derived on demand from stored facts - task history, t
 
 ## Board insights
 
-**Insights** is the board's flow-metrics dialog. Open it with the **Insights** button in the board toolbar, or via the command palette (**Open Insights**). Metrics are replayed from the board's full history each time you open it.
+**Insights** is the board's flow-metrics dialog. Open **Board tools** (`⋯` at the end of the board toolbar) and choose **Insights**, or use the command palette (**Open Insights**). Metrics are replayed from the board's full history each time you open it.
 
 The dialog shows, top to bottom:
 
@@ -82,7 +82,7 @@ Report definitions carry the same filter predicate saved views persist (text, pr
 
 Financial reporting is the **Financial (spend)** source in the same builder: spend is derived as logged minutes x the board's hourly rate, rounded to cents - never stored. Group it by **Board** for a portfolio cost rollup, by **Member** for labour cost per person, or by **Day** for a burn line. When the scope is a single currency, values render with the board's currency code.
 
-For per-board budget tracking, open the **Budget** dialog from the board toolbar. Everyone with viewer access sees the figures:
+For per-board budget tracking, open **Board tools** and choose **Budget**. Everyone with viewer access sees the figures:
 
 - **Budget**, **Spent**, and **Remaining** tiles, with Remaining shown in red when negative.
 - A utilization bar (spend as a fraction of budget) with an "over budget" flag past 100%.
@@ -92,7 +92,7 @@ Setting the numbers is admin-only: admins see a **Budget** / **Rate /h** / **Cur
 
 ## Time tracking
 
-Time is logged per task, in the **Time** section of the task dialog. Enter minutes in the **Min** field, optionally note what the time went to ("What for?"), and click **Log**. The section shows the task's running total and every entry with its duration, author, date, and note. You can delete your own entries (click **Delete**, then **Really?** to confirm); each write lands in the task's activity feed.
+Time is logged per task, in the **Time** section of the task panel. Enter minutes in the **Min** field, optionally note what the time went to ("What for?"), and click **Log**. The section shows the task's running total and every entry with its duration, author, date, and note. You can delete your own entries (click **Delete**, then **Really?** to confirm); each write lands in the task's activity feed.
 
 :::note
 Time tracking is humans-only. Agents never log minutes - their spend is metered in dollars elsewhere, so timesheets and labour costs always describe people.
@@ -102,17 +102,17 @@ Time entries feed the timesheet, the budget's spend figure, and the **Time logge
 
 ## Timesheets
 
-The **Timesheet** button in the board toolbar opens the board's weekly time grid: one row per contributor, one column per day, each cell showing logged time as `Xh Ym`. A **Total** column sums each row, and an **All** footer row totals each day and the whole week.
+Open **Board tools** and choose **Timesheet** for the board's weekly time grid: one row per contributor, one column per day, each cell showing logged time as `Xh Ym`. A **Total** column sums each row, and an **All** footer row totals each day and the whole week.
 
 The first open defaults to the week ending today; the previous/next week arrows step a week at a time, and closing the dialog resets back to the current week. Review is read-only - entries are corrected on the task itself.
 
 ## Estimates
 
-Each task carries an optional **Estimate** field (points) in the task dialog, shown on the card. Estimates power the points column of the Insights workload table, sprint velocity and burndown, the Dashboard's **Points** tile, and the **Total estimate** report metric. Estimating is covered with sprints in [Agile workflows](/kanban/guide/agile/).
+Each task carries an optional **Estimate** field (points) in the task panel, shown on the card. Estimates power the points column of the Insights workload table, sprint velocity and burndown, the Dashboard's **Points** tile, and the **Total estimate** report metric. Estimating is covered with sprints in [Agile workflows](/kanban/guide/agile/).
 
 ## Exporting board data
 
-The **Export** menu in the board toolbar downloads the board's tasks as a file - **CSV** for spreadsheets, **JSON** for everything else. An export is a read, so any role that can see the board (viewer and up) can export it. Agents can call the same endpoint: `GET /api/board/{id}/export?format=csv|json`.
+Open **Board tools** and choose **Export CSV** or **Export JSON** to download the board's tasks. An export is a read, so any role that can see the board (viewer and up) can export it. Agents can call the same endpoint: `GET /api/board/{id}/export?format=csv|json`.
 
 Both formats carry one row per task with these columns:
 

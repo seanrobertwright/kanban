@@ -9,7 +9,7 @@ The board ships a full agile toolkit: a backlog lens for planning, sprints with 
 
 ## Backlog
 
-The backlog is every task with no sprint — a fourth lens on the same board, not a separate list. Switch to it with the `Backlog` toggle in the board toolbar (next to `Board`, `List`, `Calendar`; see [Planning views](/kanban/guide/planning-views/) for the rest).
+The backlog is every task with no sprint — another lens on the same board, not a separate list. Open **More views** in the view switcher and choose **Backlog** (see [Planning views](/kanban/guide/planning-views/) for the rest).
 
 The lens lays out one `Backlog` column plus a column for each planning or active sprint, each header showing its task count and total points. To plan:
 
@@ -21,13 +21,13 @@ Cards sort by priority (highest first), then age. Completed sprints are not drop
 
 ![The Backlog lens: a Backlog column beside a Sprint 24 column, each header showing its task count and total points](../../../assets/guide-backlog.jpg)
 
-You can also assign a sprint per task: the task dialog's `Sprint` picker offers planning and active sprints (it appears once the board has at least one sprint).
+You can also assign a sprint per task: the task panel's `Sprint` picker offers planning and active sprints (it appears once the board has at least one sprint).
 
 ## Sprints
 
-Open the `Sprints` button in the board toolbar. The dialog lists every sprint with its status (`Planning`, `Active`, `Completed`), goal, date range, a points progress bar, and a per-assignee capacity breakdown that counts agents alongside people.
+Open **Settings** in the sidebar, then choose **Sprints**. The section lists every sprint with its status (`Planning`, `Active`, `Completed`), goal, date range, a points progress bar, and a per-assignee capacity breakdown that counts agents alongside people.
 
-![The Sprints dialog: a planning sprint with its goal, date range, points, and per-assignee capacity, above the new-sprint form](../../../assets/guide-sprints.jpg)
+![The Sprints section: a planning sprint with its goal, date range, points, and per-assignee capacity, above the new-sprint form](../../../assets/guide-sprints.jpg)
 
 Create one under `New sprint` (member role):
 
@@ -46,11 +46,11 @@ Each sprint row shows `done/total tasks · donePoints/points pts`, plus one capa
 
 ## User stories and story points
 
-Every task carries a `Type` (`Task`, `Bug`, `Story`) and an `Estimate` in points — both set in the task dialog, side by side, because sprint planning reads them together. `Story` is how you frame user-value work; the estimate is a non-negative integer, and leaving it blank means unestimated. Points roll up everywhere: sprint progress, backlog column headers, capacity rows, velocity, and burndown.
+Every task carries a `Type` (`Task`, `Bug`, `Story`) and an `Estimate` in points — both set in the task panel, side by side, because sprint planning reads them together. `Story` is how you frame user-value work; the estimate is a non-negative integer, and leaving it blank means unestimated. Points roll up everywhere: sprint progress, backlog column headers, capacity rows, velocity, and burndown.
 
 ## Velocity and burndown
 
-Both charts render in the `Insights` dialog (board toolbar), not in the Sprints dialog:
+Both charts render in **Board tools** (`⋯` at the end of the board toolbar) → **Insights**, not in the Sprints section:
 
 - **`Burndown — <sprint name>`** appears while a sprint with dates is active: remaining committed points at each day's end across the sprint window, replayed from the activity log, with an ideal line to compare against.
 - **`Velocity — points completed per sprint`** charts completed points per *completed* sprint, oldest first, with the average marked. Completion reads each sprint's frozen done-scope, so later edits don't rewrite history.
@@ -69,7 +69,7 @@ WIP limits are advisory. The board highlights an over-limit column but never blo
 
 ## Prioritization scoring
 
-Each task can carry `Value` and `Risk` (both 0–10) beside its `Estimate` in the task dialog. The dialog shows a live `Score` readout as you type:
+Each task can carry `Value` and `Risk` (both 0–10) beside its `Estimate` in the task panel. The panel shows a live `Score` readout as you type:
 
 ```
 score = value / (estimate × (1 + risk / 10))
@@ -79,10 +79,10 @@ The score is derived on every read, never stored — change any input and it mov
 
 ## Releases
 
-Open `Releases` in the board toolbar. A release is a version your work ships under — `planned` until it ships, then `released`. Member role for all writes.
+Open **Settings** in the sidebar, then choose **Releases**. A release is a version your work ships under — `planned` until it ships, then `released`. Member role for all writes.
 
 1. Type a name under the input (for example `v1.2.0`) and click `Add`.
-2. Click a release row to expand it, then use `Add a task…` to assign board tasks (or `Remove` to pull one out). Assignment lives here, not in the task dialog.
+2. Click a release row to expand it, then use `Add a task…` to assign board tasks (or `Remove` to pull one out). Assignment lives here, not in the task panel.
 3. Each row shows a progress bar counting its tasks in the done column.
 4. Ship it either way:
    - **By hand** — click `Ship` on a planned release.
@@ -92,7 +92,7 @@ Shipping stamps the release time and freezes release notes with this precedence:
 
 ## Product discovery
 
-Open `Discovery` in the board toolbar. The dialog has two tabs; the `Ideas` tab is the pre-commitment backlog, ranked by RICE score within each stage. Anyone with the viewer role can read it; authoring and promoting take member.
+Open **Board tools** (`⋯` at the end of the board toolbar) and choose **Discovery**. The dialog has two tabs; the `Ideas` tab is the pre-commitment backlog, ranked by RICE score within each stage. Anyone with the viewer role can read it; authoring and promoting take member.
 
 Capture an idea with `Capture an idea…` plus its four RICE inputs, then `Add idea`:
 
