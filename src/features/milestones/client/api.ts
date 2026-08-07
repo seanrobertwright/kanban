@@ -32,9 +32,19 @@ export function createMilestone(
   }).then((res) => jsonOrThrow<Milestone>(res));
 }
 
+/**
+ * A partial update. Omitting `epicId` or `objectiveId` leaves that filing
+ * alone; passing `null` clears it — the server distinguishes the two with
+ * `"epicId" in payload`, so the difference is real and worth preserving here.
+ */
 export function updateMilestone(
   id: number,
-  input: { name?: string; dueDate?: string | null }
+  input: {
+    name?: string;
+    dueDate?: string | null;
+    epicId?: number | null;
+    objectiveId?: number | null;
+  }
 ): Promise<Milestone> {
   return fetch(`/api/milestones/${id}`, {
     method: "PATCH",

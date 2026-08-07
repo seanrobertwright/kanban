@@ -65,6 +65,9 @@ export function MilestonesDialog({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
+  // The row's filing, same "" stand-in for null the create form uses.
+  const [editEpicId, setEditEpicId] = useState("");
+  const [editObjectiveId, setEditObjectiveId] = useState("");
 
   const epicName = new Map(epics.map((e) => [e.id, e.name]));
   const objectiveName = new Map(objectives.map((o) => [o.id, o.name]));
@@ -98,6 +101,10 @@ export function MilestonesDialog({
     setEditingId(milestone.id);
     setEditName(milestone.name);
     setEditDueDate(milestone.dueDate ?? "");
+    setEditEpicId(milestone.epicId == null ? "" : String(milestone.epicId));
+    setEditObjectiveId(
+      milestone.objectiveId == null ? "" : String(milestone.objectiveId)
+    );
   }
 
   async function saveEdit(id: number) {
@@ -106,9 +113,16 @@ export function MilestonesDialog({
     setBusy(true);
     setError(null);
     try {
+      // epicId and objectiveId go on every save, explicitly null when unset
+      // rather than omitted (UI-6). The server reads an absent key as "leave it
+      // alone" — deliberately, so a rename need not restate a milestone's
+      // filing — which means omitting them is exactly how you would fail to
+      // unfile one.
       await api.updateMilestone(id, {
         name: trimmed,
         dueDate: editDueDate || null,
+        epicId: editEpicId === "" ? null : Number(editEpicId),
+        objectiveId: editObjectiveId === "" ? null : Number(editObjectiveId),
       });
       setEditingId(null);
       onChanged();
@@ -165,14 +179,15 @@ export function MilestonesDialog({
                   className="grid gap-1 rounded-lg border px-3 py-2"
                 >
                   {editingId === milestone.id ? (
-                    /* Inline edit: rename and re-date in place, the row's own
-                       Save/Cancel — nothing else about the row changes. */
-                    <div className="flex items-center gap-2">
+                    /* Inline edit: rename, re-date and re-file in place, the
+                       row's own Save/Cancel. Wraps, because four controls and
+                       two buttons do not fit a dialog's width in one line. */
+                    <div className="flex flex-wrap items-center gap-2">
                       <Input
                         aria-label={`Rename ${milestone.name}`}
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
-                        className="h-8"
+                        className="h-8 min-w-40 flex-1"
                       />
                       <Input
                         aria-label={`Due date for ${milestone.name}`}
@@ -181,6 +196,37 @@ export function MilestonesDialog({
                         value={editDueDate}
                         onChange={(e) => setEditDueDate(e.target.value)}
                       />
+                      {/* Re-filing, the half the row used to be missing (UI-6).
+                          The chips below have always shown where a milestone is
+                          filed; until now that was the only thing you could do
+                          about it. Same options and same "" stand-in for null as
+                          the create form, so the two read alike. */}
+                      <Select
+                        aria-label={`Epic for ${milestone.name}`}
+                        value={editEpicId}
+                        onValueChange={setEditEpicId}
+                        className="h-8 w-36 shrink-0 text-sm"
+                      >
+                        <SelectItem value="">No epic</SelectItem>
+                        {epics.map((e) => (
+                          <SelectItem key={e.id} value={String(e.id)}>
+                            {e.name}
+                          </SelectItem>
+                        ))}
+                      </Select>
+                      <Select
+                        aria-label={`Objective for ${milestone.name}`}
+                        value={editObjectiveId}
+                        onValueChange={setEditObjectiveId}
+                        className="h-8 w-36 shrink-0 text-sm"
+                      >
+                        <SelectItem value="">No objective</SelectItem>
+                        {objectives.map((o) => (
+                          <SelectItem key={o.id} value={String(o.id)}>
+                            {o.name}
+                          </SelectItem>
+                        ))}
+                      </Select>
                       <Button
                         type="button"
                         size="sm"

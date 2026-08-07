@@ -58,14 +58,28 @@ async function selectMilestone(
   return rows[0];
 }
 
+/**
+ * A whole milestone row, progress included — EPIC_SELECT's twin, and exported
+ * for its reason.
+ *
+ * The board read cannot call `listMilestones`: it has already proven the
+ * caller's role and a second identical authz query is waste. So it used to
+ * hand-write this SELECT, and the copy drifted — it lost `epic_id` and
+ * `objective_id`, which is every milestone landing in the Roadmap's "Unfiled"
+ * lane no matter what it was filed under (UI-5). Sharing the string is what
+ * stops the two ever disagreeing again; skipping the authz is the only thing
+ * the board read actually needed to do differently.
+ */
+export const MILESTONE_SELECT = `SELECT ${MILESTONE_COLUMNS}, ${PROGRESS_COLUMNS}
+                                   FROM milestone m`;
+
 export async function listMilestones(
   actor: string | Principal,
   boardId: number
 ): Promise<Milestone[]> {
   await requireBoardRole(actor, boardId, "viewer");
   return query<Milestone>(
-    `SELECT ${MILESTONE_COLUMNS}, ${PROGRESS_COLUMNS}
-       FROM milestone m
+    `${MILESTONE_SELECT}
       WHERE m.board_id = $1
       ORDER BY m.due_date NULLS LAST, m.id`,
     [boardId]

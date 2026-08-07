@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { addDependency } from "@/features/dependencies/server/repository";
+import { createEpic } from "@/features/epics/server/repository";
+import { createMilestone } from "@/features/milestones/server/repository";
 import { createTask } from "@/features/tasks/server/repository";
 import {
   ensurePersonalWorkspace,
@@ -81,6 +83,37 @@ describe("getBoard", () => {
     const task = board!.tasks.find((t) => t.id === created.id);
 
     expect(task).toEqual(created);
+  });
+
+  // The same drift this file was written about, in the milestone read (UI-5).
+  // getBoard hand-wrote its own milestone SELECT to avoid listMilestones' second
+  // authz query, and that copy left out epic_id and objective_id — so every
+  // milestone reached the Roadmap with no epic, and the Roadmap groups its
+  // swimlanes by exactly that field. Filed under an epic in the database,
+  // rendered under "Unfiled" on screen, with nothing in between to notice.
+  //
+  // toEqual against createMilestone's own return, the whole-task test's trick:
+  // it needs no maintenance, and it fails the moment the two lists disagree
+  // again. A non-null epicId is the point — a milestone with none would pass
+  // against a query that never returns the column.
+  it("returns whole milestones, epic and objective links included", async () => {
+    const epic = await createEpic(
+      alice,
+      boardId,
+      { name: "Engine" },
+      { type: "human", id: alice }
+    );
+    const created = await createMilestone(
+      alice,
+      boardId,
+      { name: "Rolling chassis", dueDate: "2026-09-05", epicId: epic.id },
+      { type: "human", id: alice }
+    );
+
+    const board = await getBoard(alice, boardId);
+    const milestone = board!.milestones.find((m) => m.id === created.id);
+
+    expect(milestone).toEqual(created);
   });
 
   it("returns the board's blocked-by edges for the Gantt (036)", async () => {

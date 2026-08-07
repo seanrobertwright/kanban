@@ -3,6 +3,7 @@ import { AuthzError, requireBoardRole } from "@/features/workspaces/server/authz
 import type { Principal } from "@/features/auth/server/principal";
 import type { CustomField } from "@/features/custom-fields/types";
 import type { TaskDependencyEdge } from "@/features/dependencies/types";
+import { MILESTONE_SELECT } from "@/features/milestones/server/repository";
 import type { Milestone } from "@/features/milestones/types";
 import { listObjectives } from "@/features/objectives/server/repository";
 import { EPIC_SELECT } from "@/features/epics/server/repository";
@@ -69,18 +70,12 @@ export async function getBoard(
   );
 
   // The authz is done (requireBoardRole above), so listMilestones' own check
-  // would be a second identical query — read the table directly.
+  // would be a second identical query — reuse its SELECT and skip the role
+  // read. Sharing the string rather than retyping it is UI-5's lesson: the
+  // hand-written copy that used to live here had lost epic_id and
+  // objective_id, and query<Milestone> is a cast, not a check.
   const milestones = await query<Milestone>(
-    `SELECT m.id, m.board_id AS "boardId", m.name,
-            m.due_date AS "dueDate", m.created_at AS "createdAt",
-            (SELECT COUNT(*)::int FROM task t
-              WHERE t.milestone_id = m.id AND t.parent_id IS NULL) AS total,
-            (SELECT COUNT(*)::int FROM task t
-              WHERE t.milestone_id = m.id AND t.parent_id IS NULL
-                AND b2.done_column_id IS NOT NULL
-                AND t.column_id = b2.done_column_id) AS done
-       FROM milestone m
-       JOIN board b2 ON b2.id = m.board_id
+    `${MILESTONE_SELECT}
       WHERE m.board_id = $1
       ORDER BY m.due_date NULLS LAST, m.id`,
     [boardId]
