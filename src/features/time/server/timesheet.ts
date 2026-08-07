@@ -3,7 +3,11 @@ import type { Principal } from "@/features/auth/server/principal";
 import { AuthzError, requireBoardRole } from "@/features/workspaces/server/authz";
 import { query, queryOne } from "@/shared/db/client";
 import type { Timesheet, TimesheetApproval, TimesheetCell } from "../types";
-import { addDays, buildTimesheetGrid, weekStart } from "../lib/timesheet";
+import {
+  buildTimesheetGrid,
+  resolveWindow,
+  weekStart,
+} from "../lib/timesheet";
 
 /**
  * A board's time_entry ledger (027) rolled up per contributor per day.
@@ -11,8 +15,13 @@ import { addDays, buildTimesheetGrid, weekStart } from "../lib/timesheet";
  * Reporting, so viewer+ — an export is a read of what the board's tasks already
  * hold, and the analytics dialog's rule. The window is bounded (a grid is not a
  * data dump): a caller's from/to is honoured but the span is clamped to
- * MAX_TIMESHEET_DAYS, and an absent window defaults to the week ending today
- * (CURRENT_DATE, so the default has no client-zone dependency).
+ * MAX_TIMESHEET_DAYS, and an absent window defaults to the Mon–Sun week
+ * containing today (CURRENT_DATE, so the default has no client-zone
+ * dependency).
+ *
+ * The default is week-*aligned*, not merely week-sized, because sign-off is
+ * keyed to `weekStart` (083): a rolling "last seven days" grid would let a
+ * reviewer approve a week other than the one on screen.
  */
 
 const MAX_TIMESHEET_DAYS = 31;
@@ -29,18 +38,17 @@ export async function getBoardTimesheet(
 ): Promise<Timesheet> {
   await requireBoardRole(actor, boardId, "viewer");
 
-  // Resolve the window. `to` defaults to today; `from` to six days before it —
-  // a Mon–Sun-sized week. Both are then clamped so the span never exceeds the
-  // bound, trimming `from` up toward `to` (the recent end is the useful one).
+  // Resolve the window against the database's today, so the default has no
+  // client-zone dependency. The rule itself is pure and lives in the lib.
   const today = await queryOne<{ today: string }>(
     `SELECT to_char(CURRENT_DATE, 'YYYY-MM-DD') AS today`
   );
-  const to = asDate(opts.to) ?? today!.today;
-  let from = asDate(opts.from) ?? addDays(to, -6);
-  if (from > to) from = to;
-  if (addDays(from, MAX_TIMESHEET_DAYS - 1) < to) {
-    from = addDays(to, -(MAX_TIMESHEET_DAYS - 1));
-  }
+  const { from, to } = resolveWindow(
+    today!.today,
+    asDate(opts.from),
+    asDate(opts.to),
+    MAX_TIMESHEET_DAYS
+  );
 
   // Board-scoped rollup: join each entry to its task's board, group by
   // contributor and day. Humans-only holds by construction — time_entry only

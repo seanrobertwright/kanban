@@ -29,6 +29,31 @@ export function weekStart(iso: string): string {
   return addDays(iso, day === 0 ? -6 : 1 - day);
 }
 
+/**
+ * The [from, to] window a timesheet read covers, given today and whatever ends
+ * the caller supplied (either may be absent).
+ *
+ * With neither end given the window is the Mon–Sun week containing `today`.
+ * That alignment is the point, not a detail: sign-off is keyed to `weekStart`
+ * (083), so a merely week-*sized* default — the last seven days ending today —
+ * would put a reviewer in front of one week and record their verdict against
+ * another. With one end given the other completes a seven-day span from it, and
+ * the span is finally clamped to `maxDays`, trimming `from` up toward `to`
+ * because the recent end is the useful one.
+ */
+export function resolveWindow(
+  today: string,
+  from: string | null,
+  to: string | null,
+  maxDays: number
+): { from: string; to: string } {
+  let start = from ?? (to ? addDays(to, -6) : weekStart(today));
+  const end = to ?? addDays(start, 6);
+  if (start > end) start = end;
+  if (addDays(start, maxDays - 1) < end) start = addDays(end, -(maxDays - 1));
+  return { from: start, to: end };
+}
+
 /** Every date from `from` to `to` inclusive; empty when to precedes from. */
 export function eachDay(from: string, to: string): string[] {
   const out: string[] = [];

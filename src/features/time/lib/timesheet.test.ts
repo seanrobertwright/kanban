@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { TimesheetCell } from "../types";
-import { addDays, buildTimesheetGrid, eachDay } from "./timesheet";
+import {
+  addDays,
+  buildTimesheetGrid,
+  eachDay,
+  resolveWindow,
+  weekStart,
+} from "./timesheet";
 
 /** Pure timesheet grouping — no database, same UTC date discipline. */
 
@@ -72,5 +78,71 @@ describe("buildTimesheetGrid", () => {
     ]);
     expect(total).toBe(0);
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe("resolveWindow", () => {
+  // 2026-07-20 is a Monday, so this covers every weekday in one week.
+  const week = [
+    "2026-07-20",
+    "2026-07-21",
+    "2026-07-22",
+    "2026-07-23",
+    "2026-07-24",
+    "2026-07-25",
+    "2026-07-26",
+  ];
+
+  it("defaults to the Mon-Sun week containing today, whatever day it is", () => {
+    for (const today of week) {
+      expect(resolveWindow(today, null, null, 31)).toEqual({
+        from: "2026-07-20",
+        to: "2026-07-26",
+      });
+    }
+  });
+
+  /**
+   * The rule the default exists for: sign-off is filed under weekStart(from)
+   * (083), so a window whose `from` is not already a Monday would record a
+   * verdict against a week other than the one the grid showed.
+   */
+  it("starts the default window on the day sign-off is keyed to", () => {
+    for (const today of week) {
+      const { from } = resolveWindow(today, null, null, 31);
+      expect(weekStart(from)).toBe(from);
+    }
+  });
+
+  it("completes a seven-day span from whichever end is given", () => {
+    expect(resolveWindow("2026-07-22", "2026-07-15", null, 31)).toEqual({
+      from: "2026-07-15",
+      to: "2026-07-21",
+    });
+    expect(resolveWindow("2026-07-22", null, "2026-07-21", 31)).toEqual({
+      from: "2026-07-15",
+      to: "2026-07-21",
+    });
+  });
+
+  it("honours a window the caller fully specifies", () => {
+    expect(resolveWindow("2026-07-22", "2026-07-01", "2026-07-10", 31)).toEqual({
+      from: "2026-07-01",
+      to: "2026-07-10",
+    });
+  });
+
+  it("clamps an over-long span by trimming the older end", () => {
+    expect(resolveWindow("2026-07-22", "2026-01-01", "2026-07-22", 31)).toEqual({
+      from: "2026-06-22",
+      to: "2026-07-22",
+    });
+  });
+
+  it("collapses an inverted window rather than inventing days", () => {
+    expect(resolveWindow("2026-07-22", "2026-07-20", "2026-07-10", 31)).toEqual({
+      from: "2026-07-10",
+      to: "2026-07-10",
+    });
   });
 });
