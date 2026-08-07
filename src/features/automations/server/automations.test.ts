@@ -212,13 +212,15 @@ describe("automation rules (db)", () => {
       actions: [{ type: "move", columnId: secondColId }],
     });
     expect(rule.name).toBe("Auto-move urgent to second column");
-    expect(rule.isEnabled).toBe(true);
+    // Born paused (OBS-9): a rule must be read back and enabled before it can
+    // act — the review-draft path's promise, now every hand-built rule's too.
+    expect(rule.isEnabled).toBe(false);
 
     const listed = await listAutomationRules(alice, boardId);
     expect(listed.some((r) => r.id === rule.id)).toBe(true);
 
-    const updated = await updateAutomationRule(alice, rule.id, { isEnabled: false });
-    expect(updated!.isEnabled).toBe(false);
+    const updated = await updateAutomationRule(alice, rule.id, { isEnabled: true });
+    expect(updated!.isEnabled).toBe(true);
 
     await deleteAutomationRule(alice, rule.id);
     const after = await listAutomationRules(alice, boardId);
@@ -232,6 +234,7 @@ describe("automation rules (db)", () => {
     });
     const rule = await createAutomationRule(alice, boardId, {
       name: "When moved to col 1, comment",
+      isEnabled: true,
       trigger: { event: "task.moved" },
       conditions: { field: "columnId", op: "eq", value: secondColId },
       actions: [{ type: "comment", body: "auto-triaged by rule" }],
@@ -260,6 +263,7 @@ describe("automation rules (db)", () => {
     const task = await createTask(alice, { columnId: firstColId, title: "Once only" });
     const rule = await createAutomationRule(alice, boardId, {
       name: "idempotency",
+      isEnabled: true,
       trigger: { event: "task.moved" },
       actions: [{ type: "comment", body: "one" }],
     });

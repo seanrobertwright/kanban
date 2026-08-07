@@ -64,6 +64,7 @@ describe("scheduled automations (db)", () => {
 
     const rule = await createAutomationRule(alice, boardId, {
       name: "Escalate low-priority daily",
+      isEnabled: true,
       trigger: { event: "schedule.tick", every: "daily" },
       conditions: { field: "priority", op: "eq", value: "low" },
       actions: [{ type: "set_field", field: "priority", value: "urgent" }],

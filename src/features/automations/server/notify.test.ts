@@ -59,6 +59,7 @@ describe("notify action (db)", () => {
     });
     await createAutomationRule(alice, boardId, {
       name: "Notify assignee on move",
+      isEnabled: true,
       trigger: { event: "task.moved" },
       actions: [{ type: "notify", target: "assignee", message: "your task moved" }],
     });

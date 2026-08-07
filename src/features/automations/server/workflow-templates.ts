@@ -205,6 +205,10 @@ export async function applyWorkflowTemplate(
       trigger: rule.trigger,
       conditions: rule.conditions,
       actions: rule.actions,
+      // Live on install, unlike a hand-built rule (which is born paused,
+      // OBS-9): instantiating a template IS the explicit "turn this workflow
+      // on" — a template that arrived all-paused would install as a no-op.
+      isEnabled: true,
     });
   }
   for (const sla of body.slaPolicies) {

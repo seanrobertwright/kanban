@@ -78,7 +78,12 @@ export async function createAutomationRule(
       [
         boardId,
         input.name.trim(),
-        input.isEnabled ?? true,
+        // Born paused unless the caller says otherwise (OBS-9): a rule that is
+        // live the moment it is saved acts on the very next matching event,
+        // before its author has read it back — the review-draft path (draft.ts)
+        // already made this promise, and a hand-built rule deserves the same
+        // Enable step.
+        input.isEnabled ?? false,
         JSON.stringify(input.trigger),
         JSON.stringify(input.conditions ?? {}),
         JSON.stringify(input.actions ?? []),

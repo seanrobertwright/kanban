@@ -166,6 +166,7 @@ describe("git connection + ingress (db)", () => {
 
     await createAutomationRule(alice, boardId, {
       name: "PR merged → Done",
+      isEnabled: true,
       trigger: { event: "git.pr_merged" },
       actions: [{ type: "move", columnId: doneCol }],
     });

@@ -63,6 +63,7 @@ describe("external triggers (db)", () => {
     });
     await createAutomationRule(alice, boardId, {
       name: "External escalate",
+      isEnabled: true,
       trigger: { event: "external.trigger" },
       conditions: { field: "priority", op: "eq", value: "low" },
       actions: [{ type: "set_field", field: "priority", value: "urgent" }],

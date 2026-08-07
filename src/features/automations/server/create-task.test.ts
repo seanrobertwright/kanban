@@ -55,6 +55,7 @@ describe("create_task action (db)", () => {
     const seed = await createTask(alice, { columnId: col1, title: "trigger" });
     await createAutomationRule(alice, boardId, {
       name: "Declare incident on move",
+      isEnabled: true,
       trigger: { event: "task.moved" },
       actions: [{ type: "create_task", title: "INCIDENT: investigate", columnId: col2 }],
     });
