@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import { Flag } from "lucide-react";
+import { Flag, Plus } from "lucide-react";
 
 import type { Epic } from "@/features/epics/types";
 import type { Milestone } from "@/features/milestones/types";
 import { useToday } from "@/shared/lib/due-date";
+import { Button } from "@/shared/ui/button";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { addDays, dayDiff, shortLabel } from "../lib/schedule";
 import { buildRoadmap } from "../lib/roadmap";
 
@@ -46,11 +48,22 @@ export function RoadmapView({
   }, [window]);
 
   if (milestones.length === 0) {
+    // The one screen with nothing to click is the one that most needs the door,
+    // and this component is already holding the handle — every marker it draws
+    // opens the same dialog. It used to render a bare line of text instead,
+    // leaving Board tools → Settings… → Milestones as the only route, which
+    // nothing on the roadmap points at (UI-2).
     return (
-      <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-        No milestones yet. Add a milestone (with a due date and an epic) and it
-        appears here as a marker on the roadmap.
-      </p>
+      <EmptyState
+        icon={Flag}
+        title="No milestones yet"
+        hint="A milestone with a due date and an epic appears here as a marker on its epic's lane, carrying its own done/total rollup."
+        action={
+          <Button size="sm" onClick={onOpenMilestones}>
+            <Plus /> New milestone
+          </Button>
+        }
+      />
     );
   }
 

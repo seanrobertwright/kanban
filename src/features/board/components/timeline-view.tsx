@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { PriorityDot } from "@/features/tasks/components/task-card";
 import type { Task } from "@/features/tasks/types";
 import { useToday } from "@/shared/lib/due-date";
+import { tickLabelTransform } from "../lib/axis-ticks";
 import { annotatableFields, fieldAnnotation } from "../lib/field-annotation";
 import { addDays, dayDiff, shortLabel, spanOf } from "../lib/schedule";
 import { FieldAnnotationPicker } from "./field-annotation-picker";
@@ -123,8 +124,11 @@ export function TimelineView({
             {ticks.map((t) => (
               <span
                 key={t.offset}
-                className="absolute -translate-x-1/2 text-micro tabular-nums text-muted-foreground"
-                style={{ left: pct(t.offset) }}
+                className="absolute text-micro tabular-nums text-muted-foreground"
+                style={{
+                  left: pct(t.offset),
+                  transform: tickLabelTransform(t.offset / w.total),
+                }}
               >
                 {t.label}
               </span>

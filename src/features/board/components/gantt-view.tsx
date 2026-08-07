@@ -18,6 +18,7 @@ import {
   shortLabel,
   spanOf,
 } from "../lib/schedule";
+import { tickLabelTransform } from "../lib/axis-ticks";
 import { annotatableFields, fieldAnnotation } from "../lib/field-annotation";
 import { FieldAnnotationPicker } from "./field-annotation-picker";
 import type { ScheduleViewProps } from "./list-view";
@@ -246,8 +247,11 @@ export function GanttView({
             {ticks.map((t) => (
               <span
                 key={t.offset}
-                className="absolute -translate-x-1/2 text-micro tabular-nums text-muted-foreground"
-                style={{ left: pct(t.offset / w.total) }}
+                className="absolute text-micro tabular-nums text-muted-foreground"
+                style={{
+                  left: pct(t.offset / w.total),
+                  transform: tickLabelTransform(t.offset / w.total),
+                }}
               >
                 {t.label}
               </span>
