@@ -23,6 +23,14 @@ export function latestRunForTask(taskId: number): Promise<RunDetail | null> {
   );
 }
 
+/** Every run in the workspace still holding a pending changeset — the review
+ *  queue, including task-less Door-2 creates the task dialog cannot reach. */
+export function fetchHeldRuns(workspaceId: string): Promise<RunDetail[]> {
+  return fetch(`/api/workspaces/${workspaceId}/held-changesets`, {
+    cache: "no-store",
+  }).then((res) => jsonOrThrow<RunDetail[]>(res));
+}
+
 /** Accept the given action ids from a changeset (an empty array rejects all). */
 export function reviewChangeset(
   changesetId: string,

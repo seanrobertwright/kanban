@@ -17,7 +17,8 @@ import { Label } from "@/shared/ui/label";
 import { Textarea } from "@/shared/ui/textarea";
 import type { WorkspaceMembership, WorkspaceRole } from "@/features/workspaces/types";
 import * as api from "../client/api";
-import type { AgentDetail, AgentKind, WorkspaceBudget } from "../types";
+import { describeAction } from "../lib/describe-action";
+import type { AgentDetail, AgentKind, RunDetail, WorkspaceBudget } from "../types";
 import { Select, SelectItem } from "@/shared/ui/select";
 
 const MICROS_PER_DOLLAR = 1_000_000;
@@ -42,6 +43,8 @@ function formatDollars(micros: number): string {
 export function AgentsDialog({ open, onOpenChange, workspace }: AgentsDialogProps) {
   const [agents, setAgents] = useState<AgentDetail[]>([]);
   const [budget, setBudget] = useState<WorkspaceBudget | null>(null);
+  const [held, setHeld] = useState<RunDetail[]>([]);
+  const [reviewing, setReviewing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,12 +68,14 @@ export function AgentsDialog({ open, onOpenChange, workspace }: AgentsDialogProp
     setLoading(true);
     setError(null);
     try {
-      const [agentList, b] = await Promise.all([
+      const [agentList, b, heldRuns] = await Promise.all([
         api.fetchAgents(workspace.id),
         api.fetchBudget(workspace.id),
+        api.fetchHeldRuns(workspace.id),
       ]);
       setAgents(agentList);
       setBudget(b);
+      setHeld(heldRuns);
       setCapInput(
         b.capMicros === null ? "" : String(b.capMicros / MICROS_PER_DOLLAR)
       );
@@ -137,6 +142,23 @@ export function AgentsDialog({ open, onOpenChange, workspace }: AgentsDialogProp
     }
   }
 
+  async function handleReview(run: RunDetail, acceptAll: boolean) {
+    if (!run.changeset) return;
+    setReviewing(true);
+    setError(null);
+    try {
+      const accept = acceptAll
+        ? run.actions.filter((a) => a.tier === "changeset").map((a) => a.id)
+        : [];
+      await api.reviewChangeset(run.changeset.id, accept);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to review the changeset");
+    } finally {
+      setReviewing(false);
+    }
+  }
+
   function submitBudget(event: React.FormEvent) {
     event.preventDefault();
     const trimmed = capInput.trim();
@@ -186,6 +208,54 @@ export function AgentsDialog({ open, onOpenChange, workspace }: AgentsDialogProp
               : "Loading…"}
           </p>
         </form>
+
+        {/* The review queue — every run still holding a pending changeset. This
+            is where a Door-2 hold for a top-level create surfaces: its run has
+            no task, so no task dialog will ever show it (UI-14). */}
+        {held.length > 0 && (
+          <div className="grid gap-2 rounded-lg border border-amber-500/50 bg-amber-500/5 p-3">
+            <p className="text-xs font-medium">
+              Held for review — an agent proposed these and is waiting on a person
+            </p>
+            {held.map((run) => {
+              const agentName =
+                agents.find((a) => a.id === run.agentId)?.name ?? "an agent";
+              const proposed = run.actions.filter((a) => a.tier === "changeset");
+              return (
+                <div key={run.id} className="grid gap-1.5 rounded-md border bg-background p-2">
+                  <p className="text-xs text-muted-foreground">
+                    {agentName}
+                    {run.taskId !== null ? ` · task #${run.taskId}` : " · no task yet — a proposed create"}
+                  </p>
+                  <ul className="grid gap-0.5 text-xs">
+                    {proposed.map((a) => (
+                      <li key={a.id}>{describeAction(a)}</li>
+                    ))}
+                  </ul>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={reviewing}
+                      onClick={() => handleReview(run, true)}
+                    >
+                      Accept all
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={reviewing}
+                      onClick={() => handleReview(run, false)}
+                    >
+                      Reject all
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Create — external (Door 2) or native (Door 1). */}
         <form onSubmit={handleCreate} className="grid gap-2 border-t pt-3">

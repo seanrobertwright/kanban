@@ -11,6 +11,7 @@ import { startRunForTask } from "./runtime";
 import {
   getLatestRunForTask,
   getRunDetail,
+  listHeldRuns,
   reviewChangeset,
   revertAction,
 } from "./review";
@@ -88,6 +89,18 @@ export async function handleLatestRunForTask(request: Request) {
   if (!Number.isInteger(taskId)) return badRequest("taskId must be an integer");
   try {
     return Response.json(await getLatestRunForTask(principal, taskId));
+  } catch (error) {
+    return authzErrorResponse(error);
+  }
+}
+
+/** GET /api/workspaces/:id/held-changesets — every run still holding a pending
+ *  changeset, including the task-less Door-2 creates no task dialog can reach. */
+export async function handleListHeldRuns(request: Request, workspaceId: string) {
+  const principal = await getPrincipalFromRequest(request);
+  if (!principal) return unauthorized();
+  try {
+    return Response.json(await listHeldRuns(principal, workspaceId));
   } catch (error) {
     return authzErrorResponse(error);
   }

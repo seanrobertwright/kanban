@@ -114,18 +114,54 @@ export async function getRunDetail(
  * The latest run for a task — what the task dialog shows so a human can review a
  * run's changeset or undo its auto actions. Null when the task has never had a
  * run. Viewer+, through getRunDetail.
+ *
+ * A run whose changeset is still pending outranks recency: an agent that
+ * proposes a move and then comments (the work_task prompt does exactly that)
+ * creates a newer auto-tier run 50 ms after the held one, and "latest by clock"
+ * would hide the only run a human still has a decision to make about.
  */
 export async function getLatestRunForTask(
   principal: string | Principal,
   taskId: number
 ): Promise<RunDetail | null> {
   const row = await queryOne<{ id: string }>(
-    `SELECT id FROM agent_run WHERE task_id = $1
-      ORDER BY created_at DESC LIMIT 1`,
+    `SELECT r.id FROM agent_run r
+       LEFT JOIN changeset c ON c.run_id = r.id AND c.status = 'pending'
+      WHERE r.task_id = $1
+      ORDER BY (c.id IS NOT NULL) DESC, r.created_at DESC
+      LIMIT 1`,
     [taskId]
   );
   if (!row) return null;
   return (await getRunDetail(principal, row.id)) ?? null;
+}
+
+/**
+ * Every run in a workspace still holding a pending changeset — the review
+ * queue. This is the surface a Door-2 hold for a top-level create lands on: its
+ * run has no task (gate.ts holdForExternalReview), so no task dialog will ever
+ * show it, and without this list it is reviewable only by whoever kept the raw
+ * changeset id. Viewer+ on the workspace; the review verbs keep their own
+ * member+ and human-only checks.
+ */
+export async function listHeldRuns(
+  principal: string | Principal,
+  workspaceId: string
+): Promise<RunDetail[]> {
+  await requireWorkspaceRole(principal, workspaceId, "viewer");
+  const rows = await query<{ runId: string }>(
+    `SELECT c.run_id AS "runId"
+       FROM changeset c JOIN agent_run r ON r.id = c.run_id
+      WHERE r.workspace_id = $1 AND c.status = 'pending'
+      ORDER BY c.created_at`,
+    [workspaceId]
+  );
+  const details: RunDetail[] = [];
+  for (const row of rows) {
+    const detail = await getRunDetail(principal, row.runId);
+    if (detail) details.push(detail);
+  }
+  return details;
 }
 
 /**

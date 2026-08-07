@@ -25,7 +25,12 @@ import {
 import type { Principal } from "@/features/auth/server/principal";
 import { pool, query, queryOne } from "@/shared/db/client";
 import { externalAgentAction } from "./gate";
-import { reviewChangeset, revertAction } from "./review";
+import {
+  getLatestRunForTask,
+  listHeldRuns,
+  reviewChangeset,
+  revertAction,
+} from "./review";
 
 /**
  * §7.1's promise — "an agent is subject to the same approval policy a human's
@@ -257,6 +262,55 @@ describe("Door 2 approval gate", () => {
     await expect(reviewChangeset(agent, held.changesetId, [])).rejects.toThrow(
       /Only a person/
     );
+  });
+
+  it("keeps a held run visible to the task dialog past a newer auto run", async () => {
+    await setPolicy({});
+    const heldTask = (
+      await createTask(owner, { columnId: todo, title: "Shadowed" })
+    ).id;
+    const held = (await externalAgentAction(agent, {
+      tool: "move_task",
+      input: { id: heldTask, columnId: todo, position: 0 },
+      taskId: heldTask,
+      execute: async () => undefined,
+    })) as { changesetId: string };
+    // The work_task prompt's step 5: the agent comments right after the hold, so
+    // a NEWER run exists 50 ms later — and "latest by clock" would show it.
+    await externalAgentAction(agent, {
+      tool: "comment_on_task",
+      input: { taskId: heldTask, body: "held one for you" },
+      taskId: heldTask,
+      execute: () =>
+        createComment(agent, { taskId: heldTask, body: "held one for you" }),
+    });
+
+    const detail = await getLatestRunForTask(owner, heldTask);
+    expect(detail?.changeset).toMatchObject({
+      id: held.changesetId,
+      status: "pending",
+    });
+  });
+
+  it("lists a task-less held create in the workspace review queue", async () => {
+    await setPolicy({});
+    const held = (await externalAgentAction(agent, {
+      tool: "create_task",
+      input: { columnId: todo, title: "Proposed by an agent" },
+      taskId: null,
+      execute: async () => undefined,
+    })) as { changesetId: string };
+
+    // No task id, so no task dialog will ever surface it — the queue must.
+    const queue = await listHeldRuns(owner, workspaceId);
+    const mine = queue.find((run) => run.changeset?.id === held.changesetId);
+    expect(mine).toBeDefined();
+    expect(mine!.taskId).toBeNull();
+
+    // Reviewed means resolved — and gone from the queue.
+    await reviewChangeset(owner, held.changesetId, []);
+    const after = await listHeldRuns(owner, workspaceId);
+    expect(after.some((run) => run.changeset?.id === held.changesetId)).toBe(false);
   });
 
   it("refuses to let an agent undo an agent's action", async () => {
