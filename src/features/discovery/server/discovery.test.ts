@@ -122,4 +122,21 @@ describe("discovery", () => {
     const updated = await updateIdea(alice, idea.id, { status: "validated" });
     expect(updated?.status).toBe("validated");
   });
+
+  it("re-scores an idea after capture, and the derived RICE follows (OBS-10)", async () => {
+    const idea = await createIdea(alice, boardId, {
+      title: "Re-score me",
+      reach: 100,
+      impact: 1,
+      confidence: 50,
+      effort: 1,
+    });
+    // Evidence arrived: reach doubled, confidence up. An estimate is not a vow.
+    await updateIdea(alice, idea.id, { reach: 200, confidence: 100, impact: 2 });
+
+    const overview = await getBoardDiscovery(alice, boardId);
+    const signal = overview.ideas.find((i) => i.id === idea.id)!;
+    expect(signal).toMatchObject({ reach: 200, confidence: 100, impact: 2, effort: 1 });
+    expect(signal.rice).toBe(400); // 200×2×1.0/1
+  });
 });

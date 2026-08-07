@@ -303,6 +303,22 @@ function IdeaRow({
   onPromoted: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  // Re-scoring (OBS-10): a RICE score is an estimate, and estimates age — the
+  // feedback an idea accrues is precisely the evidence that changes reach and
+  // confidence. The capture form's inputs, behind the score itself.
+  const [scoring, setScoring] = useState(false);
+  const [reach, setReach] = useState(String(idea.reach));
+  const [impact, setImpact] = useState(String(idea.impact));
+  const [confidence, setConfidence] = useState(String(idea.confidence));
+  const [effort, setEffort] = useState(String(idea.effort));
+
+  function openScoring() {
+    setReach(String(idea.reach));
+    setImpact(String(idea.impact));
+    setConfidence(String(idea.confidence));
+    setEffort(String(idea.effort));
+    setScoring(true);
+  }
 
   async function run(fn: () => Promise<unknown>, after: () => Promise<void>) {
     setBusy(true);
@@ -320,10 +336,54 @@ function IdeaRow({
     <div className="grid gap-1.5 rounded-lg border px-3 py-2.5">
       <div className="flex items-start justify-between gap-2">
         <span className="min-w-0 text-sm font-medium">{idea.title}</span>
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-          RICE {idea.rice}
-        </span>
+        {canEdit ? (
+          <button
+            type="button"
+            aria-label={`Re-score ${idea.title}`}
+            className="shrink-0 text-xs tabular-nums text-muted-foreground underline-offset-2 hover:underline"
+            disabled={busy}
+            onClick={() => (scoring ? setScoring(false) : openScoring())}
+          >
+            RICE {idea.rice}
+          </button>
+        ) : (
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            RICE {idea.rice}
+          </span>
+        )}
       </div>
+      {scoring && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <RiceInput label="Reach" value={reach} onChange={setReach} />
+          <RiceInput label="Impact 1-5" value={impact} onChange={setImpact} />
+          <RiceInput label="Confid %" value={confidence} onChange={setConfidence} />
+          <RiceInput label="Effort wk" value={effort} onChange={setEffort} />
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="ml-auto h-7 px-2 text-xs"
+            disabled={busy}
+            onClick={() =>
+              run(
+                () =>
+                  api.updateIdea(idea.id, {
+                    reach: clampInt(reach, idea.reach),
+                    impact: clampInt(impact, idea.impact),
+                    confidence: clampInt(confidence, idea.confidence),
+                    effort: Math.max(1, clampInt(effort, idea.effort)),
+                  }),
+                async () => {
+                  setScoring(false);
+                  await onChanged();
+                }
+              )
+            }
+          >
+            Save score
+          </Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         {idea.feedbackCount > 0 && (
           <span className="rounded-full bg-muted px-2 py-0.5">
