@@ -379,13 +379,13 @@ All inside the **Edit task** dialog for `UAT-Task-01` (open it, scroll below the
 
 ### UAT-029 — Add and open a subtask
 1. In the **Subtasks** section, type `UAT-Sub-01` in the input (placeholder **Add a subtask…**) and press Enter (or the add button).
-   - **Expected:** `UAT-Sub-01` appears in the subtask list. The board card for `UAT-Task-01` gains a subtask count badge (e.g. `0/1`).
+   - **Expected:** `UAT-Sub-01` appears in the subtask list. The board card for `UAT-Task-01` gains a subtask **count** badge — `1`, titled "1 subtask". It is a count, not a done/total ratio; the checklist badge is the one shaped `1/2`.
 2. Click the subtask `UAT-Sub-01` in the list.
    - **Expected:** the dialog swaps to **Edit subtask** for `UAT-Sub-01`, with a back link at the top showing the parent's title `UAT-Task-01`, and a **Status** select (listing the board's columns) that top-level tasks do not have. **Milestone/Epic/Objective/Sprint/Repeat** fields are absent for a subtask.
 3. Change **Status** to `UAT-Col-Done`.
    - **Expected:** the change commits immediately (no save needed).
 4. Click the back link (`UAT-Task-01`).
-   - **Expected:** you return to the parent's dialog without it closing; after closing the dialog the card badge reads `1/1`.
+   - **Expected:** you return to the parent's dialog without it closing; the subtask now reads `Done` in the parent's list.
 
 **Result:** ☐ Pass ☐ Fail ☐ Blocked — Notes: ______________________
 
