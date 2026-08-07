@@ -31,22 +31,22 @@ describe("compileSubmission (pure)", () => {
     { label: "Severity", type: "text" as const, required: false },
   ];
 
-  it("takes the first answer as the title and compiles the rest", () => {
+  it("takes the first answer as the title and compiles the REST — not the title again", () => {
     const { title, description } = compileSubmission(fields, [
       "Login broken",
       "500 on submit",
       "high",
     ]);
     expect(title).toBe("Login broken");
-    expect(description).toBe(
-      "**Summary:** Login broken\n\n**Details:** 500 on submit\n\n**Severity:** high"
-    );
+    // The panel promises "the first answer becomes the title, the rest its
+    // description" — repeating the title as a **Summary:** line broke it (OBS-8).
+    expect(description).toBe("**Details:** 500 on submit\n\n**Severity:** high");
   });
 
-  it("skips unanswered optional fields", () => {
+  it("skips unanswered optional fields — a title-only submission has no description", () => {
     const { title, description } = compileSubmission(fields, ["Only a title", "", ""]);
     expect(title).toBe("Only a title");
-    expect(description).toBe("**Summary:** Only a title");
+    expect(description).toBe("");
   });
 });
 

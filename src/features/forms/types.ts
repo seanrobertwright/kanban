@@ -94,9 +94,11 @@ export function isFormFieldType(v: unknown): v is FormFieldType {
 /**
  * Compiles a submission's answers into a task title + description, the one place
  * the intake→task shape is decided so the repository and its test agree. The
- * first field's answer is the title (trimmed); every answered field, the first
- * included, becomes a `**Label:** value` line in the description. Unanswered
- * optional fields are skipped rather than carried as empty rows.
+ * first field's answer is the title (trimmed); every OTHER answered field
+ * becomes a `**Label:** value` line in the description — the panel's promise
+ * ("the first answer becomes the title, the rest its description"), which
+ * repeating the title broke (OBS-8). Unanswered optional fields are skipped
+ * rather than carried as empty rows.
  */
 export function compileSubmission(
   fields: FormField[],
@@ -104,7 +106,7 @@ export function compileSubmission(
 ): { title: string; description: string } {
   const title = (answers[0] ?? "").trim();
   const lines: string[] = [];
-  for (let i = 0; i < fields.length; i++) {
+  for (let i = 1; i < fields.length; i++) {
     const value = (answers[i] ?? "").trim();
     if (value === "") continue;
     lines.push(`**${fields[i].label}:** ${value}`);
