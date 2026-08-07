@@ -138,6 +138,18 @@ export function CapacityDialog({
               </span>
             </div>
 
+            {/* Work held by agents — no point budget to weigh it against, but
+                demand that must not vanish from the plan (UI-13). */}
+            {plan.agents.tasks > 0 && (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Held by agents</span>
+                <span className="tabular-nums text-muted-foreground">
+                  {plan.agents.points} pts · {plan.agents.tasks}{" "}
+                  {plan.agents.tasks === 1 ? "task" : "tasks"}
+                </span>
+              </div>
+            )}
+
             {/* Rollup — total demand vs the capacity the week actually has. */}
             <div className="mt-1 flex items-center justify-between gap-2 border-t pt-2 text-sm">
               <span className="text-muted-foreground">

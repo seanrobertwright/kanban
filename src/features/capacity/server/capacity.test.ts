@@ -117,6 +117,29 @@ describe("capacity", () => {
     expect(plan.totals).toMatchObject({ capacity: 10, committed: 5 });
   });
 
+  it("rolls agent-held work into its own bucket instead of dropping it", async () => {
+    // An agent holds open work: no member row for it (no point budget to weigh
+    // against) but the demand must not vanish from the plan (UI-13).
+    const agentId = randomUUID();
+    await query(
+      `INSERT INTO agent (id, workspace_id, name, role, kind, token_hash)
+       VALUES ($1, $2, 'Cap Bot', 'member', 'external', $3)`,
+      [agentId, workspaceId, `hash-${agentId}`]
+    );
+    await createTask(alice, {
+      columnId: todoId,
+      title: "Agent held",
+      assignee: { type: "agent", id: agentId },
+      estimate: 4,
+    });
+
+    const plan = await getBoardCapacity(alice, boardId);
+    expect(plan.agents).toEqual({ points: 4, tasks: 1 });
+    // Not double-counted: no member row carries it, and it is not "unassigned".
+    expect(plan.rows.some((r) => r.userId === agentId)).toBe(false);
+    expect(plan.unassigned.tasks).toBe(1);
+  });
+
   it("upserts a member's capacity and reports null utilization when unset", async () => {
     // Overwrite alice to 0 budget → utilization null even with demand.
     await setMemberCapacity(alice, workspaceId, alice, { weeklyPoints: 0, role: "" });

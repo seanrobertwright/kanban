@@ -60,8 +60,11 @@ export interface CapacityRow {
  *  and the workspace-vs-board rollup. */
 export interface CapacityPlan {
   rows: CapacityRow[];
-  /** Open top-level work with no human assignee — demand nobody is carrying yet. */
+  /** Open top-level work with no assignee at all — demand nobody is carrying yet. */
   unassigned: { points: number; tasks: number };
+  /** Open top-level work held by agents. No per-agent row — an agent has no
+   *  point budget — but the demand is real and must not vanish from the plan. */
+  agents: { points: number; tasks: number };
   /** `capacity` is the nominal sum, `available` the same sum after time off. */
   totals: { capacity: number; available: number; committed: number };
   /** The Mon–Sun window the availability is measured over (ISO dates), so the

@@ -31,9 +31,10 @@ import type {
  * Demand is measured in story points (task.estimate, 022) so it compares to the
  * point budget directly; "open" work is everything not in the board's done column
  * (020's completion notion), because finished work is no longer a claim on
- * anyone's capacity. Agents are out of this view by design — an agent's spend is
- * metered in dollars, not a point budget (the log_time cut's reasoning) — so a
- * human-only roster is the honest capacity picture.
+ * anyone's capacity. Agents get no member row by design — an agent's spend is
+ * metered in dollars, not a point budget (the log_time cut's reasoning) — but
+ * the work they hold still exists, so it rolls into its own bucket beside
+ * "unassigned" rather than vanishing from the picture entirely (UI-13).
  *
  * Time off (090) prorates the budget rather than the demand: leave changes how
  * much of the week a person has, never which tasks are theirs. The window is the
@@ -120,6 +121,19 @@ export async function getBoardCapacity(
     [boardId, board.doneColumnId]
   );
 
+  // Open work held by agents. No per-agent row — no point budget to weigh it
+  // against — but it is real demand on the board, and a plan that dropped it
+  // silently would read as lighter than the board actually is.
+  const agents = await queryOne<{ points: number; tasks: number }>(
+    `SELECT COALESCE(SUM(t.estimate), 0)::int AS points, COUNT(*)::int AS tasks
+       FROM task t
+       JOIN board_column bc ON bc.id = t.column_id
+      WHERE bc.board_id = $1 AND t.parent_id IS NULL
+        AND t.agent_id IS NOT NULL
+        AND ($2::int IS NULL OR t.column_id <> $2)`,
+    [boardId, board.doneColumnId]
+  );
+
   // Absences from this week onward (090). Entries that ended before the window
   // are history: they can no longer change a budget, and the dialog offers to
   // revoke only leave that is still ahead of the plan.
@@ -162,6 +176,7 @@ export async function getBoardCapacity(
   return {
     rows,
     unassigned: unassigned ?? { points: 0, tasks: 0 },
+    agents: agents ?? { points: 0, tasks: 0 },
     totals: summarizeCapacity(rows),
     week,
   };
