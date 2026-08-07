@@ -104,6 +104,28 @@ describe("WhiteboardCanvas", () => {
     expect(provider!.ydoc.getMap("elements").get("drawn")).toEqual(element("drawn"));
   });
 
+  it("stores a snapshot, so in-place mutation of the live element still syncs", async () => {
+    const { onScene } = await mount({ ticket: true });
+    await waitFor(() => expect(provider).not.toBeNull());
+    provider!.sync(true);
+
+    // Excalidraw mutates the same element object for the whole gesture. If the
+    // map holds that object, the pointer-down state is what got encoded, and
+    // every later version compares against itself — never written again.
+    const live = element("stroke");
+    sceneToReport = [live];
+    fireEvent.click(screen.getByText("draw"));
+    await waitFor(() => expect(onScene).toHaveBeenCalled());
+    expect(provider!.ydoc.getMap("elements").get("stroke")).not.toBe(live);
+
+    live.version = 2;
+    live.width = 100;
+    fireEvent.click(screen.getByText("draw"));
+    await waitFor(() =>
+      expect(provider!.ydoc.getMap<SyncElement>("elements").get("stroke")).toEqual({ ...element("stroke", 2), width: 100 })
+    );
+  });
+
   it("paints what a peer draws without being asked to re-render", async () => {
     const { onScene } = await mount({ ticket: true });
     await waitFor(() => expect(provider).not.toBeNull());

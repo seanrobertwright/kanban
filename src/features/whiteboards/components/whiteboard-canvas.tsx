@@ -1,5 +1,7 @@
 "use client";
 
+import "@excalidraw/excalidraw/index.css";
+
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
@@ -99,7 +101,7 @@ export function WhiteboardCanvas({
         provider.on("sync", (synced: boolean) => {
           if (!synced || stopped) return;
           if (shared.size === 0 && seed.length > 0) {
-            ydoc.transact(() => { for (const element of seed) shared.set(element.id, element); });
+            ydoc.transact(() => { for (const element of seed) shared.set(element.id, structuredClone(element)); });
           }
           setLive(true);
           repaint();
@@ -135,8 +137,13 @@ export function WhiteboardCanvas({
     }
     const { upserts, removals } = localChanges(elements, shared, seenRef.current);
     if (upserts.length === 0 && removals.length === 0) return;
+    // Snapshot, never the live object: Excalidraw mutates elements in place as a
+    // gesture continues, so storing its object writes the pointer-down state to
+    // the room and then leaves the map holding the very object whose `version`
+    // isNewer compares against — every later mutation compares the element with
+    // itself and is never written.
     shared.doc?.transact(() => {
-      for (const element of upserts) shared.set(element.id, element);
+      for (const element of upserts) shared.set(element.id, structuredClone(element));
       for (const id of removals) shared.delete(id);
     });
     for (const element of elements) seenRef.current.add(element.id);
@@ -154,7 +161,7 @@ export function WhiteboardCanvas({
   const add = useCallback((elements: SyncElement[]) => {
     const shared = sharedRef.current;
     if (shared) {
-      shared.doc?.transact(() => { for (const element of elements) shared.set(element.id, element); });
+      shared.doc?.transact(() => { for (const element of elements) shared.set(element.id, structuredClone(element)); });
       for (const element of elements) seenRef.current.add(element.id);
       paintedRef.current = sceneFromShared(shared);
       apiRef.current?.updateScene({ elements: paintedRef.current });
