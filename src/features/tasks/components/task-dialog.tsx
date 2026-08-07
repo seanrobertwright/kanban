@@ -245,6 +245,13 @@ interface TaskDialogProps {
   sprints?: Sprint[];
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: TaskFormValues) => Promise<void> | void;
+  /**
+   * Whether this role may write the task. A viewer still opens the dialog —
+   * reading a task and commenting are theirs by design — but offering a Save
+   * button whose PATCH the server will 403 is a lie told twice: once by the
+   * affordance, once by the silent close that followed it (UI-12).
+   */
+  canEdit?: boolean;
   /** Open one of this task's pieces in this same dialog (a piece is a task). */
   onOpenSubtask?: (task: Task) => void;
   /** Return from a piece to its parent without closing the dialog. */
@@ -288,6 +295,7 @@ export function TaskDialog({
   sprints = [],
   onOpenChange,
   onSubmit,
+  canEdit = true,
   onOpenSubtask,
   onBack,
   onMoveSubtask,
@@ -401,7 +409,7 @@ export function TaskDialog({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!title.trim()) return;
+    if (!canEdit || !title.trim()) return;
     setSaving(true);
     try {
       await onSubmit({
@@ -480,13 +488,23 @@ export function TaskDialog({
               </button>
             )}
             <DialogTitle>
-              {task ? (isSubtask ? "Edit subtask" : "Edit task") : "New task"}
+              {task
+                ? canEdit
+                  ? isSubtask
+                    ? "Edit subtask"
+                    : "Edit task"
+                  : isSubtask
+                    ? "Subtask"
+                    : "Task"
+                : "New task"}
             </DialogTitle>
             <DialogDescription>
               {task
-                ? isSubtask
-                  ? "Update the subtask details below."
-                  : "Update the task details below."
+                ? canEdit
+                  ? isSubtask
+                    ? "Update the subtask details below."
+                    : "Update the task details below."
+                  : "View only — your role can read and comment."
                 : "Add a task to this column."}
             </DialogDescription>
           </DialogHeader>
@@ -1109,11 +1127,13 @@ export function TaskDialog({
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {canEdit ? "Cancel" : "Close"}
             </Button>
-            <Button type="submit" disabled={saving || !title.trim()}>
-              {task ? "Save changes" : "Create task"}
-            </Button>
+            {canEdit && (
+              <Button type="submit" disabled={saving || !title.trim()}>
+                {task ? "Save changes" : "Create task"}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

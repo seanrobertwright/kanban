@@ -143,7 +143,9 @@ function task(over: Partial<Task> = {}): Task {
   };
 }
 
-function renderDialog(over: { task?: Task; onRunReviewed?: () => void } = {}) {
+function renderDialog(
+  over: { task?: Task; onRunReviewed?: () => void; canEdit?: boolean } = {}
+) {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
   render(
     <TaskDialog
@@ -155,6 +157,7 @@ function renderDialog(over: { task?: Task; onRunReviewed?: () => void } = {}) {
       labels={LABELS}
       onOpenChange={vi.fn()}
       onSubmit={onSubmit}
+      canEdit={over.canEdit}
       onRunReviewed={over.onRunReviewed}
     />
   );
@@ -163,6 +166,22 @@ function renderDialog(over: { task?: Task; onRunReviewed?: () => void } = {}) {
 
 const submit = () =>
   fireEvent.click(screen.getByRole("button", { name: /Save changes|Create task/ }));
+
+describe("TaskDialog for a viewer", () => {
+  it("offers no Save button and says so, instead of a save that 403s", () => {
+    // A viewer opens a task to read and comment (their rights by design). The
+    // dialog used to offer the full editor whose SAVE CHANGES the server 403'd
+    // and the UI swallowed — a silent no-op (UI-12).
+    renderDialog({ task: task(), canEdit: false });
+    expect(screen.queryByRole("button", { name: /Save changes/ })).toBeNull();
+    // Two Close buttons: the dialog's corner X and the footer's relabelled
+    // Cancel — the point is that neither is a Save.
+    expect(screen.getAllByRole("button", { name: "Close" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/View only — your role can read and comment/)
+    ).toBeTruthy();
+  });
+});
 
 /**
  * The picker's whole job is translating between a DOM value (always a string)

@@ -1582,6 +1582,7 @@ export function Board({
           if (!open) setDialog(null);
         }}
         onSubmit={handleDialogSubmit}
+        canEdit={canEdit}
         // Opening a piece keeps the dialog open and swaps the task inside it,
         // stashing the current one as the parent to return to. Depth is 1, so the
         // task being opened is always top-level — there is no deeper stack.
