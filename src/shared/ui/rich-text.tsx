@@ -19,12 +19,19 @@ import type { ReactNode } from "react";
  * Anything outside it is left as literal text, which is the safe default.
  */
 
-/** Allow only hrefs that cannot execute script: http(s), mailto, or same-site
- *  relative. A `javascript:` or `data:` URL falls through to null and the link
- *  renders as its literal Markdown text instead. */
+/** Allow only hrefs that cannot execute script: http(s), mailto, same-site
+ *  relative, or a `#fragment` (the docs preview's `#doc-<id>` wiki links — a
+ *  fragment navigates within the page and can never run). A `javascript:` or
+ *  `data:` URL falls through to null and the link renders as its literal
+ *  Markdown text instead. */
 function safeHref(url: string): string | null {
   const u = url.trim();
-  if (/^https?:\/\//i.test(u) || /^mailto:/i.test(u) || u.startsWith("/")) {
+  if (
+    /^https?:\/\//i.test(u) ||
+    /^mailto:/i.test(u) ||
+    u.startsWith("/") ||
+    u.startsWith("#")
+  ) {
     return u;
   }
   return null;
@@ -62,8 +69,11 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
           <a
             key={key}
             href={href}
-            target="_blank"
-            rel="noreferrer noopener nofollow"
+            // A fragment stays in this page — the docs dialog intercepts its
+            // click; a new tab would land it on nothing.
+            {...(href.startsWith("#")
+              ? {}
+              : { target: "_blank", rel: "noreferrer noopener nofollow" })}
             className="text-primary underline underline-offset-2"
           >
             {m[3]}
@@ -145,6 +155,25 @@ export function RichText({
       continue;
     }
 
+    // Heading: "# " through "###### ". In the grammar because the app itself
+    // writes them — the meeting and decision doc templates are built of "# "
+    // sections — so leaving them literal renders our own templates as noise.
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) {
+      const level = heading[1].length;
+      const Tag = `h${level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+      const size =
+        level === 1 ? "text-lg" : level === 2 ? "text-base" : "text-sm";
+      const key = `b${b++}`;
+      blocks.push(
+        <Tag key={key} className={`${size} font-semibold leading-6`}>
+          {renderInline(heading[2], key)}
+        </Tag>
+      );
+      i++;
+      continue;
+    }
+
     // Bullet list: consecutive "- " / "* " lines.
     if (/^[-*]\s+/.test(line)) {
       const items: string[] = [];
@@ -189,7 +218,8 @@ export function RichText({
       lines[i].trim() !== "" &&
       !lines[i].startsWith("```") &&
       !/^[-*]\s+/.test(lines[i]) &&
-      !/^>\s?/.test(lines[i])
+      !/^>\s?/.test(lines[i]) &&
+      !/^#{1,6}\s+/.test(lines[i])
     ) {
       para.push(lines[i]);
       i++;

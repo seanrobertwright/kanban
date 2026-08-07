@@ -164,7 +164,7 @@ export default async function Home({
   const collaborate = (
     <>
       <KnowledgeButton workspaceId={data.board.workspaceId} />
-      <DocsButton workspaceId={data.board.workspaceId} canManage={canEdit} />
+      <DocsButton workspaceId={data.board.workspaceId} boardId={data.board.id} canManage={canEdit} />
       <ChatButton
         workspaceId={data.board.workspaceId}
         canEdit={canEdit}

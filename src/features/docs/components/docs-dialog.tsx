@@ -22,12 +22,12 @@ const TEMPLATES: Record<DocKind, { title: string; body: string }> = {
   decision: { title: "Decision", body: "# Context\n\n# Decision\n\n# Rationale\n\n# Status\nProposed" },
 };
 
-export function DocsButton({ workspaceId, canManage }: { workspaceId: string; canManage: boolean }) {
+export function DocsButton({ workspaceId, boardId, canManage }: { workspaceId: string; boardId: number; canManage: boolean }) {
   const [open, setOpen] = useState(false);
-  return <><Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setOpen(true)}><BookOpen /> Docs</Button><DocsDialog workspaceId={workspaceId} canManage={canManage} open={open} onOpenChange={setOpen} /></>;
+  return <><Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setOpen(true)}><BookOpen /> Docs</Button><DocsDialog workspaceId={workspaceId} boardId={boardId} canManage={canManage} open={open} onOpenChange={setOpen} /></>;
 }
 
-function DocsDialog({ workspaceId, canManage, open, onOpenChange }: { workspaceId: string; canManage: boolean; open: boolean; onOpenChange: (open: boolean) => void }) {
+function DocsDialog({ workspaceId, boardId, canManage, open, onOpenChange }: { workspaceId: string; boardId: number; canManage: boolean; open: boolean; onOpenChange: (open: boolean) => void }) {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [selected, setSelected] = useState<Doc | null>(null);
   const [title, setTitle] = useState("");
@@ -71,7 +71,11 @@ function DocsDialog({ workspaceId, canManage, open, onOpenChange }: { workspaceI
    *  becomes a real child in one click rather than a note to self. */
   async function createWanted(title: string) { if (!selected) return; setBusy(true); setError(null); try { const doc = await api.createDoc(workspaceId, { title, kind: "page", parentId: selected.id }); setDocs((old) => [...old, doc]); } catch (e) { setError(e instanceof Error ? e.message : "Could not create document"); } finally { setBusy(false); } }
 
-  async function add(kind: DocKind) { setBusy(true); setError(null); try { const doc = await api.createDoc(workspaceId, { ...TEMPLATES[kind], kind }); setDocs((old) => [...old, doc]); choose(doc); } catch (e) { setError(e instanceof Error ? e.message : "Could not create document"); } finally { setBusy(false); } }
+  // A meeting note is born board-scoped: promoteMeetingAction refuses a doc
+  // with no board ("there is no implicit destination"), and this dialog is the
+  // only UI that creates one — without the board it minted docs whose action
+  // items could never become work (UI-9).
+  async function add(kind: DocKind) { setBusy(true); setError(null); try { const doc = await api.createDoc(workspaceId, { ...TEMPLATES[kind], kind, ...(kind === "meeting" ? { boardId } : {}) }); setDocs((old) => [...old, doc]); choose(doc); } catch (e) { setError(e instanceof Error ? e.message : "Could not create document"); } finally { setBusy(false); } }
   async function save() { if (!selected || !title.trim()) return; setBusy(true); setError(null); try { const doc = await api.updateDoc(selected.id, { title, body }); setDocs((old) => old.map((item) => item.id === doc.id ? doc : item)); choose(doc); } catch (e) { setError(e instanceof Error ? e.message : "Could not save document"); } finally { setBusy(false); } }
   async function togglePublish() { if (!selected) return; setBusy(true); setError(null); try { const doc = await api.updateDoc(selected.id, { isPublished: !selected.isPublished }); setDocs((old) => old.map((item) => item.id === doc.id ? doc : item)); setSelected(doc); } catch (e) { setError(e instanceof Error ? e.message : "Could not update publish state"); } finally { setBusy(false); } }
   async function remove() { if (!selected) return; setBusy(true); try { await api.deleteDoc(selected.id); const next = docs.filter((doc) => doc.id !== selected.id); setDocs(next); choose(next[0] ?? null); } catch (e) { setError(e instanceof Error ? e.message : "Could not delete document"); } finally { setBusy(false); } }

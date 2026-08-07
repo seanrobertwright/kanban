@@ -49,6 +49,24 @@ describe("RichText", () => {
     expect(container.textContent).toContain("[click](javascript:alert(1))");
   });
 
+  it("renders a fragment link in-page — no new tab, no rejection", () => {
+    // The docs preview writes resolved [[wiki links]] as #doc-<id>; a fragment
+    // cannot execute, and it must stay in this page for the dialog to intercept.
+    const { container } = render(<RichText text="See [Other page](#doc-42)" />);
+    const a = container.querySelector("a");
+    expect(a?.getAttribute("href")).toBe("#doc-42");
+    expect(a?.getAttribute("target")).toBeNull();
+  });
+
+  it("renders # headings — the doc templates are built of them", () => {
+    const { container } = render(
+      <RichText text={"# Attendees\nAlice\n## Agenda"} />
+    );
+    expect(container.querySelector("h1")?.textContent).toBe("Attendees");
+    expect(container.querySelector("h2")?.textContent).toBe("Agenda");
+    expect(container.textContent).not.toContain("#");
+  });
+
   it("renders a bullet list and a fenced code block", () => {
     const { container } = render(
       <RichText text={"- one\n- two\n\n```\nx = 1\n```"} />
