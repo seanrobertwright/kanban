@@ -56,6 +56,11 @@ export function LabelsDialog({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState<LabelColor>("slate");
+  // Two-click delete (OBS-6): deleting a label strips it from every task
+  // wearing it, immediately and with no undo — the epics/forms "Really?"
+  // idiom, because unlike a column delete the server has no safe-to-refuse
+  // rule to lean on here.
+  const [confirmingId, setConfirmingId] = useState<number | null>(null);
 
   async function reload() {
     onChanged(await labelsApi.fetchLabels(workspaceId));
@@ -196,13 +201,25 @@ export function LabelsDialog({
               {canDelete && (
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="size-7 text-muted-foreground"
+                  size={confirmingId === label.id ? "sm" : "icon"}
+                  className={
+                    confirmingId === label.id
+                      ? "h-7 px-2 text-xs text-destructive"
+                      : "size-7 text-muted-foreground"
+                  }
                   disabled={busy}
                   aria-label={`Delete ${label.name}`}
-                  onClick={() => run(() => labelsApi.deleteLabel(label.id))}
+                  onClick={() =>
+                    confirmingId === label.id
+                      ? run(async () => {
+                          await labelsApi.deleteLabel(label.id);
+                          setConfirmingId(null);
+                        })
+                      : setConfirmingId(label.id)
+                  }
+                  onBlur={() => setConfirmingId(null)}
                 >
-                  <Trash2 />
+                  {confirmingId === label.id ? "Really?" : <Trash2 />}
                 </Button>
               )}
             </li>
