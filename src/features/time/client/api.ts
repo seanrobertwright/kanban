@@ -21,15 +21,23 @@ export async function fetchTaskTime(taskId: number): Promise<TaskTime> {
   return jsonOrThrow<TaskTime>(res);
 }
 
+/**
+ * `spentOn` is the caller's *local* date (UI-3). Omitting it falls back to the
+ * server's `CURRENT_DATE`, which is the database's zone — UTC here — and dates
+ * an evening's work to tomorrow for every reader behind Greenwich. It stays
+ * optional because the fallback is right for a caller with no reader to ask,
+ * and wrong only when there is one.
+ */
 export function addTimeEntry(
   taskId: number,
   minutes: number,
-  note: string
+  note: string,
+  spentOn?: string | null
 ): Promise<TimeEntry> {
   return fetch(`/api/tasks/${taskId}/time`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ minutes, note }),
+    body: JSON.stringify(spentOn ? { minutes, note, spentOn } : { minutes, note }),
   }).then((res) => jsonOrThrow<TimeEntry>(res));
 }
 

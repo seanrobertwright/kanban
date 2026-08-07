@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { formatDueDate, useToday } from "@/shared/lib/due-date";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import * as api from "../client/api";
@@ -19,6 +20,7 @@ interface TimeSectionProps {
  * section exists for; the entries under it are its receipt.
  */
 export function TimeSection({ taskId, onChanged }: TimeSectionProps) {
+  const today = useToday();
   const [time, setTime] = useState<TaskTime | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [minutes, setMinutes] = useState("");
@@ -61,7 +63,13 @@ export function TimeSection({ taskId, onChanged }: TimeSectionProps) {
     const parsed = parseInt(minutes, 10);
     if (!Number.isInteger(parsed) || parsed <= 0) return;
     await mutate(async () => {
-      await api.addTimeEntry(taskId, parsed, note.trim());
+      // The reader's date, not the database's (UI-3). Left to the server's
+      // CURRENT_DATE this was stamped in the container's zone, so 20:58 in New
+      // York was filed under tomorrow — and spent_on is what the timesheet
+      // groups and filters by, so the day and sometimes the week were wrong.
+      // `today` is null only during SSR and the first client render, neither of
+      // which can be logging time; the server's default remains the fallback.
+      await api.addTimeEntry(taskId, parsed, note.trim(), today);
       setMinutes("");
       setNote("");
     });
@@ -96,7 +104,11 @@ export function TimeSection({ taskId, onChanged }: TimeSectionProps) {
                   {formatMinutes(entry.minutes)}
                 </span>{" "}
                 · {entry.userName ?? "A removed user"} ·{" "}
-                <time dateTime={entry.spentOn}>{entry.spentOn}</time>
+                {/* Formatted, like every other date in the dialog (UI-4): the
+                    machine-readable form belongs in dateTime, not on screen. */}
+                <time dateTime={entry.spentOn}>
+                  {formatDueDate(entry.spentOn)}
+                </time>
                 {entry.note && <> · {entry.note}</>}
               </span>
               {entry.canDelete && (
