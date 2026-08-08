@@ -11,42 +11,44 @@ extension format instead; a ready-made wrapper sits in [`gemini/`](./gemini).
 
 ## Install
 
-Run the block for your client from the repository the agent works in.
+No shell commands — your agent installs its own skill. Open the coding agent
+in the repository it works in and paste the prompt for your client.
 
-**Claude Code**
+**Claude Code** — paste this into your coding agent:
 
-```sh
-mkdir -p .claude/skills/kanban
-curl -fsSL https://raw.githubusercontent.com/seanrobertwright/kanban/master/skills/kanban/SKILL.md \
-  -o .claude/skills/kanban/SKILL.md
+```text
+Install the agent skill found at
+https://raw.githubusercontent.com/seanrobertwright/kanban/master/skills/kanban/SKILL.md
+into this repository at .claude/skills/kanban/SKILL.md, then confirm it loads.
 ```
 
-**Codex CLI** — project-level `.agents/skills/` (commit it with the repo), or
-`~/.codex/skills/` for every project:
+**Codex CLI** — paste this into your coding agent (say
+`~/.codex/skills/kanban/SKILL.md` instead to have it in every project):
 
-```sh
-mkdir -p .agents/skills/kanban
-curl -fsSL https://raw.githubusercontent.com/seanrobertwright/kanban/master/skills/kanban/SKILL.md \
-  -o .agents/skills/kanban/SKILL.md
+```text
+Install the agent skill found at
+https://raw.githubusercontent.com/seanrobertwright/kanban/master/skills/kanban/SKILL.md
+into this repository at .agents/skills/kanban/SKILL.md, then confirm it loads.
 ```
 
-**Pi** — project-level `.pi/skills/`, or `~/.pi/agent/skills/` for every
-project:
+**Pi** — paste this into your coding agent (or `~/.pi/agent/skills/kanban/`
+for every project):
 
-```sh
-mkdir -p .pi/skills/kanban
-curl -fsSL https://raw.githubusercontent.com/seanrobertwright/kanban/master/skills/kanban/SKILL.md \
-  -o .pi/skills/kanban/SKILL.md
+```text
+Install the agent skill found at
+https://raw.githubusercontent.com/seanrobertwright/kanban/master/skills/kanban/SKILL.md
+into this repository at .pi/skills/kanban/SKILL.md, then confirm it loads.
 ```
 
-**Gemini CLI** — install the extension (from a checkout of this repo):
+**Gemini CLI** — Gemini loads extensions rather than skills; the wrapper in
+[`gemini/`](./gemini) carries the same instructions as always-on context
+(`GEMINI.md`). Paste this into your coding agent:
 
-```sh
-gemini extensions install ./skills/kanban/gemini
+```text
+Install the Gemini CLI extension found in the skills/kanban/gemini folder of
+https://github.com/seanrobertwright/kanban — clone the repository to a
+temporary folder and run: gemini extensions install <clone>/skills/kanban/gemini
 ```
-
-The extension carries the same instructions as `SKILL.md`, loaded as
-always-on context (`GEMINI.md`) rather than a triggered skill.
 
 ## Connect
 
