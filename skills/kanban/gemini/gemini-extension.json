@@ -1,0 +1,6 @@
+{
+  "name": "kanban",
+  "version": "1.0.0",
+  "description": "Work a self-hosted Kanban board: read it, create/update/move/claim tasks, comment, and honor the approval gate.",
+  "contextFileName": "GEMINI.md"
+}

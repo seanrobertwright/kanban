@@ -1,14 +1,16 @@
 ---
 title: The Kanban skill
-description: A drop-in skill that teaches a coding agent in any repository how to work your board — install it, connect it, and know what it will and will not do.
+description: A drop-in skill for Claude Code, Codex CLI, Pi, and Gemini CLI that teaches a coding agent in any repository how to work your board.
 ---
 
-The repository ships a ready-made **agent skill** — a single `SKILL.md` file
-you drop into any repository where a coding agent works (Claude Code reads
-`.claude/skills/`; the format is plain Markdown with a name and trigger
-description, so other skill-aware clients can consume it too). Once installed,
-the agent knows how to find your board, act under its own identity, and stay
-inside the approval gate — without you re-explaining the API in every session.
+The repository ships a ready-made **agent skill** — a single `SKILL.md` in the
+cross-platform Agent Skills format (YAML frontmatter + Markdown). The same
+file works unchanged in **Claude Code**, **OpenAI Codex CLI**, and **Pi**;
+only the directory it lands in differs. **Gemini CLI** uses its extension
+format instead, and a ready-made wrapper ships alongside. Once installed, the
+agent knows how to find your board, act under its own identity, and stay
+inside the approval gate — without you re-explaining the API in every
+session.
 
 The skill lives at
 [`skills/kanban/SKILL.md`](https://github.com/seanrobertwright/kanban/tree/master/skills/kanban)
@@ -36,7 +38,10 @@ in the repository.
 
 ## Install
 
-In the repository the agent works in:
+Run the block for your client from the repository the agent works in. The
+skill is self-contained — one file, no scripts — so "install" is a copy.
+
+### Claude Code
 
 ```sh
 mkdir -p .claude/skills/kanban
@@ -44,8 +49,39 @@ curl -fsSL https://raw.githubusercontent.com/seanrobertwright/kanban/master/skil
   -o .claude/skills/kanban/SKILL.md
 ```
 
-Or copy `skills/kanban/` from a checkout. The skill is self-contained — one
-file, no scripts.
+### Codex CLI
+
+Project-level (commit it with the repo):
+
+```sh
+mkdir -p .agents/skills/kanban
+curl -fsSL https://raw.githubusercontent.com/seanrobertwright/kanban/master/skills/kanban/SKILL.md \
+  -o .agents/skills/kanban/SKILL.md
+```
+
+Or once for every project: the same file into `~/.codex/skills/kanban/`.
+
+### Pi
+
+Project-level:
+
+```sh
+mkdir -p .pi/skills/kanban
+curl -fsSL https://raw.githubusercontent.com/seanrobertwright/kanban/master/skills/kanban/SKILL.md \
+  -o .pi/skills/kanban/SKILL.md
+```
+
+Or once for every project: the same file into `~/.pi/agent/skills/kanban/`.
+
+### Gemini CLI
+
+Gemini loads extensions rather than skills; the wrapper in
+`skills/kanban/gemini/` carries the same instructions as always-on context.
+From a checkout of the kanban repository:
+
+```sh
+gemini extensions install ./skills/kanban/gemini
+```
 
 ## Connect
 
@@ -56,9 +92,12 @@ The skill needs one of two connections (both described in
    `KANBAN_AGENT_KEY`. Mint the key in the app under **Settings → Agents →
    Add an agent** (kind *external*, role `member` for a working agent or
    `viewer` for a read-and-comment one). The token is shown once.
-2. **MCP** — point the target repo's `.mcp.json` at `mcp/server.mjs` in this
-   repository with the same two values in its `env` block. Keep `.mcp.json`
-   out of version control; it holds a live credential.
+2. **MCP** — point the client's MCP config at `mcp/server.mjs` in this
+   repository with the same two values in its `env` block: Claude Code uses
+   `.mcp.json` in the target repo, Codex `[mcp_servers.kanban]` in
+   `~/.codex/config.toml`, Gemini CLI `mcpServers` in `.gemini/settings.json`.
+   Keep whichever file holds the key out of version control; it is a live
+   credential.
 
 Use a separate agent identity per repository or per agent, so a task's
 history reads as who actually did the work.

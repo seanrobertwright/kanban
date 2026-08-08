@@ -1,9 +1,8 @@
----
-name: kanban
-description: Work a self-hosted Kanban board from any repo — read the board, create/update/move/claim tasks, comment, and honor the approval gate. Use when the user mentions their kanban board, board tasks/tickets, sprints, or asks to file, update, pick up, or finish board work.
----
-
 # Working the Kanban board
+
+> Gemini CLI extension context. Applies whenever the user talks about their
+> kanban board, its tasks or tickets, sprints, or asks you to file, update,
+> pick up, or finish board work.
 
 You are talking to a self-hosted Kanban app whose API treats an agent as a
 first-class principal: you act under your own identity, your actions land in
@@ -15,9 +14,9 @@ what will surprise you.
 
 Check in this order:
 
-1. **MCP tools present?** If tools named `mcp__kanban__*` (e.g.
-   `mcp__kanban__whoami`, `mcp__kanban__list_board`) are available, use them —
-   they map one-to-one onto the HTTP API and handle auth for you. Skip to §2.
+1. **MCP tools present?** If tools from a `kanban` MCP server (`whoami`,
+   `list_board`, `search_tasks`, …) are available, use them — they map
+   one-to-one onto the HTTP API and handle auth for you. Skip to §2.
 2. **Environment configured?** If `KANBAN_URL` and `KANBAN_AGENT_KEY` are set
    (check with `echo ${KANBAN_URL:+set} ${KANBAN_AGENT_KEY:+set}` — never echo
    the key itself), speak HTTP directly:
@@ -33,12 +32,9 @@ Check in this order:
      Add an agent** (kind: external). The `kbn_…` token is shown exactly once.
    - Set `KANBAN_URL` (the app's origin, e.g. `http://localhost:6810`) and
      `KANBAN_AGENT_KEY` (the token) in the environment or repo `.env`.
-   - Optional MCP wiring (needs the kanban repo checked out somewhere): the
-     server is `node <path-to-kanban-repo>/mcp/server.mjs` with
-     `KANBAN_URL` and `KANBAN_AGENT_KEY` in its env. Add it to your client's
-     MCP config — Claude Code: `.mcp.json` in the repo; Codex:
-     `[mcp_servers.kanban]` in `~/.codex/config.toml`; Gemini CLI:
-     `mcpServers` in `.gemini/settings.json`. Claude Code example:
+   - Optional MCP wiring (needs the kanban repo checked out somewhere): add
+     to `.gemini/settings.json` (or this extension's own config) an
+     `mcpServers` entry:
 
      ```json
      {
@@ -52,7 +48,7 @@ Check in this order:
      }
      ```
 
-     Whatever file holds the key must be gitignored — it is a live credential.
+     `.mcp.json` must be gitignored — it holds a live credential.
 
 **The key is a credential.** Never print it, commit it, or paste it into
 comments, code, or task descriptions.
