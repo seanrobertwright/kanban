@@ -40,7 +40,10 @@ function classify(status, body) {
   return [serverCode ?? "HTTP_ERROR", false];
 }
 
-export function createClient({ baseUrl, key, timeoutMs = 15000, dryRun = false }) {
+// `key` is an agent key (kbn_, x-agent-key) or a personal user key
+// (kbu_, x-user-key); `keyHeader` says which header carries it. The server
+// keeps one resolution path per header, so sending the right one matters.
+export function createClient({ baseUrl, key, keyHeader = "x-agent-key", timeoutMs = 15000, dryRun = false }) {
   const BASE = baseUrl.replace(/\/$/, "");
 
   async function api(
@@ -60,7 +63,7 @@ export function createClient({ baseUrl, key, timeoutMs = 15000, dryRun = false }
         res = await fetch(`${BASE}${path}`, {
           method,
           headers: {
-            "x-agent-key": key,
+            [keyHeader]: key,
             ...(body ? { "content-type": "application/json" } : {}),
             ...(dryRun ? { "dry-run": "true" } : {}),
             ...headers,

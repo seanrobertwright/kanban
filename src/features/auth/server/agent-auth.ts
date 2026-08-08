@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { queryOne } from "@/shared/db/client";
 import { getSessionFromRequest } from "./session";
+import { getUserByApiKey, USER_KEY_HEADER } from "./user-key";
 import type { Principal } from "./principal";
 
 /**
@@ -50,6 +51,11 @@ export async function getAgentByToken(
  * is no session does the agent header get considered — which is what keeps this a
  * strict superset of the old getSessionFromRequest behaviour, with the human path
  * byte-for-byte unchanged.
+ *
+ * The personal API key (user-key.ts) is the third credential class: it resolves
+ * to a HUMAN principal, so a CLI presenting one acts as its owner — same roles,
+ * same attribution — without a browser cookie. It is checked last because a
+ * request carrying it never carries the other two.
  */
 export async function getPrincipalFromRequest(
   request: Request
@@ -59,6 +65,9 @@ export async function getPrincipalFromRequest(
 
   const key = request.headers.get(AGENT_KEY_HEADER);
   if (key) return getAgentByToken(key);
+
+  const userKey = request.headers.get(USER_KEY_HEADER);
+  if (userKey) return getUserByApiKey(userKey);
 
   return null;
 }

@@ -19,6 +19,27 @@ kanban task release 42
 Mint a key with `npm run create-agent`. `KANBAN_BOARD_ID` (or `--board`) pins
 the default board in a multi-board workspace.
 
+## Acting as yourself — the personal key
+
+An agent key (`kbn_…`) attributes everything to a bot. To act as *you* — same
+boards, same role, history that says your name — mint a personal key in
+**Settings → API keys** and use it instead:
+
+```sh
+KANBAN_USER_KEY=kbu_… kanban me
+kanban --user-key kbu_… task comment 42 "reviewed, shipping"
+```
+
+The personal key travels in `x-user-key` and resolves to your user account;
+your workspace roles are looked up per request, exactly as for a browser
+session. When both env keys are set the personal key wins (a stderr note says
+so); passing both flags is an error. Personal keys also unlock the commands an
+agent key cannot reach: `notify list`, `notify seen`, and `knowledge`.
+
+Key hygiene: keys are shown once at mint, stored hashed, revocable in the same
+settings panel, and minting requires a browser session — a leaked key cannot
+mint further keys.
+
 ## Exit codes — the contract with scripts
 
 | Code | Meaning |
@@ -56,6 +77,6 @@ succeeded *as a proposal*. Branch on it.
   copy so the doors version independently. It returns `{ status, data }`
   because the CLI must map 202 to exit 3.
 
-Not yet reachable with an agent key (server-side limitation, shared with the
-other doors): `notify list`, `notify seen`, and `knowledge` currently accept
-only human sessions.
+Not reachable with an *agent* key (server-side, shared with the other doors):
+`notify list`, `notify seen`, and `knowledge` accept only human credentials —
+a session or a personal key.

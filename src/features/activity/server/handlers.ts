@@ -1,9 +1,6 @@
 import { getPrincipalFromRequest } from "@/features/auth/server/agent-auth";
 import { asPrincipal } from "@/features/auth/server/principal";
-import {
-  getSessionFromRequest,
-  unauthorized,
-} from "@/features/auth/server/session";
+import { unauthorized } from "@/features/auth/server/session";
 import { takeToken } from "@/shared/lib/rate-limit";
 import { authzErrorResponse } from "@/features/workspaces/server/authz";
 import { parseEventQuery } from "../lib/events";
@@ -121,15 +118,19 @@ export async function handleBoardEvents(request: Request, id: string) {
 // Human-only, unlike the task feed above: the notification bell is a person's
 // inbox. An agent has no bell — it reads the board it acts on, it does not get
 // pinged about it.
+// The notification inbox is per-user state, so it takes any credential that
+// resolves to a HUMAN principal — a cookie session or a personal API key
+// (user-key.ts), which is how the CLI reads its owner's inbox. An agent key
+// still gets 401: an agent has no seen-state row here to read.
 export async function handleListNotifications(
   request: Request,
   workspaceId: string
 ) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (principal?.kind !== "human") return unauthorized();
   try {
     return Response.json(
-      await listWorkspaceNotifications(session.user.id, workspaceId)
+      await listWorkspaceNotifications(principal.userId, workspaceId)
     );
   } catch (error) {
     return authzErrorResponse(error);
@@ -140,11 +141,11 @@ export async function handleMarkNotificationsSeen(
   request: Request,
   workspaceId: string
 ) {
-  const session = await getSessionFromRequest(request);
-  if (!session) return unauthorized();
+  const principal = await getPrincipalFromRequest(request);
+  if (principal?.kind !== "human") return unauthorized();
   try {
     const lastSeenAt = await markNotificationsSeen(
-      session.user.id,
+      principal.userId,
       workspaceId
     );
     return Response.json({ lastSeenAt });

@@ -27,6 +27,7 @@ import {
   Gauge,
   GitBranch,
   Inbox,
+  KeyRound,
   Landmark,
   Layers,
   LayoutDashboard,
@@ -80,6 +81,7 @@ import { AuditLogPanel } from "@/features/admin/components/audit-log-panel";
 import { EmailIntakePanel } from "@/features/admin/components/email-intake-panel";
 import { PermissionsPanel } from "@/features/admin/components/permissions-panel";
 import { SecurityPanel } from "@/features/admin/components/security-panel";
+import { ApiKeysPanel } from "@/features/auth/components/api-keys-panel";
 import { WorkspaceOverviewPanel } from "@/features/admin/components/workspace-overview-panel";
 import { RepoConnectionsDialog } from "@/features/git/components/repo-connections-dialog";
 import { MembersDialog } from "@/features/workspaces/components/members-dialog";
@@ -1009,6 +1011,16 @@ export function Board({
             onChanged={refresh}
           />
         ),
+      },
+      // Personal, not admin-gated: the list is the caller's own keys and
+      // nothing else (user-key-handlers.ts scopes every query to the session).
+      {
+        id: "api-keys",
+        label: "API keys",
+        group: "Account",
+        icon: KeyRound,
+        description: "Personal keys that let the CLI and scripts act as you.",
+        render: () => <ApiKeysPanel />,
       },
     ],
     [

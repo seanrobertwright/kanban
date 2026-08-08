@@ -27,7 +27,8 @@ const GLOBAL_FLAGS = {
   "dry-run": { type: "boolean", desc: "Ask what the call would do; write nothing" },
   board: { type: "string", desc: "Board id (default: KANBAN_BOARD_ID, else the workspace's first board)" },
   url: { type: "string", desc: "App base URL (default: KANBAN_URL, else http://localhost:3000)" },
-  key: { type: "string", desc: "Agent key (default: KANBAN_AGENT_KEY)" },
+  key: { type: "string", desc: "Agent key kbn_… — acts as a bot (default: KANBAN_AGENT_KEY)" },
+  "user-key": { type: "string", desc: "Personal key kbu_… — acts as YOU (default: KANBAN_USER_KEY)" },
   "idempotency-key": { type: "string", desc: "Stable key so a retried create is not a duplicate" },
   help: { type: "boolean", short: "h", desc: "Show help" },
 };
@@ -196,11 +197,35 @@ if (opts["dry-run"] && !cmd.mutating) {
 // ── Context and execution ───────────────────────────────────────────────────
 
 const baseUrl = opts.url ?? process.env.KANBAN_URL ?? "http://localhost:3000";
-const key = opts.key ?? process.env.KANBAN_AGENT_KEY;
+
+// Two credential classes: a personal key acts as YOU, an agent key as a bot.
+// An explicit flag beats the environment; between the two, the personal key
+// wins — when both are configured, attributing work to the person is the
+// safer default, and the stderr note says which identity is speaking.
+const flagUserKey = opts["user-key"];
+const flagAgentKey = opts.key;
+if (flagUserKey && flagAgentKey) {
+  fail("pass --key or --user-key, not both", 2);
+}
+let key;
+let keyHeader;
+if (flagUserKey) {
+  [key, keyHeader] = [flagUserKey, "x-user-key"];
+} else if (flagAgentKey) {
+  [key, keyHeader] = [flagAgentKey, "x-agent-key"];
+} else if (process.env.KANBAN_USER_KEY) {
+  [key, keyHeader] = [process.env.KANBAN_USER_KEY, "x-user-key"];
+  if (process.env.KANBAN_AGENT_KEY) {
+    console.error("kanban: both KANBAN_USER_KEY and KANBAN_AGENT_KEY are set — acting as YOU (user key)");
+  }
+} else if (process.env.KANBAN_AGENT_KEY) {
+  [key, keyHeader] = [process.env.KANBAN_AGENT_KEY, "x-agent-key"];
+}
 if (!key) {
   fail(
-    "no agent key. Set KANBAN_AGENT_KEY or pass --key. Mint one with:\n" +
-      '  npm run create-agent -- --workspace <slug> --name "My Bot" --role member',
+    "no credential. Set KANBAN_USER_KEY (personal key from Settings → API keys, acts as you)\n" +
+      "or KANBAN_AGENT_KEY (bot key, mint with:\n" +
+      '  npm run create-agent -- --workspace <slug> --name "My Bot" --role member)',
     2
   );
 }
@@ -208,6 +233,7 @@ if (!key) {
 const client = createClient({
   baseUrl,
   key,
+  keyHeader,
   timeoutMs: Number(process.env.KANBAN_TIMEOUT_MS ?? 15000),
   dryRun: Boolean(opts["dry-run"]),
 });
@@ -234,8 +260,23 @@ const ctx = {
     }
     return info.boards[0].id;
   },
+  // An agent's me carries a scalar workspaceId; a human's carries workspaces
+  // and per-board workspaceIds. Resolve in that order: agent scalar, the
+  // pinned/default board's workspace, then a sole membership.
   async workspaceId() {
-    return (await client.me()).workspaceId;
+    const info = await client.me();
+    if (info.workspaceId) return info.workspaceId;
+    const boards = info.boards ?? [];
+    const boardId = await this.boardId();
+    const viaBoard = boards.find((b) => b.id === boardId)?.workspaceId;
+    if (viaBoard) return viaBoard;
+    if (info.workspaces?.length === 1) return info.workspaces[0].id;
+    throw new ApiError(
+      "INVALID_REQUEST",
+      0,
+      "Cannot resolve a workspace — pass --board for a board in the workspace you mean.",
+      false
+    );
   },
 };
 
