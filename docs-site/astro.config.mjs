@@ -56,6 +56,14 @@ export default defineConfig({
 						{ label: 'MCP reference', slug: 'agents/mcp' },
 						{ label: 'Agent workflows', slug: 'agents/workflows' },
 						{ label: 'HTTP API', slug: 'agents/http-api' },
+						{
+							label: 'Archon',
+							badge: { text: 'BETA', variant: 'caution' },
+							items: [
+								{ label: 'Kanban + Archon', slug: 'agents/archon' },
+								{ label: 'Workflow recipes', slug: 'agents/archon-recipes' },
+							],
+						},
 					],
 				},
 				{
