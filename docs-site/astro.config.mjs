@@ -52,6 +52,7 @@ export default defineConfig({
 					items: [
 						{ label: 'AI agents', slug: 'guide/ai-agents' },
 						{ label: 'Connect an agent', slug: 'agents/connect' },
+						{ label: 'The Kanban skill', slug: 'agents/skill' },
 						{ label: 'MCP reference', slug: 'agents/mcp' },
 						{ label: 'Agent workflows', slug: 'agents/workflows' },
 						{ label: 'HTTP API', slug: 'agents/http-api' },

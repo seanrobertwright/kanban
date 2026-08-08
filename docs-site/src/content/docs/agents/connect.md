@@ -7,6 +7,10 @@ Kanban’s MCP server is a local `stdio` process. Your coding client starts it, 
 
 The adapter is intentionally thin. The agent still uses the application’s workspace scope, roles, claims, approval policy, and activity history.
 
+:::tip[Skip the explaining]
+The repository ships a drop-in [agent skill](/kanban/agents/skill/) — one `SKILL.md` copied into the target repo teaches the agent the connection order, the work loop, and the approval gate without a custom prompt.
+:::
+
 ## Before you begin
 
 You need:
