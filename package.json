@@ -2,6 +2,9 @@
   "name": "kanban",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "kanban": "cli/kanban.mjs"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -15,6 +18,7 @@
     "db:setup": "npm run db:auth && npm run db:migrate",
     "create-agent": "node --env-file=.env.local scripts/create-agent.mjs",
     "mcp": "node mcp/server.mjs",
+    "cli": "node --env-file-if-exists=.env.local cli/kanban.mjs",
     "realtime": "node --env-file-if-exists=.env.local realtime/server.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
