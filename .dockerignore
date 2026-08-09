@@ -19,3 +19,7 @@ coverage
 *.md
 devdocs
 docs
+# The marketing/docs site is its own Astro project with its own node_modules;
+# nothing in the app image needs it, and its Vite dep cache has file names
+# BuildKit refuses to read from a Windows context.
+docs-site

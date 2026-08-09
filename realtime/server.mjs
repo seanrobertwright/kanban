@@ -59,8 +59,26 @@ async function bindDoc(docId, ydoc) {
   if (snapshot.rows[0]) Y.applyUpdate(ydoc, new Uint8Array(snapshot.rows[0].state));
   const updates = await pool.query("SELECT update FROM doc_yjs_update WHERE doc_id=$1 ORDER BY id", [docId]);
   for (const row of updates.rows) Y.applyUpdate(ydoc, new Uint8Array(row.update));
-  ydoc.on("update", (update) => pool.query("INSERT INTO doc_yjs_update (doc_id, update) VALUES ($1,$2)", [docId, Buffer.from(update)]).catch(console.error));
+  ydoc.on("update", (update) => trackWrite(ydoc, pool.query("INSERT INTO doc_yjs_update (doc_id, update) VALUES ($1,$2)", [docId, Buffer.from(update)]).catch(console.error)));
 }
+
+/**
+ * The per-update INSERTs above are fire-and-forget, and that was a race:
+ * writeState's closing transaction DELETEs the update log, but an INSERT
+ * still in flight from the room's last edits could land AFTER the commit —
+ * an orphan row that makes the CRDT history look newer than the flattened
+ * scene on the next open, resurrecting strokes a whole-scene PATCH replaced.
+ * Each in-flight INSERT is tracked on its ydoc so the close can drain them
+ * before it deletes.
+ */
+const pendingWrites = new WeakMap();
+function trackWrite(ydoc, promise) {
+  let set = pendingWrites.get(ydoc);
+  if (!set) pendingWrites.set(ydoc, (set = new Set()));
+  set.add(promise);
+  promise.finally(() => set.delete(promise));
+}
+const drainWrites = (ydoc) => Promise.all([...(pendingWrites.get(ydoc) ?? [])]);
 
 /**
  * A whiteboard room opens on whichever copy of the canvas is newer: the CRDT
@@ -92,7 +110,7 @@ async function bindWhiteboard(whiteboardId, ydoc) {
     await pool.query("DELETE FROM whiteboard_yjs_snapshot WHERE whiteboard_id=$1", [whiteboardId]);
     ydoc.transact(() => { for (const element of board.scene ?? []) if (element?.id) map.set(String(element.id), element); });
   }
-  ydoc.on("update", (update) => pool.query("INSERT INTO whiteboard_yjs_update (whiteboard_id, update) VALUES ($1,$2)", [whiteboardId, Buffer.from(update)]).catch(console.error));
+  ydoc.on("update", (update) => trackWrite(ydoc, pool.query("INSERT INTO whiteboard_yjs_update (whiteboard_id, update) VALUES ($1,$2)", [whiteboardId, Buffer.from(update)]).catch(console.error)));
 }
 
 setPersistence({
@@ -105,6 +123,9 @@ setPersistence({
   async writeState(name, ydoc) {
     const room = parseRoom(name);
     if (!room) return;
+    // Let any in-flight update INSERTs land before the DELETE below, or a
+    // straggler would outlive the compaction as an orphan row.
+    await drainWrites(ydoc);
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
