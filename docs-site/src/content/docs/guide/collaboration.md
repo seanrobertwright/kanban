@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-Every board carries a workspace tool cluster — `Ask`, `Docs`, `Chat`, and `Whiteboards` buttons that render in the sidebar on wide screens and fall back into the header on small ones. Each button opens a dialog over the board, so shared context is never more than one click from the work it supports.
+Every board carries a workspace tool cluster — `Ask`, `Docs`, `Chat`, and `Whiteboards` buttons that render in the sidebar on wide screens and fall back into the header on small ones. `Ask`, `Docs`, and `Chat` open focused dialogs. `Whiteboards` replaces the board area with a full workspace surface while keeping the app header and sidebar visible.
 
 ## Docs and wiki
 
@@ -90,12 +90,12 @@ Reading a channel requires `viewer`; posting requires `member`. There are no dir
 
 ## Whiteboards
 
-The `Whiteboards` button opens a visual canvas scoped to the current board — a self-hosted [Excalidraw](https://excalidraw.com/) editor, no third-party service involved.
+The `Whiteboards` button opens a visual workspace scoped to the current board — a self-hosted [Excalidraw](https://excalidraw.com/) editor, no third-party service involved. Its canvas fills the board area, with whiteboard navigation in a compact rail and a close button that returns you to the unchanged board.
 
 - **Multiple boards** — the left rail lists every whiteboard on this kanban board; editors create more with the `Board name` box and `Add`.
 - **Task cards** — pick a task from the `Add task card…` select and press `Task card` to drop a card (rectangle plus `Task #id: title` label) onto the canvas, tagged with the task's id. Sketch architecture around real work items.
 - **Draw together** — a canvas is shared through the same realtime service the documents use. Each shape is synced on its own, so two people drawing at once merge instead of overwriting: the line under the canvas reads **Live** when a room is holding it and everyone in it sees your strokes as you make them.
-- **Autosave** — with no realtime service running, the canvas falls back to saving the whole scene automatically, debounced to half a second so a stroke persists once rather than per pixel, with a final flush when the dialog closes. That fallback is single-writer — the last save of two people wins — which is why the status line says which mode you are in. In a live room the service saves the canvas itself when the last person leaves.
+- **Autosave** — with no realtime service running, the canvas falls back to saving the whole scene automatically, debounced to half a second so a stroke persists once rather than per pixel, with a final flush when the whiteboard workspace closes. That fallback is single-writer — the last save of two people wins — which is why the status line says which mode you are in. In a live room the service saves the canvas itself when the last person leaves.
 - **Roles** — viewers get Excalidraw's view mode: they can pan and read but not draw, and see no create or task-card controls. A socket is a write channel, so only editors open one; a viewer reads the saved scene.
 
 ## Comments on tasks

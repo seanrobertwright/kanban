@@ -16,6 +16,41 @@ type SceneApi = { updateScene: (scene: { elements: readonly unknown[] }) => void
 /** What the parent can do to a canvas it does not own the state of. */
 export type CanvasHandle = { add: (elements: SyncElement[]) => void };
 
+export interface TaskCardData {
+  id: number;
+  title: string;
+}
+
+export async function createTaskCardElements(
+  task: TaskCardData
+): Promise<SyncElement[]> {
+  // Excalidraw reads browser globals at module load, so a static import cannot
+  // survive the server render that still precedes this client component.
+  const { convertToExcalidrawElements } = await import(
+    "@excalidraw/excalidraw"
+  );
+  return convertToExcalidrawElements([
+    {
+      type: "rectangle",
+      x: 80,
+      y: 80,
+      width: 300,
+      height: 100,
+      backgroundColor: "transparent",
+      strokeColor: "#1e1e1e",
+      customData: { taskId: task.id },
+    },
+    {
+      type: "text",
+      x: 100,
+      y: 110,
+      text: `Task #${task.id}: ${task.title}`,
+      fontSize: 20,
+      customData: { taskId: task.id },
+    },
+  ]) as unknown as SyncElement[];
+}
+
 /**
  * The canvas, and the whole of the whiteboard's realtime story (088).
  *
@@ -73,6 +108,7 @@ export function WhiteboardCanvas({
     const ydoc = new Y.Doc();
     const shared = ydoc.getMap<SyncElement>("elements");
     let provider: WebsocketProvider | undefined;
+    let observing = false;
 
     // Repaint from the shared map. Skipped when nothing observable changed:
     // updateScene is what interrupts a local pointer gesture, so it must not
@@ -95,6 +131,7 @@ export function WhiteboardCanvas({
         provider = new WebsocketProvider(endpoint, `wb-${whiteboardId}`, ydoc, { params: { ticket } });
         sharedRef.current = shared;
         shared.observe(repaint);
+        observing = true;
         // The room's state is authoritative once it arrives, but a canvas whose
         // room has never been opened arrives empty — seed it from the scene the
         // server already has rather than publishing an empty canvas over it.
@@ -114,7 +151,7 @@ export function WhiteboardCanvas({
       stopped = true;
       setLive(false);
       sharedRef.current = null;
-      shared.unobserve(repaint);
+      if (observing) shared.unobserve(repaint);
       provider?.destroy();
       ydoc.destroy();
     };
@@ -177,13 +214,20 @@ export function WhiteboardCanvas({
   useEffect(() => { onReadyRef.current?.({ add }); }, [add]);
 
   return (
-    <>
-      <div className="h-[32rem] overflow-hidden rounded border">
+    <div className="flex h-full min-h-0 flex-col">
+      <div
+        className="min-h-0 flex-1 overflow-hidden"
+        data-testid="whiteboard-canvas"
+      >
         <Excalidraw
-          excalidrawAPI={(api) => { apiRef.current = api as unknown as SceneApi; }}
+          excalidrawAPI={(api) => {
+            apiRef.current = api as unknown as SceneApi;
+          }}
           initialData={{ elements: seed as never[] }}
           viewModeEnabled={!canEdit}
-          onChange={(elements) => { if (canEdit) handleChange(elements as unknown as SyncElement[]); }}
+          onChange={(elements) => {
+            if (canEdit) handleChange(elements as unknown as SyncElement[]);
+          }}
         />
       </div>
       {/* Said out loud, because the two modes have genuinely different rules: in
@@ -191,10 +235,15 @@ export function WhiteboardCanvas({
           save of the two wins. A user about to draw with someone deserves to
           know which one they are in. */}
       {canEdit && (
-        <p className="mt-1 text-xs text-muted-foreground" data-testid="whiteboard-connection">
-          {live ? "Live — everyone in this canvas sees your strokes" : "Saving to the server — open the realtime service to draw together"}
+        <p
+          className="shrink-0 border-t bg-background px-2 py-1 text-xs text-muted-foreground"
+          data-testid="whiteboard-connection"
+        >
+          {live
+            ? "Live — everyone in this canvas sees your strokes"
+            : "Saving to the server — open the realtime service to draw together"}
         </p>
       )}
-    </>
+    </div>
   );
 }

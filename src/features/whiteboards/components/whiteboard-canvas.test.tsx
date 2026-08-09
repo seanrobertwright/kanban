@@ -73,7 +73,10 @@ async function mount(options: { ticket: boolean; initial?: SyncElement[] }) {
 
 describe("WhiteboardCanvas", () => {
   beforeEach(() => { sceneToReport = []; provider = null; updateScene.mockClear(); });
-  afterEach(() => { vi.unstubAllGlobals(); });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
   it("reports scenes as not live until a room is holding them", async () => {
     const { onScene } = await mount({ ticket: false });
@@ -161,5 +164,23 @@ describe("WhiteboardCanvas", () => {
     expect(provider!.ydoc.getMap("elements").get("task-card")).toEqual(element("task-card"));
     expect(updateScene).toHaveBeenCalledWith({ elements: [element("task-card")] });
     expect(onScene).toHaveBeenLastCalledWith([element("task-card")], true);
+  });
+
+  it("unmounts cleanly while the collaboration ticket is pending", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { unmount } = render(
+      <WhiteboardCanvas
+        whiteboardId={3}
+        initialScene={[]}
+        canEdit
+        onScene={() => undefined}
+      />
+    );
+    await screen.findByText("draw");
+
+    unmount();
+
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

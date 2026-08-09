@@ -29,7 +29,10 @@ import { listTemplates } from "@/features/templates/server/repository";
 import { ThemeToggle } from "@/shared/theme/theme-toggle";
 import { DocsButton } from "@/features/docs/components/docs-dialog";
 import { ChatButton } from "@/features/chat/components/chat-dialog";
-import { WhiteboardsButton } from "@/features/whiteboards/components/whiteboards-dialog";
+import {
+  WhiteboardsButton,
+  WhiteboardsWorkspace,
+} from "@/features/whiteboards/components/whiteboards-surface";
 import { SettingsTrigger } from "@/features/settings/components/settings-dialog";
 import { CommandPaletteTrigger } from "@/features/board/components/command-palette";
 import { BoardExtensionActions } from "@/features/extensions/components/board-extension-actions";
@@ -159,8 +162,8 @@ export default async function Home({
   // made the sidebar a menu of everything the app can do; three short named
   // groups make it navigation, which is what a sidebar is for.
   //
-  // Each *Button owns its dialog, which portals out of this container — so the
-  // width override on the nav only ever reaches the trigger buttons themselves.
+  // Most *Buttons own a dialog that portals out of this container. Whiteboards
+  // is the exception: its trigger opens the workspace surface beside the board.
   const collaborate = (
     <>
       <KnowledgeButton workspaceId={data.board.workspaceId} />
@@ -170,7 +173,7 @@ export default async function Home({
         canEdit={canEdit}
         currentUserId={session.user.id}
       />
-      <WhiteboardsButton boardId={data.board.id} canEdit={canEdit} />
+      <WhiteboardsButton />
     </>
   );
 
@@ -325,33 +328,39 @@ export default async function Home({
             key, React would keep the previous board's state and show its columns
             under the new board's name. */}
         <div className="flex min-w-0 flex-1 flex-col p-5">
-          <Board
-            key={data.board.id}
+          <WhiteboardsWorkspace
+            key={`whiteboards-${data.board.id}`}
             boardId={data.board.id}
-            columns={data.columns}
-            initialTasks={data.tasks}
-            members={members}
-            agents={agents}
-            initialLabels={labels}
-            workspaceId={data.board.workspaceId}
-            initialSavedViews={savedViews}
-            initialDoneColumnId={data.doneColumnId}
-            initialTemplates={templates}
-            initialMilestones={data.milestones}
-            initialEpics={data.epics}
-            initialSprints={data.sprints}
-            initialDependencies={data.dependencies}
-            initialCustomFields={data.customFields}
-            initialObjectives={data.objectives}
-            extensions={extensions}
             canEdit={canEdit}
-            canDeleteColumns={canDeleteColumns}
-            currentUserId={session.user.id}
-            workspace={workspace}
-            boards={boards.filter(
-              (b) => b.workspaceId === data.board.workspaceId
-            )}
-          />
+          >
+            <Board
+              key={data.board.id}
+              boardId={data.board.id}
+              columns={data.columns}
+              initialTasks={data.tasks}
+              members={members}
+              agents={agents}
+              initialLabels={labels}
+              workspaceId={data.board.workspaceId}
+              initialSavedViews={savedViews}
+              initialDoneColumnId={data.doneColumnId}
+              initialTemplates={templates}
+              initialMilestones={data.milestones}
+              initialEpics={data.epics}
+              initialSprints={data.sprints}
+              initialDependencies={data.dependencies}
+              initialCustomFields={data.customFields}
+              initialObjectives={data.objectives}
+              extensions={extensions}
+              canEdit={canEdit}
+              canDeleteColumns={canDeleteColumns}
+              currentUserId={session.user.id}
+              workspace={workspace}
+              boards={boards.filter(
+                (board) => board.workspaceId === data.board.workspaceId
+              )}
+            />
+          </WhiteboardsWorkspace>
         </div>
       </main>
     </div>

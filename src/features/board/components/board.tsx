@@ -1059,10 +1059,10 @@ export function Board({
    * half, so a stray G does not silently arm the next letter you type minutes
    * later.
    *
-   * Anything with a dialog open is off limits — the check is for a rendered
-   * dialog rather than this component's own state, so the palette, a confirm,
-   * and a panel opened by some other component all suppress the chords without
-   * this effect having to know they exist.
+   * Anything with a dialog or immersive workspace open is off limits. Both
+   * checks inspect the rendered document, so the palette, a confirm, or a
+   * surface opened by another component suppresses chords without this effect
+   * having to know their state.
    */
   const chord = useRef<{ key: string; at: number } | null>(null);
   useEffect(() => {
@@ -1070,6 +1070,7 @@ export function Board({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isTypingTarget(e.target)) return;
       if (document.querySelector('[data-slot="dialog-content"]')) return;
+      if (document.querySelector('[data-suppress-board-shortcuts="true"]')) return;
       const key = e.key.toLowerCase();
       const pending =
         chord.current && e.timeStamp - chord.current.at < 1500
