@@ -55,6 +55,7 @@ export default defineConfig({
 						{ label: 'The Kanban skill', slug: 'agents/skill' },
 						{ label: 'MCP reference', slug: 'agents/mcp' },
 						{ label: 'Agent workflows', slug: 'agents/workflows' },
+						{ label: 'The CLI', slug: 'agents/cli' },
 						{ label: 'HTTP API', slug: 'agents/http-api' },
 						{
 							label: 'Archon',

@@ -103,7 +103,41 @@ After Archon creates or updates a pull request, close the loop so a teammate can
       what is risky, and what was explicitly out of scope.
 ```
 
-## Recipe 4: Bounded triage as a scheduled workflow
+## Recipe 4: Deterministic board steps in `bash` nodes
+
+Board reporting does not always need a model. The [Kanban CLI](../cli/) turns claim, move, comment, and release into deterministic `bash` nodes — cheaper than a prompt node, and impossible for a model to reword. Its exit codes carry the approval contract: 0 applied, 3 held for review, 5 claim conflict.
+
+```yaml
+  - id: claim
+    type: bash
+    script: |
+      kanban task claim {{task_id}} --ttl 120 || {
+        code=$?
+        # 5 = another actor holds it: a legitimate stop, not a failure.
+        [ "$code" -eq 5 ] && echo "task {{task_id}} held elsewhere" && exit 1
+        exit "$code"
+      }
+
+  - id: implement
+    type: prompt
+    depends_on: [claim]
+    prompt: |
+      Implement Kanban task {{task_id}} in this worktree. The claim is
+      already taken; keep checklist state current as you work.
+
+  - id: report-and-release
+    type: bash
+    depends_on: [validate]
+    script: |
+      kanban task comment {{task_id}} "Implemented on branch $(git branch --show-current); tests green."
+      # A held move (exit 3) is a legitimate end state: the proposal is filed.
+      kanban task move {{task_id}} --column "$REVIEW_COLUMN" || [ $? -eq 3 ]
+      kanban task release {{task_id}}
+```
+
+`KANBAN_URL` and the key travel in the environment Archon gives its `bash` nodes, the same one the assistant sees. Prefer an agent key here — a deterministic pipeline is a bot even when a person launched it.
+
+## Recipe 5: Bounded triage as a scheduled workflow
 
 Archon can run a triage pass on a schedule. Reuse the bounded triage prompt from [Agent workflows](../workflows/#workflow-2-triage-an-incoming-backlog) verbatim inside a single `prompt` node — the bounds (at most 20 tasks, low-risk metadata only, no assignment or moves) are what make it safe to run unattended. Pair it with an `approval` node if your write policy does not already hold risky mutations.
 
