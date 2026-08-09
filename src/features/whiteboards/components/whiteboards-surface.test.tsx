@@ -113,7 +113,7 @@ describe("Whiteboards workspace surface", () => {
         </WhiteboardsWorkspace>
       </>
     );
-    const [opener, fallback] = screen.getAllByRole("button", {
+    const [opener, fallback] = screen.getAllByRole<HTMLButtonElement>("button", {
       name: "Whiteboards",
     });
     fireEvent.click(opener);

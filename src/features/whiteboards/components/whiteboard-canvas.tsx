@@ -6,10 +6,13 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
+import { useTheme } from "next-themes";
 
 import { localChanges, sceneDiffers, sceneFromShared, type SyncElement } from "../lib/sync";
 
 const Excalidraw = dynamic(() => import("@excalidraw/excalidraw").then((module) => module.Excalidraw), { ssr: false });
+
+const LOCAL_SYNC_ORIGIN = Symbol("whiteboard-local-sync");
 
 type SceneApi = { updateScene: (scene: { elements: readonly unknown[] }) => void };
 
@@ -34,19 +37,17 @@ export async function createTaskCardElements(
       type: "rectangle",
       x: 80,
       y: 80,
-      width: 300,
-      height: 100,
+      width: 320,
+      height: 120,
       backgroundColor: "transparent",
-      strokeColor: "#1e1e1e",
+      strokeColor: "#1971c2",
       customData: { taskId: task.id },
-    },
-    {
-      type: "text",
-      x: 100,
-      y: 110,
-      text: `Task #${task.id}: ${task.title}`,
-      fontSize: 20,
-      customData: { taskId: task.id },
+      label: {
+        text: `Task #${task.id}: ${task.title}`,
+        fontSize: 20,
+        textAlign: "center",
+        verticalAlign: "middle",
+      },
     },
   ]) as unknown as SyncElement[];
 }
@@ -83,6 +84,8 @@ export function WhiteboardCanvas({
   onScene: (scene: SyncElement[], live: boolean) => void;
   onReady?: (handle: CanvasHandle) => void;
 }) {
+  const { resolvedTheme } = useTheme();
+  const excalidrawTheme = resolvedTheme === "light" ? "light" : "dark";
   const apiRef = useRef<SceneApi | null>(null);
   const sharedRef = useRef<Y.Map<SyncElement> | null>(null);
   const paintedRef = useRef<SyncElement[]>(initialScene);
@@ -110,10 +113,9 @@ export function WhiteboardCanvas({
     let provider: WebsocketProvider | undefined;
     let observing = false;
 
-    // Repaint from the shared map. Skipped when nothing observable changed:
-    // updateScene is what interrupts a local pointer gesture, so it must not
-    // fire for an update that adds no information (our own echo, presence, a
-    // peer re-sending an element at the same version).
+    // Repaint only remote changes. Local writes are already on Excalidraw's
+    // screen; feeding them straight back through updateScene interrupts the
+    // pointer gesture that produced them and collapses shapes/text mid-draw.
     const repaint = () => {
       const next = sceneFromShared(shared);
       if (!sceneDiffers(next, paintedRef.current)) return;
@@ -121,6 +123,13 @@ export function WhiteboardCanvas({
       for (const element of next) seenRef.current.add(element.id);
       apiRef.current?.updateScene({ elements: next });
       onSceneRef.current(next, true);
+    };
+    const observeShared = (
+      _event: Y.YMapEvent<SyncElement>,
+      transaction: Y.Transaction
+    ) => {
+      if (transaction.origin === LOCAL_SYNC_ORIGIN) return;
+      repaint();
     };
 
     void fetch(`/api/whiteboards/${whiteboardId}/collaboration-ticket`, { method: "POST" })
@@ -130,7 +139,7 @@ export function WhiteboardCanvas({
         const endpoint = process.env.NEXT_PUBLIC_REALTIME_URL ?? "ws://localhost:1234";
         provider = new WebsocketProvider(endpoint, `wb-${whiteboardId}`, ydoc, { params: { ticket } });
         sharedRef.current = shared;
-        shared.observe(repaint);
+        shared.observe(observeShared);
         observing = true;
         // The room's state is authoritative once it arrives, but a canvas whose
         // room has never been opened arrives empty — seed it from the scene the
@@ -138,7 +147,11 @@ export function WhiteboardCanvas({
         provider.on("sync", (synced: boolean) => {
           if (!synced || stopped) return;
           if (shared.size === 0 && seed.length > 0) {
-            ydoc.transact(() => { for (const element of seed) shared.set(element.id, structuredClone(element)); });
+            ydoc.transact(() => {
+              for (const element of seed) {
+                shared.set(element.id, structuredClone(element));
+              }
+            }, LOCAL_SYNC_ORIGIN);
           }
           setLive(true);
           repaint();
@@ -151,7 +164,7 @@ export function WhiteboardCanvas({
       stopped = true;
       setLive(false);
       sharedRef.current = null;
-      if (observing) shared.unobserve(repaint);
+      if (observing) shared.unobserve(observeShared);
       provider?.destroy();
       ydoc.destroy();
     };
@@ -180,9 +193,11 @@ export function WhiteboardCanvas({
     // isNewer compares against — every later mutation compares the element with
     // itself and is never written.
     shared.doc?.transact(() => {
-      for (const element of upserts) shared.set(element.id, structuredClone(element));
+      for (const element of upserts) {
+        shared.set(element.id, structuredClone(element));
+      }
       for (const id of removals) shared.delete(id);
-    });
+    }, LOCAL_SYNC_ORIGIN);
     for (const element of elements) seenRef.current.add(element.id);
     for (const id of removals) seenRef.current.delete(id);
     paintedRef.current = sceneFromShared(shared);
@@ -198,7 +213,11 @@ export function WhiteboardCanvas({
   const add = useCallback((elements: SyncElement[]) => {
     const shared = sharedRef.current;
     if (shared) {
-      shared.doc?.transact(() => { for (const element of elements) shared.set(element.id, structuredClone(element)); });
+      shared.doc?.transact(() => {
+        for (const element of elements) {
+          shared.set(element.id, structuredClone(element));
+        }
+      }, LOCAL_SYNC_ORIGIN);
       for (const element of elements) seenRef.current.add(element.id);
       paintedRef.current = sceneFromShared(shared);
       apiRef.current?.updateScene({ elements: paintedRef.current });
@@ -224,6 +243,7 @@ export function WhiteboardCanvas({
             apiRef.current = api as unknown as SceneApi;
           }}
           initialData={{ elements: seed as never[] }}
+          theme={excalidrawTheme}
           viewModeEnabled={!canEdit}
           onChange={(elements) => {
             if (canEdit) handleChange(elements as unknown as SyncElement[]);

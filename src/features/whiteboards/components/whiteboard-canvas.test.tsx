@@ -3,7 +3,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as Y from "yjs";
 
-import { WhiteboardCanvas, type CanvasHandle } from "./whiteboard-canvas";
+import {
+  createTaskCardElements,
+  WhiteboardCanvas,
+  type CanvasHandle,
+} from "./whiteboard-canvas";
 import type { SyncElement } from "../lib/sync";
 
 /**
@@ -17,14 +21,31 @@ import type { SyncElement } from "../lib/sync";
 // The real editor is a canvas with no test surface; this stub is a button that
 // reports a scene, which is the only interaction the component actually has.
 let sceneToReport: SyncElement[] = [];
+let currentTheme: "dark" | "light" = "dark";
 const updateScene = vi.fn();
+const convertToExcalidrawElements = vi.fn(
+  (elements: unknown[]) => elements as SyncElement[]
+);
+vi.mock("next-themes", () => ({
+  useTheme: () => ({ resolvedTheme: currentTheme }),
+}));
 vi.mock("@excalidraw/excalidraw", () => ({
-  Excalidraw: ({ excalidrawAPI, onChange }: {
+  convertToExcalidrawElements,
+  Excalidraw: ({
+    excalidrawAPI,
+    onChange,
+    theme,
+  }: {
     excalidrawAPI?: (api: unknown) => void;
     onChange?: (elements: readonly SyncElement[]) => void;
+    theme?: "dark" | "light";
   }) => {
     excalidrawAPI?.({ updateScene });
-    return <button onClick={() => onChange?.(sceneToReport)}>draw</button>;
+    return (
+      <button data-theme={theme} onClick={() => onChange?.(sceneToReport)}>
+        draw
+      </button>
+    );
   },
 }));
 
@@ -72,7 +93,13 @@ async function mount(options: { ticket: boolean; initial?: SyncElement[] }) {
 }
 
 describe("WhiteboardCanvas", () => {
-  beforeEach(() => { sceneToReport = []; provider = null; updateScene.mockClear(); });
+  beforeEach(() => {
+    sceneToReport = [];
+    currentTheme = "dark";
+    provider = null;
+    updateScene.mockClear();
+    convertToExcalidrawElements.mockClear();
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -105,6 +132,54 @@ describe("WhiteboardCanvas", () => {
     expect(onScene.mock.calls.every(([, live]) => live === true)).toBe(true);
     // And the stroke is in the shared document, not merely in local state.
     expect(provider!.ydoc.getMap("elements").get("drawn")).toEqual(element("drawn"));
+  });
+
+  it("does not repaint a local gesture through its own shared-map write", async () => {
+    const { onScene } = await mount({ ticket: true });
+    await waitFor(() => expect(provider).not.toBeNull());
+    provider!.sync(true);
+    await waitFor(() => expect(screen.getByTestId("whiteboard-connection").textContent).toMatch(/^Live/));
+    updateScene.mockClear();
+    onScene.mockClear();
+
+    sceneToReport = [{ ...element("shape"), width: 260, height: 170 }];
+    fireEvent.click(screen.getByText("draw"));
+
+    await waitFor(() =>
+      expect(provider!.ydoc.getMap<SyncElement>("elements").get("shape")).toMatchObject({
+        width: 260,
+        height: 170,
+      })
+    );
+    expect(updateScene).not.toHaveBeenCalled();
+    expect(onScene).toHaveBeenCalledWith(sceneToReport, true);
+  });
+
+  it("creates a task card as one container skeleton with a bound label", async () => {
+    await createTaskCardElements({
+      id: 42,
+      title: "A title long enough to need wrapping inside the card",
+    });
+
+    expect(convertToExcalidrawElements).toHaveBeenCalledOnce();
+    const [skeletons] = convertToExcalidrawElements.mock.calls[0]!;
+    expect(skeletons).toHaveLength(1);
+    expect(skeletons[0]).toMatchObject({
+      type: "rectangle",
+      customData: { taskId: 42 },
+      label: {
+        text: "Task #42: A title long enough to need wrapping inside the card",
+        textAlign: "center",
+        verticalAlign: "middle",
+      },
+    });
+  });
+
+  it("gives Excalidraw the resolved application theme", async () => {
+    currentTheme = "dark";
+    await mount({ ticket: false });
+
+    expect(screen.getByText("draw").dataset.theme).toBe("dark");
   });
 
   it("stores a snapshot, so in-place mutation of the live element still syncs", async () => {
