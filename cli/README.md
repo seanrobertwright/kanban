@@ -56,8 +56,10 @@ succeeded *as a proposal*. Branch on it.
 
 ## Conventions
 
-- Output is JSON on stdout: pretty on a TTY, compact when piped; `--json`
-  forces compact. Diagnostics go to stderr.
+- Output: compact JSON when piped or with `--json` — the scriptable contract.
+  A TTY gets aligned tables for list shapes and pretty JSON for everything
+  else (`format.mjs`; `NO_COLOR` disables the styling). Diagnostics go to
+  stderr.
 - Mutating commands accept `--dry-run`: the server reports the approval tier
   the call would run under and the before/after state, and writes nothing.
   Claims, releases, and bulk have no dry run.

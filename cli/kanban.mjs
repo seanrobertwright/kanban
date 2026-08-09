@@ -21,6 +21,7 @@ import { parseArgs } from "node:util";
 
 import { createClient, ApiError } from "./api.mjs";
 import { COMMANDS, UsageError } from "./commands.mjs";
+import { renderForTTY } from "./format.mjs";
 
 const GLOBAL_FLAGS = {
   json: { type: "boolean", desc: "Force compact JSON output" },
@@ -38,9 +39,14 @@ function fail(message, exitCode = 1) {
   process.exit(exitCode);
 }
 
+// Piped or --json: compact JSON, the scriptable contract. A TTY gets tables
+// for list shapes and pretty JSON otherwise (format.mjs).
 function print(data, forceJson) {
-  const compact = forceJson || !process.stdout.isTTY;
-  process.stdout.write(JSON.stringify(data, null, compact ? 0 : 2) + "\n");
+  if (forceJson || !process.stdout.isTTY) {
+    process.stdout.write(JSON.stringify(data) + "\n");
+    return;
+  }
+  process.stdout.write(renderForTTY(data) + "\n");
 }
 
 // ── Help ────────────────────────────────────────────────────────────────────
